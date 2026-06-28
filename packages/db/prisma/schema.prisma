@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  displayName  String
+  passwordHash String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+
+  hostedTournaments Tournament[]       @relation("Host")
+  tournamentPlayers TournamentPlayer[]
+  gameResults       GameResult[]
+  stats             UserStats?
+}
+
+model UserStats {
+  id               String @id @default(cuid())
+  userId           String @unique
+  tournamentsPlayed Int   @default(0)
+  wins             Int    @default(0)
+  itmCount         Int    @default(0)
+  totalBuyInCents  Int    @default(0)
+  totalPayoutCents Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum TournamentStatus {
+  LOBBY
+  RUNNING
+  FINISHED
+}
+
+enum GameStatus {
+  RUNNING
+  FINISHED
+}
+
+model Tournament {
+  id             String           @id @default(cuid())
+  hostUserId     String
+  status         TournamentStatus @default(LOBBY)
+  name           String
+  buyInCents     Int
+  startingChips  Int
+  maxPlayers     Int              @default(9)
+  payoutPercents Json @default("[50, 30, 20]")
+  blindPreset    String           @default("standard")
+  inviteCode     String           @unique @default(cuid())
+  createdAt      DateTime         @default(now())
+  closedAt       DateTime?
+
+  host    User               @relation("Host", fields: [hostUserId], references: [id])
+  players TournamentPlayer[]
+  games   Game[]
+}
+
+model TournamentPlayer {
+  id           String   @id @default(cuid())
+  tournamentId String
+  userId       String
+  joinedAt     DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+}
+
+model Game {
+  id             String     @id @default(cuid())
+  tournamentId   String
+  gameNumber     Int
+  status         GameStatus @default(RUNNING)
+  prizePoolCents Int        @default(0)
+  startedAt      DateTime   @default(now())
+  finishedAt     DateTime?
+
+  tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  results    GameResult[]
+
+  @@unique([tournamentId, gameNumber])
+}
+
+model GameResult {
+  id             String @id @default(cuid())
+  gameId         String
+  userId         String
+  finishPosition Int
+  payoutCents    Int    @default(0)
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([gameId, userId])
+}

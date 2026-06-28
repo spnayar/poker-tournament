@@ -1,0 +1,22 @@
+{
+  "name": "poker-tournament",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "db:migrate": "pnpm --filter @poker/db migrate",
+    "db:generate": "pnpm --filter @poker/db generate",
+    "db:push": "pnpm --filter @poker/db push",
+    "postinstall": "pnpm db:generate"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
