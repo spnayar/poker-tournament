@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "pnpm --filter @poker/db build && pnpm --filter @poker/protocol build && next build",
-    "start": "next start",
+    "start": "pnpm --filter @poker/db exec prisma db push --skip-generate && next start",
     "lint": "next lint"
   },
   "dependencies": {

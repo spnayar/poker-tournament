@@ -3,4 +3,3 @@ buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @poker/web build
 
 [deploy]
 startCommand = "pnpm --filter @poker/web start"
-preDeployCommand = "pnpm --filter @poker/db exec prisma db push"
