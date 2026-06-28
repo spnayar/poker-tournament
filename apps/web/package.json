@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "pnpm --filter @poker/db build && pnpm --filter @poker/protocol build && next build",
-    "start": "pnpm --filter @poker/db exec prisma db push --skip-generate && next start",
+    "start": "sh -c 'if [ -n \"$DATABASE_URL\" ]; then pnpm --filter @poker/db exec prisma db push --skip-generate; else echo \"WARNING: DATABASE_URL not set — skipping db push\"; fi && next start'",
     "lint": "next lint"
   },
   "dependencies": {
