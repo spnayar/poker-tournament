@@ -18,7 +18,10 @@ import {
   PlayerActionSchema,
 } from "@poker/protocol";
 
-const PORT = parseInt(process.env.GAME_SERVER_PORT ?? "3001", 10);
+const PORT = parseInt(
+  process.env.PORT ?? process.env.GAME_SERVER_PORT ?? "3001",
+  10
+);
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const SNAPSHOT_TTL_SEC = 60 * 60 * 24 * 7;
