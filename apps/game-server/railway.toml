@@ -1,0 +1,5 @@
+[build]
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @poker/game-server build"
+
+[deploy]
+startCommand = "pnpm --filter @poker/game-server start"

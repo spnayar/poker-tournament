@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "pnpm --filter @poker/db build && pnpm --filter @poker/protocol build && pnpm --filter @poker/game-engine build && tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
