@@ -6,6 +6,11 @@ import { prisma } from "@poker/db";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 
+/** Read at request time — bracket access avoids Next.js build-time inlining. */
+export function readAuthSecret(): string | undefined {
+  return process.env["NEXTAUTH_SECRET"] ?? process.env["AUTH_SECRET"];
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
