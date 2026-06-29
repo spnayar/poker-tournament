@@ -19,6 +19,8 @@ export interface TableSnapshot {
   eliminationOrder: number[];
   actionLog: ActionLogEntry[];
   actionLogId: number;
+  postedSbSeat: number | null;
+  postedBbSeat: number | null;
 }
 
 export function tableToSnapshot(table: TableEngine): TableSnapshot {

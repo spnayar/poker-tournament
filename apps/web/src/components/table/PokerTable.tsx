@@ -86,6 +86,16 @@ export function PlayerSeat({
             D
           </span>
         )}
+        {seat.isSmallBlind && !seat.isDealer && (
+          <span className="absolute -top-1 -left-1 w-5 h-5 bg-sky-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-20">
+            SB
+          </span>
+        )}
+        {seat.isBigBlind && (
+          <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-20">
+            BB
+          </span>
+        )}
       </div>
 
       <p className="text-xs font-medium mt-1 max-w-[80px] truncate">

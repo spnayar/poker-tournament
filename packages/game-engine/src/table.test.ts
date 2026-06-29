@@ -350,6 +350,69 @@ describe("TableEngine", () => {
     expect(table.getLegalActions(aliceSeat)?.canCall).toBe(true);
   });
 
+  it("rotates dealer and blinds clockwise each hand", () => {
+    const table = new TableEngine({
+      tournamentId: "test",
+      startingChips: 1000,
+      blindPreset: "turbo",
+      levelIncreaseEvery: 100,
+    });
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.addPlayer(3, "u4", "Dave", null, 1000);
+
+    const roles: { dealer: number; sb: number; bb: number }[] = [];
+
+    for (let h = 0; h < 4; h++) {
+      table.startHand();
+      const state = table.getPublicState();
+      const sb = state.seats.find((s) => s.isSmallBlind)!;
+      const bb = state.seats.find((s) => s.isBigBlind)!;
+      roles.push({
+        dealer: state.dealerSeat,
+        sb: sb.seatId,
+        bb: bb.seatId,
+      });
+
+      while (table.getPublicState().phase !== "hand-complete") {
+        const actor = table.getPublicState().currentActorSeat;
+        if (actor === null) break;
+        table.applyAction(actor, { type: "fold" });
+      }
+    }
+
+    expect(roles[0]).toEqual({ dealer: 1, sb: 2, bb: 3 });
+    expect(roles[1]).toEqual({ dealer: 2, sb: 3, bb: 0 });
+    expect(roles[2]).toEqual({ dealer: 3, sb: 0, bb: 1 });
+    expect(roles[3]).toEqual({ dealer: 0, sb: 1, bb: 2 });
+    expect(new Set(roles.map((r) => r.dealer)).size).toBe(4);
+  });
+
+  it("keeps blind badges on posted seats after a fold", () => {
+    const table = new TableEngine({
+      tournamentId: "test",
+      startingChips: 1000,
+      blindPreset: "turbo",
+      levelIncreaseEvery: 100,
+    });
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+
+    table.startHand();
+    const prefold = table.getPublicState();
+    const bbSeat = prefold.seats.find((s) => s.isBigBlind)!.seatId;
+
+    table.applyAction(prefold.currentActorSeat!, { type: "fold" });
+
+    const midHand = table.getPublicState();
+    expect(midHand.phase).not.toBe("hand-complete");
+    expect(midHand.seats.find((s) => s.seatId === bbSeat)?.isBigBlind).toBe(
+      true
+    );
+  });
+
   it("action after middle raise goes to player after raiser", () => {
     const table = new TableEngine({
       tournamentId: "test",

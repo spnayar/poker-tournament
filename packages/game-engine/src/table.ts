@@ -66,6 +66,9 @@ export class TableEngine {
   private pendingEvents: TableEvent[] = [];
   private actionLog: ActionLogEntry[] = [];
   private actionLogId = 0;
+  /** Blind seats posted for the current hand (stable even after folds). */
+  private postedSbSeat: number | null = null;
+  private postedBbSeat: number | null = null;
 
   constructor(config: TableConfig) {
     this.config = config;
@@ -130,6 +133,8 @@ export class TableEngine {
       eliminationOrder: [...this.eliminationOrder],
       actionLog: [...this.actionLog],
       actionLogId: this.actionLogId,
+      postedSbSeat: this.postedSbSeat,
+      postedBbSeat: this.postedBbSeat,
     };
   }
 
@@ -158,6 +163,8 @@ export class TableEngine {
     this.eliminationOrder = [...snapshot.eliminationOrder];
     this.actionLog = [...snapshot.actionLog];
     this.actionLogId = snapshot.actionLogId;
+    this.postedSbSeat = snapshot.postedSbSeat ?? null;
+    this.postedBbSeat = snapshot.postedBbSeat ?? null;
     this.pendingEvents = [];
   }
 
@@ -232,32 +239,60 @@ export class TableEngine {
       .sort((a, b) => a - b);
   }
 
+  /** Next active seat clockwise on the table ring (skips empty/busted seats). */
+  private nextActiveSeatClockwise(
+    fromSeat: number,
+    activeSeats: number[]
+  ): number {
+    if (activeSeats.length === 0) return fromSeat;
+    const ring = this.getSeatIds();
+    const startIdx = ring.indexOf(fromSeat);
+    const begin = startIdx === -1 ? 0 : startIdx;
+    for (let i = 1; i <= ring.length; i++) {
+      const candidate = ring[(begin + i) % ring.length]!;
+      if (activeSeats.includes(candidate)) return candidate;
+    }
+    return activeSeats[0]!;
+  }
+
+  private blindSeatsForDealer(
+    dealer: number,
+    activeSeats: number[]
+  ): { sb: number; bb: number } {
+    const sb =
+      activeSeats.length === 2
+        ? dealer
+        : this.nextActiveSeatClockwise(dealer, activeSeats);
+    const bb = this.nextActiveSeatClockwise(sb, activeSeats);
+    return { sb, bb };
+  }
+
   private moveDealerButton(activeSeats: number[]): void {
-    const idx = activeSeats.indexOf(this.dealerSeat);
-    const nextIdx = idx === -1 ? 0 : (idx + 1) % activeSeats.length;
-    this.dealerSeat = activeSeats[nextIdx]!;
+    this.dealerSeat = this.nextActiveSeatClockwise(
+      this.dealerSeat,
+      activeSeats
+    );
   }
 
   /** Who will have the button if the next hand is dealt now. */
   getNextDealerSeat(): number | null {
     const activeSeats = this.getActiveSeats();
     if (activeSeats.length < 2) return null;
-    const idx = activeSeats.indexOf(this.dealerSeat);
-    const nextIdx = idx === -1 ? 0 : (idx + 1) % activeSeats.length;
-    return activeSeats[nextIdx] ?? null;
+    return this.nextActiveSeatClockwise(this.dealerSeat, activeSeats);
   }
 
-  private seatAfter(seat: number, activeSeats: number[]): number {
-    const idx = activeSeats.indexOf(seat);
-    return activeSeats[(idx + 1) % activeSeats.length]!;
+  private seatAfter(seat: number, seatsInOrder: number[]): number {
+    const idx = seatsInOrder.indexOf(seat);
+    return seatsInOrder[(idx + 1) % seatsInOrder.length]!;
   }
 
   private postBlinds(activeSeats: number[]): void {
-    const sbSeat =
-      activeSeats.length === 2
-        ? this.dealerSeat
-        : this.seatAfter(this.dealerSeat, activeSeats);
-    const bbSeat = this.seatAfter(sbSeat, activeSeats);
+    const { sb: sbSeat, bb: bbSeat } = this.blindSeatsForDealer(
+      this.dealerSeat,
+      activeSeats
+    );
+    this.postedSbSeat = sbSeat;
+    this.postedBbSeat = bbSeat;
 
     this.postBlind(sbSeat, this.smallBlind, true);
     this.postBlind(bbSeat, this.bigBlind, false);
@@ -372,12 +407,10 @@ export class TableEngine {
     this.emitState();
   }
 
-  private findBigBlindSeat(handSeats: number[]): number {
-    const sbSeat =
-      handSeats.length === 2
-        ? this.dealerSeat
-        : this.seatAfter(this.dealerSeat, handSeats);
-    return this.seatAfter(sbSeat, handSeats);
+  private findBigBlindSeat(_handSeats: number[]): number {
+    if (this.postedBbSeat !== null) return this.postedBbSeat;
+    const activeSeats = this.getActiveSeats();
+    return this.blindSeatsForDealer(this.dealerSeat, activeSeats).bb;
   }
 
   /** True if some opponent could call or re-raise a new bet/raise. */
@@ -973,18 +1006,41 @@ export class TableEngine {
     };
   }
 
+  private getDisplayBlindRoles(): {
+    dealer: number;
+    sb: number;
+    bb: number;
+  } {
+    const activeSeats = this.getActiveSeats();
+
+    if (this.phase === "hand-complete" && activeSeats.length >= 2) {
+      const nextDealer = this.getNextDealerSeat() ?? this.dealerSeat;
+      const { sb, bb } = this.blindSeatsForDealer(nextDealer, activeSeats);
+      return { dealer: nextDealer, sb, bb };
+    }
+
+    if (
+      this.postedSbSeat !== null &&
+      this.postedBbSeat !== null &&
+      this.phase !== "waiting"
+    ) {
+      return {
+        dealer: this.dealerSeat,
+        sb: this.postedSbSeat,
+        bb: this.postedBbSeat,
+      };
+    }
+
+    const basis = activeSeats.length >= 2 ? activeSeats : this.getSeatIds();
+    const { sb, bb } = this.blindSeatsForDealer(this.dealerSeat, basis);
+    return { dealer: this.dealerSeat, sb, bb };
+  }
+
   private buildPublicSeats(): SeatPublic[] {
     const reviewingHand =
       this.phase === "hand-complete" || this.phase === "showdown";
-    const seatBasis =
-      this.phase === "waiting" || this.phase === "hand-complete"
-        ? this.getActiveSeats()
-        : this.getHandSeats();
-    const sbSeat =
-      seatBasis.length === 2
-        ? this.dealerSeat
-        : this.seatAfter(this.dealerSeat, seatBasis);
-    const bbSeat = this.seatAfter(sbSeat, seatBasis);
+    const { dealer: dealerSeat, sb: sbSeat, bb: bbSeat } =
+      this.getDisplayBlindRoles();
 
     return [...this.players.values()]
       .filter(
@@ -1002,7 +1058,7 @@ export class TableEngine {
         totalBet: p.totalBet,
         folded: p.folded,
         allIn: p.allIn,
-        isDealer: p.seatId === this.dealerSeat,
+        isDealer: p.seatId === dealerSeat,
         isSmallBlind: p.seatId === sbSeat,
         isBigBlind: p.seatId === bbSeat,
         lastAction: p.lastAction,
