@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { buildBlindLevels } from "@poker/protocol";
 import { TableEngine } from "./table";
 
 describe("TableEngine snapshot", () => {
@@ -6,8 +7,7 @@ describe("TableEngine snapshot", () => {
     const table = new TableEngine({
       tournamentId: "test",
       startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
+      blindLevels: buildBlindLevels(1000, "turbo"),
     });
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);

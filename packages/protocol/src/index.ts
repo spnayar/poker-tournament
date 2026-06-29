@@ -105,6 +105,7 @@ export type LegalActions = z.infer<typeof LegalActionsSchema>;
 
 export const ServerEvents = {
   TABLE_STATE: "table:state",
+  BLIND_TIMER: "blind:timer",
   PLAYER_CARDS: "player:cards",
   ACTION_REQUIRED: "action:required",
   HAND_RESULT: "hand:result",
@@ -123,6 +124,8 @@ export const ClientEvents = {
   ACTION: "player:action",
   RECONNECT: "player:reconnect",
   START_NEXT_HAND: "hand:start-next",
+  PAUSE_BLIND_TIMER: "blind:pause",
+  RESUME_BLIND_TIMER: "blind:resume",
 } as const;
 
 export const AnimDealSchema = z.object({
@@ -328,3 +331,5 @@ export function computeNightLedger(
     })
     .sort((a, b) => b.netCents - a.netCents);
 }
+
+export * from "./blinds";

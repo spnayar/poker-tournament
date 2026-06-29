@@ -16,7 +16,10 @@ import {
   ServerEvents,
   computePayoutsFromPercents,
   PlayerActionSchema,
+  resolveBlindLevels,
+  type BlindLevel,
 } from "@poker/protocol";
+import { BlindTimer, type BlindTimerSnapshot } from "./blindTimer";
 
 const PORT = parseInt(
   process.env.PORT ?? process.env.GAME_SERVER_PORT ?? "3001",
@@ -48,6 +51,9 @@ interface TournamentRoom {
   gameId: string;
   gameNumber: number;
   payoutPercents: number[];
+  hostUserId: string;
+  blindLevels: BlindLevel[];
+  blindTimer: BlindTimer;
 }
 
 const rooms = new Map<string, TournamentRoom>();
@@ -78,6 +84,29 @@ function beginLockKey(tournamentId: string, gameNumber: number): string {
   return `tournament:${tournamentId}:game:${gameNumber}:begin-lock`;
 }
 
+function blindTimerKey(tournamentId: string, gameNumber: number): string {
+  return `tournament:${tournamentId}:game:${gameNumber}:blind-timer`;
+}
+
+type TournamentSettings = {
+  buyInCents: number;
+  payoutPercents: unknown;
+  hostUserId: string;
+  startingChips: number;
+  blindLevels: unknown;
+  blindPace: string;
+  blindPreset: string;
+  blindLevelMinutes: number;
+};
+
+function getBlindLevelsForTournament(tournament: TournamentSettings): BlindLevel[] {
+  return resolveBlindLevels(tournament.startingChips, {
+    blindLevels: tournament.blindLevels,
+    blindPace: tournament.blindPace,
+    blindPreset: tournament.blindPreset,
+  });
+}
+
 async function getRunningGame(tournamentId: string) {
   return prisma.game.findFirst({
     where: { tournamentId, status: "RUNNING" },
@@ -93,6 +122,36 @@ async function persistRoom(tournamentId: string, room: TournamentRoom): Promise<
     "EX",
     SNAPSHOT_TTL_SEC
   );
+  await redis.set(
+    blindTimerKey(tournamentId, room.gameNumber),
+    JSON.stringify(room.blindTimer.toSnapshot()),
+    "EX",
+    SNAPSHOT_TTL_SEC
+  );
+}
+
+function broadcastBlindTimer(tournamentId: string, room: TournamentRoom): void {
+  const snap = room.table.toSnapshot();
+  const timerState = room.blindTimer.getPublicState(
+    snap.smallBlind,
+    snap.bigBlind,
+    snap.blindLevel
+  );
+  io.to(`tournament:${tournamentId}`).emit(ServerEvents.BLIND_TIMER, {
+    ...timerState,
+    hostUserId: room.hostUserId,
+  });
+}
+
+async function applyPendingBlindIncrease(room: TournamentRoom): Promise<boolean> {
+  if (!room.blindTimer.getIncreasePending()) return false;
+  const applied = room.table.applyScheduledBlindIncrease();
+  if (applied) {
+    room.blindTimer.onLevelApplied(room.table.toSnapshot().blindLevel);
+    return true;
+  }
+  room.blindTimer.clearIncreasePending();
+  return false;
 }
 
 function buildSeatMap(table: TableEngine): Map<string, number> {
@@ -105,9 +164,12 @@ function buildSeatMap(table: TableEngine): Map<string, number> {
 
 function buildRoom(
   table: TableEngine,
-  tournament: { buyInCents: number; payoutPercents: unknown },
-  game: { id: string; gameNumber: number }
+  tournament: TournamentSettings,
+  game: { id: string; gameNumber: number },
+  blindTimerSnapshot?: BlindTimerSnapshot
 ): TournamentRoom {
+  const blindLevels = getBlindLevelsForTournament(tournament);
+  const levelDurationMs = tournament.blindLevelMinutes * 60 * 1000;
   return {
     table,
     playerSockets: new Map(),
@@ -116,6 +178,9 @@ function buildRoom(
     gameId: game.id,
     gameNumber: game.gameNumber,
     payoutPercents: tournament.payoutPercents as number[],
+    hostUserId: tournament.hostUserId,
+    blindLevels,
+    blindTimer: new BlindTimer(blindLevels, levelDurationMs, blindTimerSnapshot),
   };
 }
 
@@ -142,8 +207,7 @@ async function createRoomFromDb(tournamentId: string): Promise<TournamentRoom | 
   const table = new TableEngine({
     tournamentId,
     startingChips: tournament.startingChips,
-    blindPreset: tournament.blindPreset,
-    levelIncreaseEvery: 8,
+    blindLevels: getBlindLevelsForTournament(tournament),
   });
 
   tournament.players.forEach((p, idx) => {
@@ -185,7 +249,13 @@ async function loadOrCreateRoom(tournamentId: string): Promise<TournamentRoom | 
       }
 
       const table = TableEngine.fromSnapshot(snapshot);
-      const room = buildRoom(table, tournament, runningGame);
+      const timerRaw = await redis.get(
+        blindTimerKey(tournamentId, runningGame.gameNumber)
+      );
+      const timerSnapshot = timerRaw
+        ? (JSON.parse(timerRaw) as BlindTimerSnapshot)
+        : undefined;
+      const room = buildRoom(table, tournament, runningGame, timerSnapshot);
       rooms.set(tournamentId, room);
       return room;
     } catch (err) {
@@ -312,10 +382,12 @@ async function startNextHand(
   if (state.phase !== "hand-complete") return false;
   if (room.table.isTournamentComplete()) return false;
 
+  await applyPendingBlindIncrease(room);
   const started = room.table.startHand();
   if (!started) return false;
 
   await processTableEvents(room, tournamentId);
+  broadcastBlindTimer(tournamentId, room);
 
   if (room.table.isTournamentComplete()) {
     void finishGame(tournamentId, room);
@@ -328,6 +400,7 @@ async function clearGameRedis(tournamentId: string, gameNumber: number): Promise
   await redis.del(snapshotKey(tournamentId, gameNumber));
   await redis.del(begunKey(tournamentId, gameNumber));
   await redis.del(beginLockKey(tournamentId, gameNumber));
+  await redis.del(blindTimerKey(tournamentId, gameNumber));
 }
 
 async function finishGame(tournamentId: string, room: TournamentRoom): Promise<void> {
@@ -491,8 +564,13 @@ async function beginGame(tournamentId: string): Promise<boolean> {
   }
 
   try {
+    await applyPendingBlindIncrease(room);
     const started = room.table.startHand();
     if (!started) return false;
+
+    if (room.table.getPublicState().handNumber === 1) {
+      room.blindTimer.startLevelTimer();
+    }
 
     await persistRoom(tournamentId, room);
     await redis.set(
@@ -503,6 +581,7 @@ async function beginGame(tournamentId: string): Promise<boolean> {
     );
     await processTableEvents(room, tournamentId);
     broadcastGameStarted(tournamentId, room);
+    broadcastBlindTimer(tournamentId, room);
     return true;
   } finally {
     await redis.del(beginLockKey(tournamentId, room.gameNumber));
@@ -543,6 +622,11 @@ async function resyncSocket(
   const state = room.table.getPublicState();
   socket.emit(ServerEvents.TABLE_STATE, state);
   sendPrivateStateToSocket(socket, room, userId);
+  const snap = room.table.toSnapshot();
+  socket.emit(ServerEvents.BLIND_TIMER, {
+    ...room.blindTimer.getPublicState(snap.smallBlind, snap.bigBlind, snap.blindLevel),
+    hostUserId: room.hostUserId,
+  });
 }
 
 app.post("/tournaments/:id/begin", async (req, res) => {
@@ -672,6 +756,40 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on(ClientEvents.PAUSE_BLIND_TIMER, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, { message: "Only the host can pause blinds" });
+      return;
+    }
+
+    room.blindTimer.pause();
+    await persistRoom(tournamentId, room);
+    broadcastBlindTimer(tournamentId, room);
+  });
+
+  socket.on(ClientEvents.RESUME_BLIND_TIMER, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, { message: "Only the host can resume blinds" });
+      return;
+    }
+
+    room.blindTimer.resume();
+    await persistRoom(tournamentId, room);
+    broadcastBlindTimer(tournamentId, room);
+  });
+
   socket.on("disconnect", () => {
     const tournamentId = socket.data.tournamentId as string | undefined;
     if (!tournamentId) return;
@@ -681,6 +799,17 @@ io.on("connection", (socket) => {
     }
   });
 });
+
+setInterval(() => {
+  for (const [tournamentId, room] of rooms) {
+    const changed = room.blindTimer.tick();
+    if (changed) {
+      void persistRoom(tournamentId, room).then(() => {
+        broadcastBlindTimer(tournamentId, room);
+      });
+    }
+  }
+}, 1000);
 
 httpServer.listen(PORT, () => {
   console.log(`Game server listening on port ${PORT}`);

@@ -6,10 +6,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
 import {
-  defaultTournamentName,
+  createGameNightFormDefaults,
   payoutPercentsSum,
   validatePayoutPercents,
+  type LastHostedDefaults,
 } from "@/lib/tournament";
+import {
+  BLIND_LEVEL_MINUTE_OPTIONS,
+  BLIND_PACE_LABELS,
+  buildBlindLevels,
+  type BlindPace,
+} from "@poker/protocol";
 
 interface Tournament {
   id: string;
@@ -44,16 +51,9 @@ export default function DashboardPage() {
   const [joinError, setJoinError] = useState("");
   const [joining, setJoining] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: defaultTournamentName(),
-    buyInDollars: "20",
-    startingChips: "5000",
-    maxPlayers: "9",
-    blindPreset: "standard",
-    payout1: "50",
-    payout2: "30",
-    payout3: "20",
-  });
+  const [lastHostedDefaults, setLastHostedDefaults] =
+    useState<LastHostedDefaults | null>(null);
+  const [form, setForm] = useState(() => createGameNightFormDefaults());
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -70,6 +70,9 @@ export default function DashboardPage() {
           }
           setTournaments(data.tournaments ?? []);
           setStats(data.stats);
+          const defaults = data.lastHostedDefaults ?? null;
+          setLastHostedDefaults(defaults);
+          setForm(createGameNightFormDefaults(defaults));
         });
     }
   }, [status]);
@@ -91,7 +94,8 @@ export default function DashboardPage() {
         buyInCents: Math.round(parseFloat(form.buyInDollars) * 100),
         startingChips: parseInt(form.startingChips, 10),
         maxPlayers: parseInt(form.maxPlayers, 10),
-        blindPreset: form.blindPreset,
+        blindPace: form.blindPace,
+        blindLevelMinutes: form.blindLevelMinutes,
         payoutPercents: [
           parseInt(form.payout1, 10),
           parseInt(form.payout2, 10),
@@ -148,6 +152,11 @@ export default function DashboardPage() {
   const payoutValues = [form.payout1, form.payout2, form.payout3];
   const payoutTotal = payoutPercentsSum(payoutValues);
   const payoutError = validatePayoutPercents(payoutValues);
+  const startingChipsNum = parseInt(form.startingChips, 10) || 5000;
+  const blindPreview = buildBlindLevels(startingChipsNum, form.blindPace).slice(
+    0,
+    6
+  );
 
   if (status === "loading") {
     return (
@@ -230,7 +239,7 @@ export default function DashboardPage() {
               setShowCreate(!showCreate);
               setShowJoin(false);
               if (!showCreate) {
-                setForm((f) => ({ ...f, name: defaultTournamentName() }));
+                setForm(createGameNightFormDefaults(lastHostedDefaults));
               }
             }}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium"
@@ -326,19 +335,74 @@ export default function DashboardPage() {
             </div>
             <div>
               <label className="block text-sm text-slate-400 mb-1">
-                Blind structure
+                Blind pace
               </label>
               <select
-                value={form.blindPreset}
+                value={form.blindPace}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, blindPreset: e.target.value }))
+                  setForm((f) => ({
+                    ...f,
+                    blindPace: e.target.value as BlindPace,
+                  }))
                 }
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
               >
-                <option value="standard">Standard blinds</option>
-                <option value="turbo">Turbo blinds</option>
+                {(Object.keys(BLIND_PACE_LABELS) as BlindPace[]).map((pace) => (
+                  <option key={pace} value={pace}>
+                    {BLIND_PACE_LABELS[pace].label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500 mt-1">
+                {BLIND_PACE_LABELS[form.blindPace].description}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">
+                Minutes per blind level
+              </label>
+              <select
+                value={form.blindLevelMinutes}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    blindLevelMinutes: parseInt(e.target.value, 10),
+                  }))
+                }
+                className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
+              >
+                {BLIND_LEVEL_MINUTE_OPTIONS.map((mins) => (
+                  <option key={mins} value={mins}>
+                    {mins} minutes
+                  </option>
+                ))}
               </select>
             </div>
+          </div>
+          <div className="mb-4 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+            <p className="text-xs font-semibold text-slate-400 mb-2">
+              Blind preview (scaled to {startingChipsNum.toLocaleString()} chips)
+            </p>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
+              {blindPreview.map((level) => (
+                <div
+                  key={level.level}
+                  className="rounded-md bg-slate-900 border border-slate-800 px-2 py-1.5 text-center"
+                >
+                  <p className="text-slate-500">L{level.level}</p>
+                  <p className="font-medium">
+                    {level.sb}/{level.bb}
+                  </p>
+                  <p className="text-slate-600">
+                    {Math.round(startingChipsNum / level.bb)} BB
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-600 mt-2">
+              Level 1 big blind is ~1% of starting stack. Blinds increase when
+              the timer expires; the next hand deals at the new level.
+            </p>
           </div>
           <div className="mb-4">
             <label className="block text-sm text-slate-400 mb-2">

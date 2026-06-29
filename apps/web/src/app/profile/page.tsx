@@ -34,6 +34,10 @@ export default function ProfilePage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [user, setUser] = useState<ProfileUser | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState("");
+  const [nameSaved, setNameSaved] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -47,6 +51,7 @@ export default function ProfilePage() {
           setStats(data.stats);
           setHistory(data.history ?? []);
           setUser(data.user ?? null);
+          setNameDraft(data.user?.displayName ?? "");
         });
     }
   }, [status]);
@@ -65,6 +70,34 @@ export default function ProfilePage() {
     },
     [updateSession]
   );
+
+  async function saveDisplayName() {
+    const trimmed = nameDraft.trim();
+    if (trimmed === user?.displayName) return;
+
+    setNameSaving(true);
+    setNameError("");
+    setNameSaved(false);
+
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: trimmed }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setNameSaving(false);
+
+    if (!res.ok) {
+      setNameError(data.error || "Could not save name");
+      return;
+    }
+
+    setUser(data.user);
+    setNameDraft(data.user.displayName);
+    await updateSession({ name: data.user.displayName });
+    setNameSaved(true);
+    setTimeout(() => setNameSaved(false), 2000);
+  }
 
   if (!stats || !user) {
     return (
@@ -107,6 +140,45 @@ export default function ProfilePage() {
           <p className="text-slate-400">{user.email}</p>
         </div>
       </div>
+
+      <section className="mb-8 bg-slate-900 rounded-xl p-4 border border-slate-800">
+        <h2 className="text-sm font-semibold text-slate-400 mb-3">Display name</h2>
+        <p className="text-xs text-slate-500 mb-3">
+          Shown at the table and on game night rosters.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={nameDraft}
+            onChange={(e) => {
+              setNameDraft(e.target.value);
+              setNameError("");
+              setNameSaved(false);
+            }}
+            maxLength={32}
+            className="flex-1 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
+            placeholder="Your name"
+          />
+          <button
+            type="button"
+            onClick={saveDisplayName}
+            disabled={
+              nameSaving ||
+              nameDraft.trim().length < 2 ||
+              nameDraft.trim() === user.displayName
+            }
+            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium text-sm disabled:opacity-50 shrink-0"
+          >
+            {nameSaving ? "Saving…" : "Save name"}
+          </button>
+        </div>
+        {nameError && (
+          <p className="text-red-400 text-sm mt-2">{nameError}</p>
+        )}
+        {nameSaved && (
+          <p className="text-emerald-400 text-sm mt-2">Name updated.</p>
+        )}
+      </section>
 
       <AvatarPicker currentUrl={user.avatarUrl} onSelect={handleAvatarSelect} />
 

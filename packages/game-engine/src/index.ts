@@ -1,11 +1,5 @@
 export { createDeck, shuffleDeck, newShuffledDeck } from "./deck";
-export {
-  STANDARD_BLINDS,
-  TURBO_BLINDS,
-  getBlindPreset,
-  getBlindsForLevel,
-  type BlindLevel,
-} from "./blinds";
+export { getBlindsForLevelFromStructure, type BlindLevel } from "./blinds";
 export {
   buildSidePots,
   totalPotAmount,

@@ -50,6 +50,8 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
+        token.name = user.name;
+        token.email = user.email;
         token.picture = user.image;
         token.gameToken = jwt.sign(
           {
@@ -61,14 +63,29 @@ export const authOptions: NextAuthOptions = {
           { expiresIn: "24h" }
         );
       }
-      if (trigger === "update" && session?.image) {
-        token.picture = session.image;
+      if (trigger === "update" && session) {
+        if (session.image !== undefined) {
+          token.picture = session.image;
+        }
+        if (session.name !== undefined) {
+          token.name = session.name;
+          token.gameToken = jwt.sign(
+            {
+              userId: token.id,
+              email: token.email,
+              displayName: session.name,
+            },
+            JWT_SECRET,
+            { expiresIn: "24h" }
+          );
+        }
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        session.user.name = (token.name as string | undefined) ?? session.user.name;
         session.user.gameToken = token.gameToken as string;
         session.user.image = (token.picture as string | null) ?? null;
       }

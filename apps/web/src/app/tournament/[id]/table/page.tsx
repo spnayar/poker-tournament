@@ -10,6 +10,7 @@ import { ActionLogPanel } from "@/components/table/ActionLogPanel";
 import { HandResultOverlay, HandWinnerChipBurst } from "@/components/table/HandResultOverlay";
 import { POST_REVEAL_PAUSE_MS } from "@/components/table/tableAnimation";
 import { GameEndSidebar } from "@/components/table/GameEndSidebar";
+import { BlindTimerBar } from "@/components/table/BlindTimerBar";
 import { DealNextHandBar } from "@/components/table/DealNextHandBar";
 import { LEDGER_DISCLAIMER } from "@/lib/utils";
 import {
@@ -22,6 +23,7 @@ import {
   type GameStarted,
   type ActionLogEntry,
   type ShownHand,
+  type BlindTimerState,
 } from "@poker/protocol";
 
 const GAME_SERVER_WS =
@@ -74,6 +76,10 @@ export default function TablePage() {
   const [actionPending, setActionPending] = useState(false);
   const [dealNextPending, setDealNextPending] = useState(false);
   const [hostActionLoading, setHostActionLoading] = useState(false);
+  const [blindTimer, setBlindTimer] = useState<
+    (BlindTimerState & { hostUserId?: string }) | null
+  >(null);
+  const [timerActionLoading, setTimerActionLoading] = useState(false);
   const [animateDeal, setAnimateDeal] = useState(true);
   const [viewerSeatId, setViewerSeatId] = useState<number | null>(null);
 
@@ -237,6 +243,12 @@ export default function TablePage() {
       setActionPending(false);
     };
 
+    const handleBlindTimer = (
+      payload: BlindTimerState & { hostUserId?: string }
+    ) => {
+      setBlindTimer(payload);
+    };
+
     const handleGameStarted = (_payload: GameStarted) => {
       gameFinishedRef.current = false;
       setGameFinished(null);
@@ -303,6 +315,7 @@ export default function TablePage() {
     socket.on(ServerEvents.HAND_RESULT, handleHandResult);
     socket.on(ServerEvents.GAME_FINISHED, handleGameFinished);
     socket.on(ServerEvents.GAME_STARTED, handleGameStarted);
+    socket.on(ServerEvents.BLIND_TIMER, handleBlindTimer);
     socket.on(ServerEvents.TOURNAMENT_FINISHED, handleTournamentFinished);
     socket.on(ServerEvents.ERROR, handleError);
 
@@ -318,6 +331,7 @@ export default function TablePage() {
       socket.off(ServerEvents.HAND_RESULT, handleHandResult);
       socket.off(ServerEvents.GAME_FINISHED, handleGameFinished);
       socket.off(ServerEvents.GAME_STARTED, handleGameStarted);
+      socket.off(ServerEvents.BLIND_TIMER, handleBlindTimer);
       socket.off(ServerEvents.TOURNAMENT_FINISHED, handleTournamentFinished);
       socket.off(ServerEvents.ERROR, handleError);
     };
@@ -341,6 +355,20 @@ export default function TablePage() {
     if (!socketRef.current || dealNextPending || gameFinished) return;
     setDealNextPending(true);
     socketRef.current.emit(ClientEvents.START_NEXT_HAND);
+  }
+
+  function pauseBlindTimer() {
+    if (!socketRef.current || timerActionLoading) return;
+    setTimerActionLoading(true);
+    socketRef.current.emit(ClientEvents.PAUSE_BLIND_TIMER);
+    setTimeout(() => setTimerActionLoading(false), 300);
+  }
+
+  function resumeBlindTimer() {
+    if (!socketRef.current || timerActionLoading) return;
+    setTimerActionLoading(true);
+    socketRef.current.emit(ClientEvents.RESUME_BLIND_TIMER);
+    setTimeout(() => setTimerActionLoading(false), 300);
   }
 
   async function playAnotherGame() {
@@ -415,6 +443,15 @@ export default function TablePage() {
         )}
 
         <div className="flex-1 flex flex-col min-w-0">
+          {blindTimer && !gameFinished && (
+            <BlindTimerBar
+              timer={blindTimer}
+              myUserId={session?.user?.id ?? ""}
+              onPause={pauseBlindTimer}
+              onResume={resumeBlindTimer}
+              actionLoading={timerActionLoading}
+            />
+          )}
           <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch">
             <div className="flex-1 flex items-center justify-center min-w-0">
               <div

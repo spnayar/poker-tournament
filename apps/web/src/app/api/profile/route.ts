@@ -56,19 +56,44 @@ export async function PATCH(req: Request) {
   }
 
   const body = await req.json();
-  const { avatarUrl } = body;
+  const { avatarUrl, displayName } = body;
 
-  if (typeof avatarUrl !== "string" || !avatarUrl) {
-    return NextResponse.json({ error: "avatarUrl is required" }, { status: 400 });
+  const data: { avatarUrl?: string; displayName?: string } = {};
+
+  if (displayName !== undefined) {
+    if (typeof displayName !== "string") {
+      return NextResponse.json({ error: "Invalid display name" }, { status: 400 });
+    }
+    const trimmed = displayName.trim();
+    if (trimmed.length < 2 || trimmed.length > 32) {
+      return NextResponse.json(
+        { error: "Display name must be 2–32 characters" },
+        { status: 400 }
+      );
+    }
+    data.displayName = trimmed;
   }
 
-  if (!isAllowedAvatarUrl(avatarUrl)) {
-    return NextResponse.json({ error: "Invalid avatar" }, { status: 400 });
+  if (avatarUrl !== undefined) {
+    if (typeof avatarUrl !== "string" || !avatarUrl) {
+      return NextResponse.json({ error: "avatarUrl is required" }, { status: 400 });
+    }
+    if (!isAllowedAvatarUrl(avatarUrl)) {
+      return NextResponse.json({ error: "Invalid avatar" }, { status: 400 });
+    }
+    data.avatarUrl = avatarUrl;
+  }
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json(
+      { error: "No valid fields to update" },
+      { status: 400 }
+    );
   }
 
   const user = await prisma.user.update({
     where: { id: session.user.id },
-    data: { avatarUrl },
+    data,
     select: { displayName: true, email: true, avatarUrl: true },
   });
 

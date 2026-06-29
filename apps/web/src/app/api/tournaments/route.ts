@@ -9,6 +9,11 @@ import {
   parsePayoutPercents,
   validatePayoutPercents,
 } from "@/lib/tournament";
+import {
+  BlindPaceSchema,
+  BLIND_LEVEL_MINUTE_OPTIONS,
+  buildBlindLevels,
+} from "@poker/protocol";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -17,7 +22,7 @@ export async function GET() {
   }
 
   try {
-    const [user, stats, tournaments] = await Promise.all([
+    const [user, stats, tournaments, lastHosted] = await Promise.all([
       prisma.user.findUnique({ where: { id: session.user.id } }),
       prisma.userStats.findUnique({ where: { userId: session.user.id } }),
       prisma.tournament.findMany({
@@ -43,9 +48,29 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         take: 20,
       }),
+      prisma.tournament.findFirst({
+        where: { hostUserId: session.user.id },
+        orderBy: { createdAt: "desc" },
+        select: {
+          buyInCents: true,
+          startingChips: true,
+          maxPlayers: true,
+          blindPace: true,
+          blindPreset: true,
+          blindLevelMinutes: true,
+          payoutPercents: true,
+        },
+      }),
     ]);
 
-    return NextResponse.json({ user, stats, tournaments });
+    const lastHostedDefaults = lastHosted
+      ? {
+          ...lastHosted,
+          payoutPercents: lastHosted.payoutPercents as number[],
+        }
+      : null;
+
+    return NextResponse.json({ user, stats, tournaments, lastHostedDefaults });
   } catch (err) {
     console.error("GET /api/tournaments failed:", err);
     return NextResponse.json(
@@ -67,9 +92,17 @@ export async function POST(req: Request) {
     buyInCents = 2000,
     startingChips = 5000,
     maxPlayers = 9,
-    blindPreset = "standard",
+    blindPace = "gradual",
+    blindLevelMinutes = 12,
     payoutPercents: rawPayouts,
   } = body;
+
+  const paceResult = BlindPaceSchema.safeParse(blindPace);
+  const resolvedPace = paceResult.success ? paceResult.data : "gradual";
+  const resolvedMinutes = BLIND_LEVEL_MINUTE_OPTIONS.includes(blindLevelMinutes)
+    ? blindLevelMinutes
+    : 12;
+  const blindLevels = buildBlindLevels(startingChips, resolvedPace);
 
   if (Array.isArray(rawPayouts)) {
     const payoutError = validatePayoutPercents(rawPayouts);
@@ -97,7 +130,10 @@ export async function POST(req: Request) {
         buyInCents,
         startingChips,
         maxPlayers,
-        blindPreset,
+        blindPreset: resolvedPace,
+        blindPace: resolvedPace,
+        blindLevelMinutes: resolvedMinutes,
+        blindLevels,
         payoutPercents,
         inviteCode: joinCode,
         players: {

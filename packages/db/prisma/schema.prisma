@@ -53,7 +53,10 @@ model Tournament {
   startingChips  Int
   maxPlayers     Int              @default(9)
   payoutPercents Json @default("[50, 30, 20]")
-  blindPreset    String           @default("standard")
+  blindPreset    String           @default("gradual")
+  blindPace      String           @default("gradual")
+  blindLevelMinutes Int           @default(12)
+  blindLevels    Json             @default("[]")
   inviteCode     String           @unique @default(cuid())
   createdAt      DateTime         @default(now())
   closedAt       DateTime?

@@ -8,6 +8,11 @@ import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
 import { computePayoutsFromPercents, type NightLedgerEntry } from "@poker/protocol";
 import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
 import { formatSessionLabelShort } from "@/lib/labels";
+import {
+  BLIND_PACE_LABELS,
+  resolveBlindLevels,
+  type BlindPace,
+} from "@poker/protocol";
 
 interface Player {
   userId: string;
@@ -38,6 +43,9 @@ interface Tournament {
   startingChips: number;
   maxPlayers: number;
   blindPreset: string;
+  blindPace?: string;
+  blindLevelMinutes?: number;
+  blindLevels?: { level: number; sb: number; bb: number }[];
   hostUserId: string;
   inviteCode: string;
   players: Player[];
@@ -189,6 +197,13 @@ export default function TournamentLobbyPage() {
   const finishedGames = tournament.games.filter((g) => g.status === "FINISHED");
   const gamesPlayed = finishedGames.length;
   const canJoin = tournament.status !== "FINISHED" && !runningGame;
+  const blindPace = (tournament.blindPace ?? tournament.blindPreset) as BlindPace;
+  const blindLevels = resolveBlindLevels(tournament.startingChips, {
+    blindLevels: tournament.blindLevels,
+    blindPace: tournament.blindPace,
+    blindPreset: tournament.blindPreset,
+  });
+  const blindPreview = blindLevels.slice(0, 5);
 
   return (
     <div className="min-h-screen p-6 max-w-2xl mx-auto">
@@ -237,6 +252,34 @@ export default function TournamentLobbyPage() {
           <div>
             <p className="text-slate-400">Games played</p>
             <p className="font-semibold">{gamesPlayed}</p>
+          </div>
+          <div>
+            <p className="text-slate-400">Blind pace</p>
+            <p className="font-semibold">
+              {BLIND_PACE_LABELS[blindPace]?.label ?? blindPace}
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-400">Level length</p>
+            <p className="font-semibold">
+              {tournament.blindLevelMinutes ?? 12} min
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-slate-800">
+          <p className="text-slate-400 text-xs mb-2">Blind structure</p>
+          <div className="flex flex-wrap gap-2">
+            {blindPreview.map((level) => (
+              <span
+                key={level.level}
+                className="text-xs bg-slate-800 px-2 py-1 rounded-md"
+              >
+                L{level.level}: {level.sb}/{level.bb}
+              </span>
+            ))}
+            {blindLevels.length > blindPreview.length && (
+              <span className="text-xs text-slate-500">+ more</span>
+            )}
           </div>
         </div>
       </div>

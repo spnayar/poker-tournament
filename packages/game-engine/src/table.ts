@@ -9,7 +9,7 @@ import type {
   TablePhase,
   TableState,
 } from "@poker/protocol";
-import { getBlindsForLevel } from "./blinds";
+import { getBlindLevelAt, type BlindLevel } from "@poker/protocol";
 import { newShuffledDeck } from "./deck";
 import {
   evaluateHand,
@@ -37,8 +37,7 @@ export interface TablePlayer {
 export interface TableConfig {
   tournamentId: string;
   startingChips: number;
-  blindPreset: string;
-  levelIncreaseEvery: number;
+  blindLevels: BlindLevel[];
 }
 
 export interface TableEvent {
@@ -73,6 +72,9 @@ export class TableEngine {
 
   constructor(config: TableConfig) {
     this.config = config;
+    const first = getBlindLevelAt(config.blindLevels, 0);
+    this.smallBlind = first.sb;
+    this.bigBlind = first.bb;
   }
 
   addPlayer(
@@ -181,18 +183,6 @@ export class TableEngine {
 
     this.handNumber++;
     this.appendHandHeader();
-    if (
-      this.handNumber > 1 &&
-      (this.handNumber - 1) % this.config.levelIncreaseEvery === 0
-    ) {
-      this.blindLevel++;
-      const blinds = getBlindsForLevel(
-        this.config.blindPreset,
-        this.blindLevel
-      );
-      this.smallBlind = blinds.sb;
-      this.bigBlind = blinds.bb;
-    }
 
     this.deck = newShuffledDeck();
     this.board = [];
@@ -286,6 +276,16 @@ export class TableEngine {
     const pick = seats[Math.floor(Math.random() * seats.length)]!;
     this.dealerSeat = pick;
     this.skipNextDealerMove = true;
+  }
+
+  /** Apply the next blind level when the level timer expires (before a new hand). */
+  applyScheduledBlindIncrease(): boolean {
+    if (this.blindLevel >= this.config.blindLevels.length - 1) return false;
+    this.blindLevel++;
+    const blinds = getBlindLevelAt(this.config.blindLevels, this.blindLevel);
+    this.smallBlind = blinds.sb;
+    this.bigBlind = blinds.bb;
+    return true;
   }
 
   /** Who will have the button if the next hand is dealt now. */

@@ -1,14 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
+import { buildBlindLevels } from "@poker/protocol";
 import { TableEngine } from "./table";
+
+function testTableConfig(startingChips = 5000) {
+  return {
+    tournamentId: "test",
+    startingChips,
+    blindLevels: buildBlindLevels(startingChips, "turbo"),
+  };
+}
 
 describe("TableEngine", () => {
   function createThreePlayerTable() {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 500);
     table.addPlayer(2, "u3", "Carol", null, 1000);
@@ -36,12 +40,7 @@ describe("TableEngine", () => {
   });
 
   it("assigns action when only one player can still bet preflop", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 100);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.startHand();
@@ -52,12 +51,7 @@ describe("TableEngine", () => {
   });
 
   it("computes side pots after short all-in", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1200);
     table.addPlayer(1, "u2", "Bob", null, 500);
     table.addPlayer(2, "u3", "Carol", null, 1200);
@@ -68,12 +62,7 @@ describe("TableEngine", () => {
   });
 
   it("HU short stack all-in from blind proceeds to showdown, not fold win", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Short", null, 25);
     table.addPlayer(1, "u2", "Big", null, 1000);
     table.startHand();
@@ -102,12 +91,7 @@ describe("TableEngine", () => {
   });
 
   it("retains action log entries across multiple hands", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.startHand();
@@ -129,12 +113,7 @@ describe("TableEngine", () => {
   });
 
   it("HU opponent gets action after all-in raise preflop", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 500);
     table.startHand();
@@ -158,12 +137,7 @@ describe("TableEngine", () => {
   });
 
   it("HU opponent gets action after all-in on flop", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 500);
     table.startHand();
@@ -191,12 +165,7 @@ describe("TableEngine", () => {
   });
 
   it("three-way: players behind get action after middle all-in", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 500);
     table.addPlayer(2, "u3", "Carol", null, 1000);
@@ -220,12 +189,7 @@ describe("TableEngine", () => {
   });
 
   it("raiser gets action after opponent all-in re-raise", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 500);
     table.startHand();
@@ -248,12 +212,7 @@ describe("TableEngine", () => {
   });
 
   it("BB preflop raise uses minRaiseTo total, not increment", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.startHand();
@@ -273,12 +232,7 @@ describe("TableEngine", () => {
   });
 
   it("BB preflop raise rejects amount below minRaiseTo", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.startHand();
@@ -299,12 +253,7 @@ describe("TableEngine", () => {
   });
 
   it("SB call then BB raise reopens action for SB", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.startHand();
@@ -329,12 +278,7 @@ describe("TableEngine", () => {
   });
 
   it("short all-in re-raise reopens action for opponent", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 105);
     table.startHand();
@@ -351,12 +295,7 @@ describe("TableEngine", () => {
   });
 
   it("rotates dealer and blinds clockwise each hand", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.addPlayer(2, "u3", "Carol", null, 1000);
@@ -390,12 +329,7 @@ describe("TableEngine", () => {
   });
 
   it("keeps blind badges on posted seats after a fold", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.addPlayer(2, "u3", "Carol", null, 1000);
@@ -414,12 +348,7 @@ describe("TableEngine", () => {
   });
 
   it("randomizeDealerButton picks an active seat and first hand keeps it", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.addPlayer(2, "u3", "Carol", null, 1000);
@@ -433,13 +362,22 @@ describe("TableEngine", () => {
     randomSpy.mockRestore();
   });
 
+  it("applyScheduledBlindIncrease advances blinds between hands", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+
+    table.startHand();
+    const level1 = table.getPublicState();
+    table.applyScheduledBlindIncrease();
+    const level2 = table.getPublicState();
+
+    expect(level2.blindLevel).toBe(level1.blindLevel + 1);
+    expect(level2.bigBlind).toBeGreaterThan(level1.bigBlind);
+  });
+
   it("action after middle raise goes to player after raiser", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.addPlayer(2, "u3", "Carol", null, 1000);
@@ -459,12 +397,7 @@ describe("TableEngine", () => {
   });
 
   it("showdown: better hand wins after opponent calls all-in", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u2", "Bob", null, 500);
     table.addPlayer(1, "u1", "Alice", null, 1000);
     table.startHand();
@@ -506,12 +439,7 @@ describe("TableEngine", () => {
   });
 
   it("all-in with zero chips does not end tournament before opponent acts", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 6190);
     table.addPlayer(1, "u2", "Bob", null, 3061);
     table.startHand();
@@ -555,12 +483,7 @@ describe("TableEngine", () => {
   });
 
   it("tournament completes only after busted player is eliminated post-hand", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 2000);
     table.addPlayer(1, "u2", "Bob", null, 500);
     table.startHand();
@@ -585,12 +508,7 @@ describe("TableEngine", () => {
   });
 
   it("facing sole all-in opponent: call or fold only", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 10000);
     table.addPlayer(1, "u2", "Bob", null, 250);
     table.startHand();
@@ -609,12 +527,7 @@ describe("TableEngine", () => {
   });
 
   it("no hand result emitted before opponent responds to all-in", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.startHand();
@@ -636,12 +549,7 @@ describe("TableEngine", () => {
   });
 
   it("returns uncalled all-in excess when opponent folds", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 10000);
     table.addPlayer(1, "u2", "Bob", null, 250);
     table.startHand();
@@ -672,12 +580,7 @@ describe("TableEngine", () => {
   });
 
   it("fold awards pot with wonByFold true", () => {
-    const table = new TableEngine({
-      tournamentId: "test",
-      startingChips: 1000,
-      blindPreset: "turbo",
-      levelIncreaseEvery: 100,
-    });
+    const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
     table.addPlayer(1, "u2", "Bob", null, 1000);
     table.startHand();
