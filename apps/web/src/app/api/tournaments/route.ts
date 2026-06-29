@@ -49,7 +49,7 @@ export async function GET() {
   } catch (err) {
     console.error("GET /api/tournaments failed:", err);
     return NextResponse.json(
-      { error: "Failed to load tournaments" },
+      { error: "Failed to load game nights" },
       { status: 500 }
     );
   }
@@ -115,7 +115,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("POST /api/tournaments failed:", err);
     return NextResponse.json(
-      { error: "Failed to create tournament" },
+      { error: "Failed to create game night" },
       { status: 500 }
     );
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { formatSessionHistoryName } from "@/lib/labels";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@poker/db";
@@ -36,7 +37,10 @@ export async function GET() {
     finishPosition: r.finishPosition,
     payoutCents: r.payoutCents,
     tournament: {
-      name: `${r.game.tournament.name} — Game ${r.game.gameNumber}`,
+      name: formatSessionHistoryName(
+        r.game.tournament.name,
+        r.game.gameNumber
+      ),
       buyInCents: r.game.tournament.buyInCents,
       finishedAt: r.game.finishedAt,
     },

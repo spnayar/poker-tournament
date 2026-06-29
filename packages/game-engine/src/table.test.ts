@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { TableEngine } from "./table";
 
 describe("TableEngine", () => {
@@ -411,6 +411,26 @@ describe("TableEngine", () => {
     expect(midHand.seats.find((s) => s.seatId === bbSeat)?.isBigBlind).toBe(
       true
     );
+  });
+
+  it("randomizeDealerButton picks an active seat and first hand keeps it", () => {
+    const table = new TableEngine({
+      tournamentId: "test",
+      startingChips: 1000,
+      blindPreset: "turbo",
+      levelIncreaseEvery: 100,
+    });
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.6);
+    table.randomizeDealerButton();
+    expect(table.getPublicState().dealerSeat).toBe(1);
+
+    table.startHand();
+    expect(table.getPublicState().dealerSeat).toBe(1);
+    randomSpy.mockRestore();
   });
 
   it("action after middle raise goes to player after raiser", () => {

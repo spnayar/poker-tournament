@@ -7,6 +7,7 @@ import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
 import { computePayoutsFromPercents, type NightLedgerEntry } from "@poker/protocol";
 import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
+import { formatSessionLabelShort } from "@/lib/labels";
 
 interface Player {
   userId: string;
@@ -130,7 +131,7 @@ export default function TournamentLobbyPage() {
     if (res.ok) router.push(`/tournament/${id}/table`);
     else {
       const data = await res.json();
-      alert(data.error || "Could not start game");
+      alert(data.error || "Could not start tournament");
     }
     setActionLoading(false);
   }
@@ -160,7 +161,7 @@ export default function TournamentLobbyPage() {
   async function deleteTournament() {
     if (
       !confirm(
-        `Delete "${tournament?.name}"? This cannot be undone and will remove it for all players.`
+        `Delete this game night "${tournament?.name}"? This cannot be undone and will remove it for all players.`
       )
     ) {
       return;
@@ -171,7 +172,7 @@ export default function TournamentLobbyPage() {
     if (res.ok) router.push("/dashboard");
     else {
       const data = await res.json();
-      alert(data.error || "Could not delete tournament");
+      alert(data.error || "Could not delete game night");
     }
   }
 
@@ -267,7 +268,7 @@ export default function TournamentLobbyPage() {
       {payouts.length > 0 && (
         <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 mb-6">
           <h3 className="text-sm font-semibold text-slate-400 mb-2">
-            Payout per game (ledger)
+            Payout per tournament (ledger)
           </h3>
           <div className="flex gap-4 flex-wrap">
             {payouts.map((amount, i) => (
@@ -287,7 +288,7 @@ export default function TournamentLobbyPage() {
       {finishedGames.length > 0 && (
         <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 mb-6">
           <h3 className="text-sm font-semibold text-slate-400 mb-3">
-            Completed games
+            Completed tournaments
           </h3>
           <div className="space-y-4">
             {finishedGames.map((game) => {
@@ -298,7 +299,7 @@ export default function TournamentLobbyPage() {
                   className="border border-slate-800 rounded-lg p-3"
                 >
                   <p className="font-medium text-sm mb-2">
-                    Game #{game.gameNumber} ·{" "}
+                    {formatSessionLabelShort(game.gameNumber)} ·{" "}
                     {formatCents(game.prizePoolCents)} pool
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -357,7 +358,9 @@ export default function TournamentLobbyPage() {
             disabled={actionLoading}
             className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 rounded-lg font-semibold disabled:opacity-50 min-w-[140px]"
           >
-            {gamesPlayed === 0 ? "Start Game 1" : `Start Game ${gamesPlayed + 1}`}
+            {gamesPlayed === 0
+              ? "Start Tournament 1"
+              : `Start Tournament ${gamesPlayed + 1}`}
           </button>
         )}
         {isHost && gamesPlayed > 0 && !runningGame && (
@@ -366,7 +369,7 @@ export default function TournamentLobbyPage() {
             disabled={actionLoading}
             className="px-6 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium disabled:opacity-50"
           >
-            End Poker Night
+            End Game Night
           </button>
         )}
         {isHost && (
@@ -388,7 +391,7 @@ export default function TournamentLobbyPage() {
 
       {gamesPlayed > 0 && !isHost && !runningGame && (
         <p className="text-slate-400 text-sm text-center mt-4">
-          Waiting for the host to start the next game… you&apos;ll join the
+          Waiting for the host to start the next tournament… you&apos;ll join the
           table automatically.
         </p>
       )}

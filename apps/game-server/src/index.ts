@@ -156,6 +156,8 @@ async function createRoomFromDb(tournamentId: string): Promise<TournamentRoom | 
     );
   });
 
+  table.randomizeDealerButton();
+
   const room = buildRoom(table, tournament, runningGame);
   rooms.set(tournamentId, room);
   return room;

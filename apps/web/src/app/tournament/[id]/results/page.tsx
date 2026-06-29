@@ -8,6 +8,7 @@ import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
 import type { NightLedgerEntry } from "@poker/protocol";
 import { normalizeGamePayouts } from "@poker/protocol";
 import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
+import { formatSessionLabel, formatSessionLabelShort } from "@/lib/labels";
 
 interface GameResult {
   userId: string;
@@ -180,7 +181,11 @@ function ResultsContent() {
   return (
     <div className="min-h-screen p-6 max-w-lg mx-auto">
       <h1 className="text-3xl font-bold text-center mb-2">
-        {isClosed ? "Poker Night Complete" : `Game ${latestGame?.gameNumber ?? ""} Complete`}
+        {isClosed
+          ? "Game Night Complete"
+          : latestGame
+            ? `${formatSessionLabel(latestGame.gameNumber)} Complete`
+            : "Tournament Complete"}
       </h1>
       <p className="text-center text-slate-400 mb-1">{tournament.name}</p>
       <p className="text-center text-amber-400/80 text-xs mb-8">
@@ -190,7 +195,7 @@ function ResultsContent() {
       {latestGame && gameStandings.length > 0 && (
         <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 mb-6">
           <h2 className="text-sm font-semibold text-slate-400 mb-3">
-            Game #{latestGame.gameNumber} — all players
+            {formatSessionLabelShort(latestGame.gameNumber)} — all players
           </h2>
           <p className="text-xs text-slate-500 mb-3">
             {formatCents(tournament.buyInCents)} buy-in · net win/loss per player
@@ -273,7 +278,7 @@ function ResultsContent() {
       {finishedGames.length > 1 && (
         <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 mb-6">
           <h2 className="text-sm font-semibold text-slate-400 mb-3">
-            All games tonight
+            All tournaments tonight
           </h2>
           <div className="space-y-2 text-sm">
             {finishedGames.map((game) => {
@@ -283,7 +288,7 @@ function ResultsContent() {
                   key={game.id}
                   className="flex justify-between py-1 border-b border-slate-800 last:border-0"
                 >
-                  <span>Game #{game.gameNumber}</span>
+                  <span>{formatSessionLabelShort(game.gameNumber)}</span>
                   <span className="text-slate-400">
                     {winner?.user.displayName} won{" "}
                     {formatCents(winner?.payoutCents ?? 0)}
@@ -302,21 +307,21 @@ function ResultsContent() {
             disabled={actionLoading}
             className="w-full py-3 bg-amber-600 hover:bg-amber-500 rounded-lg font-semibold disabled:opacity-50"
           >
-            Play Another Game
+            Play Another Tournament
           </button>
           <button
             onClick={closeNight}
             disabled={actionLoading}
             className="w-full py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium disabled:opacity-50"
           >
-            End Poker Night
+            End Game Night
           </button>
         </div>
       )}
 
       {!isClosed && !isHost && (
         <p className="text-center text-slate-400 text-sm mb-4">
-          Waiting for the host to start another game or end the night… you&apos;ll
+          Waiting for the host to start another tournament or end the game night… you&apos;ll
           join the table automatically.
         </p>
       )}

@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
   if (tournament.status === "FINISHED") {
     return NextResponse.json(
-      { error: "This poker night has ended" },
+      { error: "This game night has ended" },
       { status: 400 }
     );
   }
@@ -40,13 +40,13 @@ export async function POST(req: Request) {
   });
   if (runningGame) {
     return NextResponse.json(
-      { error: "A game is in progress — join between games" },
+      { error: "A tournament is in progress — join between tournaments" },
       { status: 400 }
     );
   }
 
   if (tournament.players.length >= tournament.maxPlayers) {
-    return NextResponse.json({ error: "Tournament is full" }, { status: 400 });
+    return NextResponse.json({ error: "Game night is full" }, { status: 400 });
   }
 
   const alreadyJoined = tournament.players.some(

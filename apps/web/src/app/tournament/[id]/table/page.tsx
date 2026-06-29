@@ -472,7 +472,7 @@ export default function TablePage() {
             Level {tableState.blindLevel} · Blinds {tableState.smallBlind}/
             {tableState.bigBlind} · Hand #{tableState.handNumber}
             {gameFinished && (
-              <span className="text-amber-400"> · Game over</span>
+              <span className="text-amber-400"> · Tournament over</span>
             )}
           </div>
 

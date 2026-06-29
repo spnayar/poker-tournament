@@ -5,8 +5,11 @@ export function defaultTournamentName(date = new Date()): string {
     day: "numeric",
     year: "numeric",
   });
-  return `${formatted} Poker`;
+  return `${formatted} Game Night`;
 }
+
+/** @deprecated use defaultTournamentName — kept for imports */
+export const defaultGameNightName = defaultTournamentName;
 
 export function defaultPayoutPercents(): number[] {
   return [50, 30, 20];

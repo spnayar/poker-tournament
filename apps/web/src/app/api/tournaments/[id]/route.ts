@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@poker/db";
+import { prisma, recomputeUserStats } from "@poker/db";
 import { computePayoutsFromPercents, computeNightLedger, normalizeGamePayouts } from "@poker/protocol";
 import { defaultTournamentName } from "@/lib/tournament";
 
@@ -131,7 +131,7 @@ export async function POST(
       return NextResponse.json({ error: "Only host can start" }, { status: 403 });
     }
     if (tournament.status === "FINISHED") {
-      return NextResponse.json({ error: "Tournament is closed" }, { status: 400 });
+      return NextResponse.json({ error: "Game night is closed" }, { status: 400 });
     }
     if (tournament.players.length < 2) {
       return NextResponse.json(
@@ -140,7 +140,7 @@ export async function POST(
       );
     }
     if (tournament.games.some((g) => g.status === "RUNNING")) {
-      return NextResponse.json({ error: "A game is already running" }, { status: 400 });
+      return NextResponse.json({ error: "A tournament is already running" }, { status: 400 });
     }
 
     const lastGame = await prisma.game.findFirst({
@@ -178,7 +178,7 @@ export async function POST(
         }
         console.error("Game server failed to begin game:", await beginRes.text());
         return NextResponse.json(
-          { error: "Could not start game on server" },
+          { error: "Could not start tournament on server" },
           { status: 500 }
         );
       }
@@ -206,7 +206,7 @@ export async function POST(
     }
     if (tournament.games.some((g) => g.status === "RUNNING")) {
       return NextResponse.json(
-        { error: "Finish the current game before closing" },
+        { error: "Finish the current tournament before closing" },
         { status: 400 }
       );
     }
@@ -248,7 +248,19 @@ export async function DELETE(
     console.error("Could not reach game server to teardown tournament:", err);
   }
 
-  await prisma.tournament.delete({ where: { id } });
+  const affectedUsers = await prisma.gameResult.findMany({
+    where: { game: { tournamentId: id } },
+    select: { userId: true },
+    distinct: ["userId"],
+  });
+  const userIds = affectedUsers.map((u) => u.userId);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.tournament.delete({ where: { id } });
+    for (const userId of userIds) {
+      await recomputeUserStats(userId, tx);
+    }
+  });
 
   return NextResponse.json({ ok: true });
 }

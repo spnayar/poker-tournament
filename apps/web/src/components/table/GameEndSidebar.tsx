@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { formatSessionLabel } from "@/lib/labels";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
 import type { GameFinished } from "@poker/protocol";
 
@@ -29,7 +30,7 @@ export function GameEndSidebar({
     <aside className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
       <div className="bg-slate-900 rounded-xl p-4 border border-amber-500/30">
         <h2 className="text-lg font-bold text-amber-400 mb-1">
-          Game {result.gameNumber} over
+          {formatSessionLabel(result.gameNumber)} over
         </h2>
         <p className="text-xs text-slate-500 mb-4">
           Prize pool {formatCents(result.prizePoolCents)} ·{" "}
@@ -84,7 +85,7 @@ export function GameEndSidebar({
             disabled={actionLoading}
             className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 rounded-lg font-semibold text-sm disabled:opacity-50"
           >
-            Play another game
+            Play another tournament
           </button>
           <button
             type="button"
@@ -92,12 +93,12 @@ export function GameEndSidebar({
             disabled={actionLoading}
             className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg font-medium text-sm disabled:opacity-50"
           >
-            End poker night
+            End game night
           </button>
         </div>
       ) : (
         <p className="text-center text-slate-400 text-sm px-2">
-          Waiting for the host to start another game… you&apos;ll join the table
+          Waiting for the host to start another tournament… you&apos;ll join the table
           automatically.
         </p>
       )}

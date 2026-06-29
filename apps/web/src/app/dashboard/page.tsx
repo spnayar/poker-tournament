@@ -102,7 +102,7 @@ export default function DashboardPage() {
     const tournament = await res.json().catch(() => ({}));
     setCreating(false);
     if (res.ok && tournament.id) router.push(`/tournament/${tournament.id}`);
-    else alert(tournament.error || "Could not create tournament");
+    else alert(tournament.error || "Could not create game night");
   }
 
   async function joinTournament() {
@@ -116,7 +116,7 @@ export default function DashboardPage() {
     const data = await res.json();
     setJoining(false);
     if (!res.ok) {
-      setJoinError(data.error || "Could not join tournament");
+      setJoinError(data.error || "Could not join game night");
       return;
     }
     router.push(`/tournament/${data.tournamentId}`);
@@ -141,7 +141,7 @@ export default function DashboardPage() {
       setTournaments((prev) => prev.filter((t) => t.id !== tournamentId));
     } else {
       const data = await res.json();
-      alert(data.error || "Could not delete tournament");
+      alert(data.error || "Could not delete game night");
     }
   }
 
@@ -214,7 +214,7 @@ export default function DashboardPage() {
       )}
 
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">My Tournaments</h2>
+        <h2 className="text-xl font-semibold">My Game Nights</h2>
         <div className="flex gap-2">
           <button
             onClick={() => {
@@ -235,16 +235,16 @@ export default function DashboardPage() {
             }}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium"
           >
-            + Create Tournament
+            + Create Game Night
           </button>
         </div>
       </div>
 
       {showJoin && (
         <div className="bg-slate-900 rounded-xl p-6 mb-6 border border-slate-800">
-          <h3 className="font-semibold mb-4">Join a Tournament</h3>
+          <h3 className="font-semibold mb-4">Join a Game Night</h3>
           <p className="text-slate-400 text-sm mb-4">
-            Enter the join code shared by the tournament host.
+            Enter the join code shared by the game night host.
           </p>
           <div className="flex gap-3">
             <div className="flex-1">
@@ -280,12 +280,12 @@ export default function DashboardPage() {
 
       {showCreate && (
         <div className="bg-slate-900 rounded-xl p-6 mb-6 border border-slate-800">
-          <h3 className="font-semibold mb-4">New Tournament</h3>
+          <h3 className="font-semibold mb-4">New Game Night</h3>
           <p className="text-amber-400/80 text-xs mb-4">{LEDGER_DISCLAIMER}</p>
           <div className="grid md:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm text-slate-400 mb-1">
-                Tournament name
+                Game night name
               </label>
               <input
                 type="text"
@@ -388,7 +388,7 @@ export default function DashboardPage() {
       <div className="space-y-3">
         {tournaments.length === 0 && (
           <p className="text-slate-400 text-center py-8">
-            No tournaments yet. Create one or join with a code from a friend.
+            No game nights yet. Create one or join with a code from a friend.
           </p>
         )}
         {tournaments.map((t) => {
@@ -429,7 +429,7 @@ export default function DashboardPage() {
                     <p className="text-slate-400 text-sm mt-1">
                       {t._count.players}/{t.maxPlayers} players
                       {(t.games?.length ?? 0) > 0 &&
-                        ` · ${t.games!.length} game${t.games!.length === 1 ? "" : "s"}`}
+                        ` · ${t.games!.length} tournament${t.games!.length === 1 ? "" : "s"}`}
                     </p>
                   </div>
                 </div>
@@ -440,7 +440,7 @@ export default function DashboardPage() {
                   onClick={() => deleteTournament(t.id, t.name)}
                   disabled={deletingId === t.id}
                   className="px-4 text-sm text-red-400 hover:bg-red-950/40 border-l border-slate-800 disabled:opacity-50 shrink-0"
-                  title="Delete tournament"
+                  title="Delete game night"
                 >
                   {deletingId === t.id ? "…" : "Delete"}
                 </button>

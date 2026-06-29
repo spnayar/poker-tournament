@@ -36,7 +36,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-slate-900 rounded-2xl p-8 shadow-xl border border-slate-800">
         <h1 className="text-3xl font-bold text-center mb-2">Poker Night</h1>
         <p className="text-slate-400 text-center mb-8 text-sm">
-          Texas Hold&apos;em tournaments with friends
+          Texas Hold&apos;em game nights with friends
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

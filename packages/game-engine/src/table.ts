@@ -52,6 +52,7 @@ export class TableEngine {
   private board: Card[] = [];
   private phase: TablePhase = "waiting";
   private dealerSeat = 0;
+  private skipNextDealerMove = false;
   private currentActorSeat: number | null = null;
   private smallBlind = 25;
   private bigBlind = 50;
@@ -213,7 +214,11 @@ export class TableEngine {
       }
     }
 
-    this.moveDealerButton(activeSeats);
+    if (this.skipNextDealerMove) {
+      this.skipNextDealerMove = false;
+    } else {
+      this.moveDealerButton(activeSeats);
+    }
     this.postBlinds(activeSeats);
     this.dealHoleCards(activeSeats);
 
@@ -272,6 +277,15 @@ export class TableEngine {
       this.dealerSeat,
       activeSeats
     );
+  }
+
+  /** Pick a random active seat as dealer when a new tournament session begins. */
+  randomizeDealerButton(activeSeats?: number[]): void {
+    const seats = activeSeats ?? this.getActiveSeats();
+    if (seats.length === 0) return;
+    const pick = seats[Math.floor(Math.random() * seats.length)]!;
+    this.dealerSeat = pick;
+    this.skipNextDealerMove = true;
   }
 
   /** Who will have the button if the next hand is dealt now. */
