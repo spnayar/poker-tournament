@@ -47,9 +47,10 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
+        token.picture = user.image;
         token.gameToken = jwt.sign(
           {
             userId: user.id,
@@ -60,12 +61,16 @@ export const authOptions: NextAuthOptions = {
           { expiresIn: "24h" }
         );
       }
+      if (trigger === "update" && session?.image) {
+        token.picture = session.image;
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.gameToken = token.gameToken as string;
+        session.user.image = (token.picture as string | null) ?? null;
       }
       return session;
     },

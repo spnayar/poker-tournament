@@ -2,9 +2,11 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl } from "@/lib/utils";
+import { AvatarPicker } from "@/components/profile/AvatarPicker";
+import type { AvatarOption } from "@/lib/avatars";
 
 interface Stats {
   tournamentsPlayed: number;
@@ -20,11 +22,18 @@ interface HistoryItem {
   tournament: { name: string; buyInCents: number; finishedAt: string | null };
 }
 
+interface ProfileUser {
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+}
+
 export default function ProfilePage() {
-  const { data: session, status } = useSession();
+  const { status, update: updateSession } = useSession();
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [user, setUser] = useState<ProfileUser | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -37,11 +46,27 @@ export default function ProfilePage() {
         .then((data) => {
           setStats(data.stats);
           setHistory(data.history ?? []);
+          setUser(data.user ?? null);
         });
     }
   }, [status]);
 
-  if (!stats) {
+  const handleAvatarSelect = useCallback(
+    async (avatar: AvatarOption) => {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: avatar.url }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      const data = await res.json();
+      setUser(data.user);
+      await updateSession({ image: data.user.avatarUrl });
+    },
+    [updateSession]
+  );
+
+  if (!stats || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-slate-400">Loading profile...</p>
@@ -63,23 +88,27 @@ export default function ProfilePage() {
       ? Math.round((stats.wins / stats.tournamentsPlayed) * 100)
       : 0;
 
+  const avatarSrc = getAvatarUrl(user.displayName, user.avatarUrl);
+
   return (
     <div className="min-h-screen p-6 max-w-2xl mx-auto">
       <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline">
         ← Back
       </Link>
 
-      <div className="flex items-center gap-4 mt-4 mb-8">
+      <div className="flex items-center gap-4 mt-4 mb-6">
         <img
-          src={getAvatarUrl(session?.user?.name ?? "", session?.user?.image)}
+          src={avatarSrc}
           alt=""
-          className="w-20 h-20 rounded-full"
+          className="w-20 h-20 rounded-full ring-2 ring-emerald-600/50"
         />
         <div>
-          <h1 className="text-2xl font-bold">{session?.user?.name}</h1>
-          <p className="text-slate-400">{session?.user?.email}</p>
+          <h1 className="text-2xl font-bold">{user.displayName}</h1>
+          <p className="text-slate-400">{user.email}</p>
         </div>
       </div>
+
+      <AvatarPicker currentUrl={user.avatarUrl} onSelect={handleAvatarSelect} />
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         {[
