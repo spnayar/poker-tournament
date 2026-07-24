@@ -29,16 +29,44 @@ const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const SNAPSHOT_TTL_SEC = 60 * 60 * 24 * 7;
 
+/** Allow both apex and www (and optional CORS_ORIGINS) so domain forwarding doesn't break sockets. */
+function resolveCorsOrigins(): string[] {
+  const configured = [
+    process.env.NEXTAUTH_URL ?? "http://localhost:3000",
+    ...(process.env.CORS_ORIGINS ?? "").split(","),
+  ]
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const origins = new Set<string>();
+  for (const origin of configured) {
+    origins.add(origin);
+    try {
+      const url = new URL(origin);
+      if (url.hostname.startsWith("www.")) {
+        origins.add(`${url.protocol}//${url.hostname.slice(4)}`);
+      } else if (url.hostname.includes(".")) {
+        origins.add(`${url.protocol}//www.${url.hostname}`);
+      }
+    } catch {
+      // ignore invalid origin strings
+    }
+  }
+  return [...origins];
+}
+
+const CORS_ORIGINS = resolveCorsOrigins();
+
 const redis = new Redis(REDIS_URL);
 const app: express.Application = express();
-app.use(cors({ origin: process.env.NEXTAUTH_URL ?? "http://localhost:3000" }));
+app.use(cors({ origin: CORS_ORIGINS }));
 app.use(express.json());
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NEXTAUTH_URL ?? "http://localhost:3000",
+    origin: CORS_ORIGINS,
     methods: ["GET", "POST"],
   },
 });
