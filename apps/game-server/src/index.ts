@@ -16,8 +16,10 @@ import {
   ServerEvents,
   computePayoutsFromPercents,
   PlayerActionSchema,
+  SeatIdPayloadSchema,
   resolveBlindLevels,
   type BlindLevel,
+  type TableState,
 } from "@poker/protocol";
 import { BlindTimer, type BlindTimerSnapshot } from "./blindTimer";
 
@@ -28,6 +30,7 @@ const PORT = parseInt(
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const SNAPSHOT_TTL_SEC = 60 * 60 * 24 * 7;
+const ACTION_TIMEOUT_MS = 60_000;
 
 /** Allow both apex and www (and optional CORS_ORIGINS) so domain forwarding doesn't break sockets. */
 function resolveCorsOrigins(): string[] {
@@ -82,6 +85,9 @@ interface TournamentRoom {
   hostUserId: string;
   blindLevels: BlindLevel[];
   blindTimer: BlindTimer;
+  actionTimer: ReturnType<typeof setTimeout> | null;
+  actionDeadlineAt: number | null;
+  actionTimerGeneration: number;
 }
 
 const rooms = new Map<string, TournamentRoom>();
@@ -182,6 +188,72 @@ async function applyPendingBlindIncrease(room: TournamentRoom): Promise<boolean>
   return false;
 }
 
+function clearActionTimer(room: TournamentRoom): void {
+  if (room.actionTimer) {
+    clearTimeout(room.actionTimer);
+    room.actionTimer = null;
+  }
+  room.actionDeadlineAt = null;
+  room.actionTimerGeneration += 1;
+}
+
+function isBettingPhase(phase: string): boolean {
+  return (
+    phase === "preflop" ||
+    phase === "flop" ||
+    phase === "turn" ||
+    phase === "river"
+  );
+}
+
+function publicTableState(room: TournamentRoom): TableState {
+  return {
+    ...room.table.getPublicState(),
+    actionDeadlineAt: room.actionDeadlineAt,
+  };
+}
+
+function armActionTimer(tournamentId: string, room: TournamentRoom): void {
+  clearActionTimer(room);
+
+  const state = room.table.getPublicState();
+  if (!isBettingPhase(state.phase) || state.currentActorSeat === null) {
+    return;
+  }
+
+  const actorSeat = state.currentActorSeat;
+  if (room.table.isSkipped(actorSeat)) {
+    return;
+  }
+
+  const legal = room.table.getLegalActions(actorSeat);
+  if (!legal) return;
+
+  const handNumber = state.handNumber;
+  const generation = room.actionTimerGeneration;
+  room.actionDeadlineAt = Date.now() + ACTION_TIMEOUT_MS;
+  room.actionTimer = setTimeout(() => {
+    void (async () => {
+      if (room.actionTimerGeneration !== generation) return;
+      const live = rooms.get(tournamentId);
+      if (live !== room) return;
+
+      const now = room.table.getPublicState();
+      if (
+        now.handNumber !== handNumber ||
+        now.currentActorSeat !== actorSeat ||
+        !isBettingPhase(now.phase)
+      ) {
+        return;
+      }
+      if (room.table.isSkipped(actorSeat)) return;
+
+      room.table.setSkipped(actorSeat, true);
+      await afterAction(tournamentId, room);
+    })();
+  }, ACTION_TIMEOUT_MS);
+}
+
 function buildSeatMap(table: TableEngine): Map<string, number> {
   const map = new Map<string, number>();
   for (const seat of table.getPublicState().seats) {
@@ -209,6 +281,9 @@ function buildRoom(
     hostUserId: tournament.hostUserId,
     blindLevels,
     blindTimer: new BlindTimer(blindLevels, levelDurationMs, blindTimerSnapshot),
+    actionTimer: null,
+    actionDeadlineAt: null,
+    actionTimerGeneration: 0,
   };
 }
 
@@ -329,7 +404,7 @@ function sendPrivateStateToSocket(
 }
 
 function syncPlayerState(room: TournamentRoom, tournamentId: string): void {
-  const state = room.table.getPublicState();
+  const state = publicTableState(room);
   io.to(`tournament:${tournamentId}`).emit(ServerEvents.TABLE_STATE, state);
 
   for (const [uid] of room.seatByUserId) {
@@ -342,7 +417,7 @@ function syncPlayerState(room: TournamentRoom, tournamentId: string): void {
   }
 
   const actorSeat = state.currentActorSeat;
-  if (actorSeat !== null) {
+  if (actorSeat !== null && !room.table.isSkipped(actorSeat)) {
     const actorUserId = [...room.seatByUserId.entries()].find(
       ([, seat]) => seat === actorSeat
     )?.[0];
@@ -391,6 +466,7 @@ async function processTableEvents(
 }
 
 async function afterAction(tournamentId: string, room: TournamentRoom): Promise<void> {
+  armActionTimer(tournamentId, room);
   await processTableEvents(room, tournamentId);
 
   const state = room.table.getPublicState();
@@ -414,12 +490,8 @@ async function startNextHand(
   const started = room.table.startHand();
   if (!started) return false;
 
-  await processTableEvents(room, tournamentId);
+  await afterAction(tournamentId, room);
   broadcastBlindTimer(tournamentId, room);
-
-  if (room.table.isTournamentComplete()) {
-    void finishGame(tournamentId, room);
-  }
 
   return true;
 }
@@ -432,6 +504,8 @@ async function clearGameRedis(tournamentId: string, gameNumber: number): Promise
 }
 
 async function finishGame(tournamentId: string, room: TournamentRoom): Promise<void> {
+  clearActionTimer(room);
+
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
     select: { hostUserId: true },
@@ -451,7 +525,10 @@ async function finishGame(tournamentId: string, room: TournamentRoom): Promise<v
   );
 
   const userById = new Map(
-    players.map((p) => [p.userId, p.user.displayName] as const)
+    players.map((p) => [
+      p.userId,
+      { displayName: p.user.displayName, avatarUrl: p.user.avatarUrl },
+    ] as const)
   );
 
   const ranked = players.map((p) => {
@@ -459,10 +536,12 @@ async function finishGame(tournamentId: string, room: TournamentRoom): Promise<v
     let position =
       seatId !== undefined ? room.table.getFinishPosition(seatId) : 0;
     if (position === 0) position = players.length;
+    const user = userById.get(p.userId);
     return {
       userId: p.userId,
       position,
-      displayName: userById.get(p.userId) ?? "Player",
+      displayName: user?.displayName ?? "Player",
+      avatarUrl: user?.avatarUrl ?? null,
     };
   });
 
@@ -473,6 +552,7 @@ async function finishGame(tournamentId: string, room: TournamentRoom): Promise<v
     position: index + 1,
     payoutCents: payoutAmounts[index] ?? 0,
     displayName: row.displayName,
+    avatarUrl: row.avatarUrl,
   }));
 
   for (const { userId, position, payoutCents } of finishOrder) {
@@ -607,7 +687,7 @@ async function beginGame(tournamentId: string): Promise<boolean> {
       "EX",
       SNAPSHOT_TTL_SEC
     );
-    await processTableEvents(room, tournamentId);
+    await afterAction(tournamentId, room);
     broadcastGameStarted(tournamentId, room);
     broadcastBlindTimer(tournamentId, room);
     return true;
@@ -647,8 +727,7 @@ async function resyncSocket(
   room: TournamentRoom,
   userId: string
 ): Promise<void> {
-  const state = room.table.getPublicState();
-  socket.emit(ServerEvents.TABLE_STATE, state);
+  socket.emit(ServerEvents.TABLE_STATE, publicTableState(room));
   sendPrivateStateToSocket(socket, room, userId);
   const snap = room.table.toSnapshot();
   socket.emit(ServerEvents.BLIND_TIMER, {
@@ -720,6 +799,12 @@ io.on("connection", (socket) => {
       86400
     );
 
+    const seatId = room.seatByUserId.get(user.userId);
+    if (seatId !== undefined && room.table.isSkipped(seatId)) {
+      room.table.setSkipped(seatId, false);
+      await afterAction(tournamentId, room);
+    }
+
     await resyncSocket(socket, room, user.userId);
   });
 
@@ -772,16 +857,77 @@ io.on("connection", (socket) => {
     }
 
     if (state.nextDealerSeat !== seatId) {
-      socket.emit(ServerEvents.ERROR, {
-        message: "Only the next dealer can deal the next hand",
-      });
-      return;
+      const nextDealer = state.nextDealerSeat;
+      const nextDealerSkipped =
+        nextDealer != null && room.table.isSkipped(nextDealer);
+      const hostCanDeal =
+        room.hostUserId === user.userId && nextDealerSkipped;
+      if (!hostCanDeal) {
+        socket.emit(ServerEvents.ERROR, {
+          message: "Only the next dealer can deal the next hand",
+        });
+        return;
+      }
     }
 
     const started = await startNextHand(tournamentId, room);
     if (!started) {
       socket.emit(ServerEvents.ERROR, { message: "Could not start next hand" });
     }
+  });
+
+  socket.on(ClientEvents.SKIP_PLAYER, async (data: unknown) => {
+    const parsed = SeatIdPayloadSchema.safeParse(data);
+    if (!parsed.success) return;
+
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the host can skip a player",
+      });
+      return;
+    }
+
+    const { seatId } = parsed.data;
+    if (!room.table.setSkipped(seatId, true)) {
+      socket.emit(ServerEvents.ERROR, { message: "Could not skip that player" });
+      return;
+    }
+
+    await afterAction(tournamentId, room);
+  });
+
+  socket.on(ClientEvents.UNSKIP_PLAYER, async (data: unknown) => {
+    const parsed = SeatIdPayloadSchema.safeParse(data);
+    if (!parsed.success) return;
+
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the host can unskip a player",
+      });
+      return;
+    }
+
+    const { seatId } = parsed.data;
+    if (!room.table.setSkipped(seatId, false)) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Could not unskip that player",
+      });
+      return;
+    }
+
+    await afterAction(tournamentId, room);
   });
 
   socket.on(ClientEvents.PAUSE_BLIND_TIMER, async () => {
@@ -814,6 +960,33 @@ io.on("connection", (socket) => {
     }
 
     room.blindTimer.resume();
+    await persistRoom(tournamentId, room);
+    broadcastBlindTimer(tournamentId, room);
+  });
+
+  socket.on(ClientEvents.ADVANCE_BLIND_LEVEL, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the host can advance blinds",
+      });
+      return;
+    }
+
+    if (!room.blindTimer.forceNextLevel()) {
+      socket.emit(ServerEvents.ERROR, {
+        message: room.blindTimer.getIncreasePending()
+          ? "Next blinds already scheduled for the next hand"
+          : "Already at the final blind level",
+      });
+      return;
+    }
+
     await persistRoom(tournamentId, room);
     broadcastBlindTimer(tournamentId, room);
   });

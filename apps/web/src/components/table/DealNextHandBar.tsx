@@ -14,7 +14,7 @@ export function DealNextHandBar({
   onDeal,
 }: DealNextHandBarProps) {
   return (
-    <div className="w-full max-w-2xl mx-auto mt-2 mb-2 px-4">
+    <div className="w-full max-w-2xl mx-auto px-1">
       <div className="bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-3">
         {canDeal ? (
           <>

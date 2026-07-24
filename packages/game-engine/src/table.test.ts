@@ -594,4 +594,143 @@ describe("TableEngine", () => {
     const result = handResult!.payload as import("@poker/protocol").HandResult;
     expect(result.winners[0]!.wonByFold).toBe(true);
   });
+
+  it("skipped players still post blinds", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    expect(table.setSkipped(0, true)).toBe(true);
+    table.startHand();
+
+    const seats = table.getPublicState().seats;
+    const alice = seats.find((s) => s.seatId === 0)!;
+    expect(alice.skipped).toBe(true);
+    const blindsPosted =
+      alice.isSmallBlind || alice.isBigBlind
+        ? alice.betThisRound > 0
+        : true;
+    expect(blindsPosted).toBe(true);
+    if (alice.isSmallBlind) expect(alice.betThisRound).toBe(25);
+    if (alice.isBigBlind) expect(alice.betThisRound).toBe(50);
+  });
+
+  it("skipped player auto-folds when facing a bet", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const actor = table.getPublicState().currentActorSeat!;
+    table.setSkipped(actor, true);
+
+    const state = table.getPublicState();
+    const skippedSeat = state.seats.find((s) => s.seatId === actor)!;
+    expect(skippedSeat.skipped).toBe(true);
+    expect(skippedSeat.folded).toBe(true);
+    expect(state.currentActorSeat).not.toBe(actor);
+    expect(state.actionLog.some((e) => e.action.includes("sit-out"))).toBe(
+      true
+    );
+  });
+
+  it("skipped BB checks when action is free", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.startHand();
+
+    const state0 = table.getPublicState();
+    const bb = state0.seats.find((s) => s.isBigBlind)!;
+    const sb = state0.seats.find((s) => s.isSmallBlind)!;
+    // HU: SB acts first; fold so BB has free option
+    expect(state0.currentActorSeat).toBe(sb.seatId);
+    table.setSkipped(bb.seatId, true);
+    expect(table.applyAction(sb.seatId, { type: "fold" })).toBe(true);
+
+    // Hand ends when SB folds — BB never needs to act. Use limped pot instead:
+    const table2 = new TableEngine(testTableConfig());
+    table2.addPlayer(0, "u1", "Alice", null, 1000);
+    table2.addPlayer(1, "u2", "Bob", null, 1000);
+    table2.addPlayer(2, "u3", "Carol", null, 1000);
+    table2.startHand();
+
+    const s = table2.getPublicState();
+    const bb2 = s.seats.find((x) => x.isBigBlind)!;
+    table2.setSkipped(bb2.seatId, true);
+
+    // Everyone calls to BB so BB faces a check
+    let guard = 0;
+    while (guard++ < 20) {
+      const st = table2.getPublicState();
+      if (st.phase !== "preflop") break;
+      const actor = st.currentActorSeat;
+      if (actor === null) break;
+      if (actor === bb2.seatId) break;
+      const legal = table2.getLegalActions(actor)!;
+      if (legal.canCall) {
+        expect(table2.applyAction(actor, { type: "call" })).toBe(true);
+      } else if (legal.canCheck) {
+        expect(table2.applyAction(actor, { type: "check" })).toBe(true);
+      } else {
+        break;
+      }
+    }
+
+    const after = table2.getPublicState();
+    const bbAfter = after.seats.find((x) => x.seatId === bb2.seatId)!;
+    // Either auto-checked (sit-out) and advanced, or still to act then resolve
+    if (after.currentActorSeat === bb2.seatId) {
+      table2.resolveSkippedActors();
+    }
+    const final = table2.getPublicState();
+    const bbFinal = final.seats.find((x) => x.seatId === bb2.seatId)!;
+    expect(bbFinal.folded).toBe(false);
+    expect(
+      final.actionLog.some(
+        (e) => e.seatId === bb2.seatId && e.action.includes("Check (sit-out)")
+      )
+    ).toBe(true);
+  });
+
+  it("clearing skip lets the player act again next turn", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const actor = table.getPublicState().currentActorSeat!;
+    // Skip a different player so the hand continues
+    const other = table
+      .getPublicState()
+      .seats.find((s) => s.seatId !== actor && !s.folded)!;
+    table.setSkipped(other.seatId, true);
+    expect(table.isSkipped(other.seatId)).toBe(true);
+    table.setSkipped(other.seatId, false);
+    expect(table.isSkipped(other.seatId)).toBe(false);
+  });
+
+  it("rejects manual actions while skipped", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const actor = table.getPublicState().currentActorSeat!;
+    const player = table.toSnapshot().players.find((p) => p.seatId === actor)!;
+    player.skipped = true;
+    // Force skipped without auto-resolve by restoring
+    const snap = table.toSnapshot();
+    const p = snap.players.find((x) => x.seatId === actor)!;
+    p.skipped = true;
+    const table2 = TableEngine.fromSnapshot(snap);
+    expect(table2.applyAction(actor, { type: "fold" })).toBe(false);
+    table2.resolveSkippedActors();
+    expect(table2.getPublicState().seats.find((s) => s.seatId === actor)!.folded).toBe(
+      true
+    );
+  });
 });

@@ -35,6 +35,8 @@ export const SeatPublicSchema = z.object({
   totalBet: z.number().int().nonnegative(),
   folded: z.boolean(),
   allIn: z.boolean(),
+  /** Host/AFK sit-out: still posts blinds, auto check/fold when facing action. */
+  skipped: z.boolean(),
   isDealer: z.boolean(),
   isSmallBlind: z.boolean(),
   isBigBlind: z.boolean(),
@@ -84,6 +86,8 @@ export const TableStateSchema = z.object({
   blindLevel: z.number(),
   handNumber: z.number(),
   actionLog: z.array(ActionLogEntrySchema),
+  /** Epoch ms when the current actor's turn times out (server-owned). */
+  actionDeadlineAt: z.number().int().nullable().optional(),
 });
 export type TableState = z.infer<typeof TableStateSchema>;
 
@@ -126,7 +130,15 @@ export const ClientEvents = {
   START_NEXT_HAND: "hand:start-next",
   PAUSE_BLIND_TIMER: "blind:pause",
   RESUME_BLIND_TIMER: "blind:resume",
+  ADVANCE_BLIND_LEVEL: "blind:advance",
+  SKIP_PLAYER: "player:skip",
+  UNSKIP_PLAYER: "player:unskip",
 } as const;
+
+export const SeatIdPayloadSchema = z.object({
+  seatId: z.number().int().nonnegative(),
+});
+export type SeatIdPayload = z.infer<typeof SeatIdPayloadSchema>;
 
 export const AnimDealSchema = z.object({
   seatOrder: z.array(z.number()),
@@ -185,6 +197,7 @@ export const GameFinishedSchema = z.object({
       position: z.number().int().positive(),
       payoutCents: z.number().int().nonnegative(),
       displayName: z.string(),
+      avatarUrl: z.string().nullable().optional(),
     })
   ),
   prizePoolCents: z.number().int().nonnegative(),

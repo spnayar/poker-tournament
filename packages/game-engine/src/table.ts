@@ -32,6 +32,8 @@ export interface TablePlayer {
   hasActed: boolean;
   eliminated: boolean;
   lastAction: string | null;
+  /** Sit-out: still dealt/blinds; auto check or fold when action lands. */
+  skipped: boolean;
 }
 
 export interface TableConfig {
@@ -69,6 +71,7 @@ export class TableEngine {
   /** Blind seats posted for the current hand (stable even after folds). */
   private postedSbSeat: number | null = null;
   private postedBbSeat: number | null = null;
+  private resolvingSkipped = false;
 
   constructor(config: TableConfig) {
     this.config = config;
@@ -98,6 +101,7 @@ export class TableEngine {
       hasActed: false,
       eliminated: false,
       lastAction: null,
+      skipped: false,
     });
   }
 
@@ -112,6 +116,58 @@ export class TableEngine {
 
   getHoleCards(seatId: number): Card[] {
     return this.players.get(seatId)?.holeCards ?? [];
+  }
+
+  isSkipped(seatId: number): boolean {
+    return this.players.get(seatId)?.skipped === true;
+  }
+
+  /**
+   * Mark a player as sitting out (or clear sit-out). When enabling, immediately
+   * auto-acts if they are the current actor.
+   */
+  setSkipped(seatId: number, skipped: boolean): boolean {
+    const player = this.players.get(seatId);
+    if (!player || player.eliminated) return false;
+    if (player.skipped === skipped) {
+      if (skipped) this.resolveSkippedActors();
+      return true;
+    }
+    player.skipped = skipped;
+    if (skipped) {
+      this.resolveSkippedActors();
+    }
+    this.emitState();
+    return true;
+  }
+
+  /**
+   * While the current actor is skipped, check (if free) or fold until a live
+   * actor is found or the betting round/street advances.
+   */
+  resolveSkippedActors(): void {
+    if (this.resolvingSkipped) return;
+    this.resolvingSkipped = true;
+    try {
+      let guard = 0;
+      while (guard++ < 64) {
+        const seatId = this.currentActorSeat;
+        if (seatId === null) break;
+        const player = this.players.get(seatId);
+        if (!player?.skipped || player.folded || player.allIn || player.eliminated) {
+          break;
+        }
+        const toCall = this.currentBet - player.betThisRound;
+        const ok = this.applyAction(
+          seatId,
+          toCall === 0 ? { type: "check" } : { type: "fold" },
+          { sitOut: true }
+        );
+        if (!ok) break;
+      }
+    } finally {
+      this.resolvingSkipped = false;
+    }
   }
 
   toSnapshot(): import("./snapshot.js").TableSnapshot {
@@ -149,7 +205,14 @@ export class TableEngine {
 
   private restoreFromSnapshot(snapshot: import("./snapshot.js").TableSnapshot): void {
     this.players = new Map(
-      snapshot.players.map((p) => [p.seatId, { ...p, holeCards: [...p.holeCards] }])
+      snapshot.players.map((p) => [
+        p.seatId,
+        {
+          ...p,
+          holeCards: [...p.holeCards],
+          skipped: p.skipped ?? false,
+        },
+      ])
     );
     this.deck = [...snapshot.deck];
     this.board = [...snapshot.board];
@@ -215,8 +278,6 @@ export class TableEngine {
     this.phase = "preflop";
     this.currentBet = this.bigBlind;
     this.startBettingRound();
-
-    this.emitState();
     return true;
   }
 
@@ -419,6 +480,7 @@ export class TableEngine {
     }
 
     this.emitState();
+    this.resolveSkippedActors();
   }
 
   private findBigBlindSeat(_handSeats: number[]): number {
@@ -475,21 +537,27 @@ export class TableEngine {
     return this.lastFullRaiseTo + this.lastRaiseSize;
   }
 
-  applyAction(seatId: number, action: PlayerAction): boolean {
+  applyAction(
+    seatId: number,
+    action: PlayerAction,
+    options?: { sitOut?: boolean }
+  ): boolean {
     if (this.currentActorSeat !== seatId) return false;
     const player = this.players.get(seatId);
     if (!player || player.folded || player.allIn) return false;
+    if (player.skipped && !options?.sitOut) return false;
 
     const handSeats = this.getHandSeats();
+    const sitOutLabel = options?.sitOut ? " (sit-out)" : "";
 
     switch (action.type) {
       case "fold":
         player.folded = true;
-        this.logAction(seatId, "Fold");
+        this.logAction(seatId, `Fold${sitOutLabel}`);
         break;
       case "check":
         if (this.currentBet - player.betThisRound > 0) return false;
-        this.logAction(seatId, "Check");
+        this.logAction(seatId, `Check${sitOutLabel}`);
         break;
       case "call": {
         const toCall = Math.min(
@@ -658,6 +726,7 @@ export class TableEngine {
         if (fallback !== null) {
           this.currentActorSeat = fallback;
           this.emitState();
+          this.resolveSkippedActors();
           return;
         }
       }
@@ -669,6 +738,7 @@ export class TableEngine {
     if (nextActor !== null) {
       this.currentActorSeat = nextActor;
       this.emitState();
+      this.resolveSkippedActors();
       return;
     }
 
@@ -677,6 +747,7 @@ export class TableEngine {
       if (fallback !== null) {
         this.currentActorSeat = fallback;
         this.emitState();
+        this.resolveSkippedActors();
         return;
       }
     }
@@ -960,6 +1031,7 @@ export class TableEngine {
     for (const p of this.players.values()) {
       if (!p.eliminated && p.chips === 0) {
         p.eliminated = true;
+        p.skipped = false;
         this.eliminationOrder.push(p.seatId);
         this.pendingEvents.push({
           type: "elimination",
@@ -1072,6 +1144,7 @@ export class TableEngine {
         totalBet: p.totalBet,
         folded: p.folded,
         allIn: p.allIn,
+        skipped: p.skipped,
         isDealer: p.seatId === dealerSeat,
         isSmallBlind: p.seatId === sbSeat,
         isBigBlind: p.seatId === bbSeat,

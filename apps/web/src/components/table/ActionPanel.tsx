@@ -109,14 +109,14 @@ export function ActionPanel({ legal, onAction, disabled }: ActionPanelProps) {
 
   if (!legal) {
     return (
-      <div className="text-center text-slate-400 py-4">
+      <div className="text-center text-slate-400 py-2 text-sm">
         Waiting for other players...
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-4 p-4">
+    <div className="flex flex-col items-center gap-3 p-2 sm:p-3">
       <div className="flex flex-wrap gap-2 justify-center">
         {legal.canFold && (
           <button

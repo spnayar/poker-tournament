@@ -12,6 +12,8 @@ interface GameEndSidebarProps {
   actionLoading: boolean;
   onPlayAnother: () => void;
   onCloseNight: () => void;
+  /** Fallback when finishOrder lacks avatarUrl (e.g. older game-server). */
+  seatAvatars?: { displayName: string; avatarUrl: string | null }[];
 }
 
 export function GameEndSidebar({
@@ -21,10 +23,19 @@ export function GameEndSidebar({
   actionLoading,
   onPlayAnother,
   onCloseNight,
+  seatAvatars,
 }: GameEndSidebarProps) {
   const sorted = [...result.finishOrder].sort(
     (a, b) => a.position - b.position
   );
+
+  function avatarFor(row: GameFinished["finishOrder"][number]): string | null {
+    if (row.avatarUrl) return row.avatarUrl;
+    return (
+      seatAvatars?.find((s) => s.displayName === row.displayName)?.avatarUrl ??
+      null
+    );
+  }
 
   return (
     <aside className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
@@ -53,7 +64,7 @@ export function GameEndSidebar({
                   #{row.position}
                 </span>
                 <img
-                  src={getAvatarUrl(row.displayName, null)}
+                  src={getAvatarUrl(row.displayName, avatarFor(row))}
                   alt=""
                   className="w-8 h-8 rounded-full"
                 />

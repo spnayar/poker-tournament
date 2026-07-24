@@ -12,6 +12,13 @@ import { POST_REVEAL_PAUSE_MS } from "@/components/table/tableAnimation";
 import { GameEndSidebar } from "@/components/table/GameEndSidebar";
 import { BlindTimerBar } from "@/components/table/BlindTimerBar";
 import { DealNextHandBar } from "@/components/table/DealNextHandBar";
+import { SoundToggle } from "@/components/table/SoundToggle";
+import { useSoundPreference } from "@/hooks/useSoundPreference";
+import {
+  playHandEndCheer,
+  playNewHandSounds,
+  unlockTableSounds,
+} from "@/lib/sounds";
 import { LEDGER_DISCLAIMER } from "@/lib/utils";
 import {
   ServerEvents,
@@ -82,6 +89,8 @@ export default function TablePage() {
   const [timerActionLoading, setTimerActionLoading] = useState(false);
   const [animateDeal, setAnimateDeal] = useState(true);
   const [viewerSeatId, setViewerSeatId] = useState<number | null>(null);
+  const { enabled: soundEnabled, toggle: toggleSound } = useSoundPreference();
+  const cheeredHandRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -89,6 +98,7 @@ export default function TablePage() {
     handNumberRef.current = stored ? parseInt(stored, 10) : 0;
     actionLogRef.current = [];
     setActionLog([]);
+    cheeredHandRef.current = null;
   }, [tournamentId]);
 
   useEffect(() => {
@@ -103,6 +113,14 @@ export default function TablePage() {
     const t = setTimeout(() => setShowHandResult(true), POST_REVEAL_PAUSE_MS);
     return () => clearTimeout(t);
   }, [handResult, boardRevealing]);
+
+  useEffect(() => {
+    if (!showHandResult || !handResult) return;
+    const handKey = handResult.handNumber ?? handNumberRef.current;
+    if (cheeredHandRef.current === handKey) return;
+    cheeredHandRef.current = handKey;
+    playHandEndCheer();
+  }, [showHandResult, handResult]);
 
   const handleBoardRevealChange = useCallback((revealing: boolean) => {
     setBoardRevealing(revealing);
@@ -146,11 +164,14 @@ export default function TablePage() {
 
     const handleTableState = (state: TableState) => {
       const previousHand = handNumberRef.current;
-      const isNewHand =
-        state.handNumber > previousHand &&
-        previousHand > 0 &&
+      const handAdvanced = state.handNumber > previousHand;
+      const isActivePhase =
         state.phase !== "hand-complete" &&
-        state.phase !== "showdown";
+        state.phase !== "showdown" &&
+        state.phase !== "waiting";
+      // Mid-join: storage empty / 0 but table already past hand 1 — don't re-animate.
+      const joinedMidHand = previousHand === 0 && state.handNumber > 1;
+      const isNewHand = handAdvanced && isActivePhase && !joinedMidHand;
 
       if (isNewHand) {
         setHandResult(null);
@@ -159,6 +180,13 @@ export default function TablePage() {
         setMyCards([]);
         setAnimateDeal(true);
         setDealNextPending(false);
+        cheeredHandRef.current = null;
+        const activePlayers = state.seats.filter(
+          (s) => s.userId && !s.folded && (s.chipCount > 0 || s.allIn)
+        ).length;
+        playNewHandSounds(Math.max(activePlayers, 2));
+      } else if (handAdvanced && joinedMidHand) {
+        setAnimateDeal(false);
       } else if (state.handNumber === previousHand && previousHand > 0) {
         setAnimateDeal(false);
       }
@@ -371,6 +399,21 @@ export default function TablePage() {
     setTimeout(() => setTimerActionLoading(false), 300);
   }
 
+  function advanceBlindLevel() {
+    if (!socketRef.current || timerActionLoading) return;
+    setTimerActionLoading(true);
+    socketRef.current.emit(ClientEvents.ADVANCE_BLIND_LEVEL);
+    setTimeout(() => setTimerActionLoading(false), 300);
+  }
+
+  function skipPlayer(seatId: number) {
+    socketRef.current?.emit(ClientEvents.SKIP_PLAYER, { seatId });
+  }
+
+  function unskipPlayer(seatId: number) {
+    socketRef.current?.emit(ClientEvents.UNSKIP_PLAYER, { seatId });
+  }
+
   async function playAnotherGame() {
     setHostActionLoading(true);
     const res = await fetch(`/api/tournaments/${tournamentId}`, {
@@ -408,16 +451,21 @@ export default function TablePage() {
   }
 
   const mySeat = tableState.seats.find((s) => s.userId === session?.user?.id);
+  const isHost =
+    session?.user?.id ===
+    (gameFinished?.hostUserId ?? blindTimer?.hostUserId ?? undefined);
   const awaitingNextHand =
     tableState.phase === "hand-complete" && !gameFinished;
   const nextDealerSeat = tableState.nextDealerSeat ?? null;
   const nextDealer = tableState.seats.find(
     (s) => s.seatId === nextDealerSeat
   );
+  const nextDealerSkipped = nextDealer?.skipped === true;
   const canDealNext =
     awaitingNextHand &&
     mySeat !== undefined &&
-    nextDealerSeat === mySeat.seatId;
+    (nextDealerSeat === mySeat.seatId ||
+      (Boolean(isHost) && nextDealerSkipped));
   const isBetting =
     !gameFinished &&
     !awaitingNextHand &&
@@ -425,10 +473,18 @@ export default function TablePage() {
     tableState.phase !== "waiting";
 
   return (
-    <div className="min-h-screen p-4 flex flex-col">
-      <p className="text-center text-amber-400/70 text-xs mb-2">
-        {LEDGER_DISCLAIMER}
-      </p>
+    <div
+      className={`min-h-screen p-4 flex flex-col${
+        isBetting || (awaitingNextHand && nextDealer) ? " pb-48" : ""
+      }`}
+      onPointerDownCapture={unlockTableSounds}
+    >
+      <div className="flex items-center justify-center gap-3 mb-2">
+        <p className="text-center text-amber-400/70 text-xs">
+          {LEDGER_DISCLAIMER}
+        </p>
+        <SoundToggle enabled={soundEnabled} onToggle={toggleSound} />
+      </div>
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch justify-center max-w-7xl mx-auto w-full">
         {gameFinished && (
@@ -439,6 +495,7 @@ export default function TablePage() {
             actionLoading={hostActionLoading}
             onPlayAnother={playAnotherGame}
             onCloseNight={closePokerNight}
+            seatAvatars={tableState?.seats}
           />
         )}
 
@@ -449,6 +506,7 @@ export default function TablePage() {
               myUserId={session?.user?.id ?? ""}
               onPause={pauseBlindTimer}
               onResume={resumeBlindTimer}
+              onAdvance={advanceBlindLevel}
               actionLoading={timerActionLoading}
             />
           )}
@@ -473,6 +531,10 @@ export default function TablePage() {
                   phase={tableState.phase}
                   animateDeal={animateDeal}
                   onBoardRevealChange={handleBoardRevealChange}
+                  isHost={Boolean(isHost)}
+                  actionDeadlineAt={tableState.actionDeadlineAt ?? null}
+                  onSkipPlayer={skipPlayer}
+                  onUnskipPlayer={unskipPlayer}
                 />
                 {showHandResult && handResult && (
                   <HandWinnerChipBurst
@@ -496,15 +558,6 @@ export default function TablePage() {
             <HandResultOverlay result={handResult} shownCards={shownCards} />
           )}
 
-          {awaitingNextHand && nextDealer && (
-            <DealNextHandBar
-              dealerName={nextDealer.displayName}
-              canDeal={canDealNext}
-              pending={dealNextPending}
-              onDeal={dealNextHand}
-            />
-          )}
-
           <div className="text-center text-sm text-slate-400 mt-2 mb-2">
             Level {tableState.blindLevel} · Blinds {tableState.smallBlind}/
             {tableState.bigBlind} · Hand #{tableState.handNumber}
@@ -512,16 +565,30 @@ export default function TablePage() {
               <span className="text-amber-400"> · Tournament over</span>
             )}
           </div>
-
-          {isBetting && (
-            <ActionPanel
-              legal={legalActions}
-              onAction={sendAction}
-              disabled={actionPending}
-            />
-          )}
         </div>
       </div>
+
+      {(isBetting || (awaitingNextHand && nextDealer)) && (
+        <div className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-700/80 bg-slate-950/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
+          <div className="max-w-7xl mx-auto px-3 py-2 safe-area-pb">
+            {awaitingNextHand && nextDealer && (
+              <DealNextHandBar
+                dealerName={nextDealer.displayName}
+                canDeal={canDealNext}
+                pending={dealNextPending}
+                onDeal={dealNextHand}
+              />
+            )}
+            {isBetting && (
+              <ActionPanel
+                legal={legalActions}
+                onAction={sendAction}
+                disabled={actionPending}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

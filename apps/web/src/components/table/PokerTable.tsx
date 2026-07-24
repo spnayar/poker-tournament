@@ -38,6 +38,10 @@ interface PlayerSeatProps {
   isActive: boolean;
   animateDeal?: boolean;
   revealHoleCards?: boolean;
+  isHost?: boolean;
+  actionSecondsLeft?: number | null;
+  onSkip?: (seatId: number) => void;
+  onUnskip?: (seatId: number) => void;
 }
 
 export function PlayerSeat({
@@ -49,6 +53,10 @@ export function PlayerSeat({
   isActive,
   animateDeal = true,
   revealHoleCards = false,
+  isHost = false,
+  actionSecondsLeft = null,
+  onSkip,
+  onUnskip,
 }: PlayerSeatProps) {
   const holeCards = myCards ?? [];
   const cardsToShow =
@@ -66,7 +74,7 @@ export function PlayerSeat({
         top: `${position.y}%`,
         transform: "translate(-50%, -50%)",
       }}
-      animate={{ opacity: seat.folded ? 0.4 : 1 }}
+      animate={{ opacity: seat.folded ? 0.4 : seat.skipped ? 0.55 : 1 }}
     >
       <div className="relative">
         {isActive && (
@@ -79,8 +87,26 @@ export function PlayerSeat({
         <img
           src={getAvatarUrl(seat.displayName, seat.avatarUrl)}
           alt={seat.displayName}
-          className="w-14 h-14 rounded-full border-2 border-slate-600 bg-slate-800 relative z-10"
+          className={`w-14 h-14 rounded-full border-2 bg-slate-800 relative z-10 ${
+            seat.skipped ? "border-orange-500 grayscale" : "border-slate-600"
+          }`}
         />
+        {seat.skipped ? (
+          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1.5 py-0.5 rounded bg-orange-600 text-[9px] font-bold text-white whitespace-nowrap">
+            Sit-out
+          </span>
+        ) : null}
+        {isActive && actionSecondsLeft !== null && (
+          <span
+            className={`absolute -top-2 left-1/2 -translate-x-1/2 z-30 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+              actionSecondsLeft <= 10
+                ? "bg-red-600 text-white"
+                : "bg-slate-900/90 text-amber-300"
+            }`}
+          >
+            {actionSecondsLeft}s
+          </span>
+        )}
         {seat.isDealer && (
           <span className="absolute -top-1 -right-1 w-5 h-5 bg-white text-slate-900 text-xs font-bold rounded-full flex items-center justify-center z-20">
             D
@@ -108,6 +134,18 @@ export function PlayerSeat({
 
       {seat.betThisRound > 0 && (
         <p className="text-xs text-emerald-400">Bet: {seat.betThisRound}</p>
+      )}
+
+      {isHost && !isMe && (
+        <button
+          type="button"
+          onClick={() =>
+            seat.skipped ? onUnskip?.(seat.seatId) : onSkip?.(seat.seatId)
+          }
+          className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-600 bg-slate-900/80 hover:bg-slate-800 text-slate-300"
+        >
+          {seat.skipped ? "Unskip" : "Skip"}
+        </button>
       )}
 
       <div className="flex gap-1 mt-2">
@@ -139,6 +177,10 @@ interface PokerTableProps {
   phase: string;
   animateDeal?: boolean;
   onBoardRevealChange?: (revealing: boolean) => void;
+  isHost?: boolean;
+  actionDeadlineAt?: number | null;
+  onSkipPlayer?: (seatId: number) => void;
+  onUnskipPlayer?: (seatId: number) => void;
 }
 
 export function PokerTable({
@@ -155,6 +197,10 @@ export function PokerTable({
   phase,
   animateDeal = true,
   onBoardRevealChange,
+  isHost = false,
+  actionDeadlineAt = null,
+  onSkipPlayer,
+  onUnskipPlayer,
 }: PokerTableProps) {
   const sortedSeats = [...seats].sort((a, b) => a.seatId - b.seatId);
   const viewerSeatIndex = getViewerSortedSeatIndex(
@@ -221,6 +267,19 @@ export function PokerTable({
       for (const t of timersRef.current) clearTimeout(t);
     };
   }, []);
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!actionDeadlineAt) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [actionDeadlineAt, currentActorSeat]);
+
+  const actionSecondsLeft =
+    actionDeadlineAt && currentActorSeat !== null
+      ? Math.max(0, Math.ceil((actionDeadlineAt - nowMs) / 1000))
+      : null;
 
   return (
     <div className="relative w-full max-w-3xl mx-auto aspect-[4/3]">
@@ -291,6 +350,12 @@ export function PokerTable({
             position={pos}
             isActive={seat.seatId === currentActorSeat}
             animateDeal={animateDeal}
+            isHost={isHost}
+            actionSecondsLeft={
+              seat.seatId === currentActorSeat ? actionSecondsLeft : null
+            }
+            onSkip={onSkipPlayer}
+            onUnskip={onUnskipPlayer}
           />
         );
       })}

@@ -74,6 +74,19 @@ export class BlindTimer {
     this.levelEndsAt = now + remaining;
   }
 
+  /**
+   * Host override: schedule the next blind level for the upcoming hand
+   * (same as letting the timer expire).
+   */
+  forceNextLevel(): boolean {
+    if (this.increasePending || !this.hasMoreLevels()) return false;
+    this.paused = false;
+    this.pausedRemainingMs = null;
+    this.levelEndsAt = null;
+    this.increasePending = true;
+    return true;
+  }
+
   onLevelApplied(tableBlindLevel: number): void {
     this.increasePending = false;
     this.levelIndex = tableBlindLevel;

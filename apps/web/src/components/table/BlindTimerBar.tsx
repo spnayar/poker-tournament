@@ -16,6 +16,7 @@ interface BlindTimerBarProps {
   myUserId: string;
   onPause: () => void;
   onResume: () => void;
+  onAdvance: () => void;
   actionLoading?: boolean;
 }
 
@@ -24,6 +25,7 @@ export function BlindTimerBar({
   myUserId,
   onPause,
   onResume,
+  onAdvance,
   actionLoading = false,
 }: BlindTimerBarProps) {
   const [now, setNow] = useState(() => Date.now());
@@ -37,6 +39,7 @@ export function BlindTimerBar({
   }, [timer]);
 
   const isHost = timer.hostUserId === myUserId;
+  const canAdvance = timer.nextBb !== null && !timer.increasePending;
   const displayRemaining = timer.increasePending
     ? 0
     : timer.paused
@@ -88,27 +91,45 @@ export function BlindTimerBar({
         </div>
       </div>
 
-      {isHost && !timer.increasePending && (
-        <div className="flex justify-center gap-2 mt-3 pt-3 border-t border-slate-800">
-          {timer.paused ? (
-            <button
-              type="button"
-              onClick={onResume}
-              disabled={actionLoading}
-              className="px-4 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium disabled:opacity-50"
-            >
-              Resume timer
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onPause}
-              disabled={actionLoading || timer.levelEndsAt === null}
-              className="px-4 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg font-medium disabled:opacity-50"
-            >
-              Pause timer
-            </button>
-          )}
+      {isHost && (
+        <div className="flex flex-wrap justify-center gap-2 mt-3 pt-3 border-t border-slate-800">
+          {!timer.increasePending &&
+            (timer.paused ? (
+              <button
+                type="button"
+                onClick={onResume}
+                disabled={actionLoading}
+                className="px-4 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium disabled:opacity-50"
+              >
+                Resume timer
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onPause}
+                disabled={actionLoading || timer.levelEndsAt === null}
+                className="px-4 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg font-medium disabled:opacity-50"
+              >
+                Pause timer
+              </button>
+            ))}
+          <button
+            type="button"
+            onClick={onAdvance}
+            disabled={actionLoading || !canAdvance}
+            title={
+              timer.increasePending
+                ? "Next blinds already scheduled"
+                : timer.nextBb === null
+                  ? "Already at the final level"
+                  : `Move to ${timer.nextSb} / ${timer.nextBb} on the next hand`
+            }
+            className="px-4 py-1.5 text-sm bg-amber-600 hover:bg-amber-500 rounded-lg font-medium disabled:opacity-50"
+          >
+            {timer.increasePending
+              ? "Blinds set for next hand"
+              : "Advance blinds now"}
+          </button>
         </div>
       )}
     </div>
