@@ -74,7 +74,7 @@ export function PlayerSeat({
         top: `${position.y}%`,
         transform: "translate(-50%, -50%)",
       }}
-      animate={{ opacity: seat.folded ? 0.4 : seat.skipped ? 0.55 : 1 }}
+      animate={{ opacity: seat.folded ? 0.4 : seat.away || seat.skipped ? 0.55 : 1 }}
     >
       <div className="relative">
         {isActive && (
@@ -88,12 +88,20 @@ export function PlayerSeat({
           src={getAvatarUrl(seat.displayName, seat.avatarUrl)}
           alt={seat.displayName}
           className={`w-14 h-14 rounded-full border-2 bg-slate-800 relative z-10 ${
-            seat.skipped ? "border-orange-500 grayscale" : "border-slate-600"
+            seat.away
+              ? "border-slate-400 grayscale"
+              : seat.skipped
+                ? "border-orange-500 grayscale"
+                : "border-slate-600"
           }`}
         />
-        {seat.skipped ? (
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1.5 py-0.5 rounded bg-orange-600 text-[9px] font-bold text-white whitespace-nowrap">
-            Sit-out
+        {seat.skipped || seat.away ? (
+          <span
+            className={`absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1.5 py-0.5 rounded text-[9px] font-bold text-white whitespace-nowrap ${
+              seat.away ? "bg-slate-600" : "bg-orange-600"
+            }`}
+          >
+            {seat.away ? "Away" : "Sit-out"}
           </span>
         ) : null}
         {isActive && actionSecondsLeft !== null && (
@@ -140,11 +148,13 @@ export function PlayerSeat({
         <button
           type="button"
           onClick={() =>
-            seat.skipped ? onUnskip?.(seat.seatId) : onSkip?.(seat.seatId)
+            seat.skipReason === "host"
+              ? onUnskip?.(seat.seatId)
+              : onSkip?.(seat.seatId)
           }
           className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-600 bg-slate-900/80 hover:bg-slate-800 text-slate-300"
         >
-          {seat.skipped ? "Unskip" : "Skip"}
+          {seat.skipReason === "host" ? "Unskip" : "Skip"}
         </button>
       )}
 

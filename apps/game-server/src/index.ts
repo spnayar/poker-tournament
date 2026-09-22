@@ -18,6 +18,7 @@ import {
   PlayerActionSchema,
   SeatIdPayloadSchema,
   resolveBlindLevels,
+  shouldResumeOnReconnect,
   type BlindLevel,
   type TableState,
 } from "@poker/protocol";
@@ -31,6 +32,8 @@ const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const SNAPSHOT_TTL_SEC = 60 * 60 * 24 * 7;
 const ACTION_TIMEOUT_MS = 60_000;
+/** Brief reconnect window so socket.io blips don't immediately fold a seat. */
+const DISCONNECT_GRACE_MS = 8_000;
 
 /** Allow both apex and www (and optional CORS_ORIGINS) so domain forwarding doesn't break sockets. */
 function resolveCorsOrigins(): string[] {
@@ -88,6 +91,7 @@ interface TournamentRoom {
   actionTimer: ReturnType<typeof setTimeout> | null;
   actionDeadlineAt: number | null;
   actionTimerGeneration: number;
+  disconnectTimers: Map<string, ReturnType<typeof setTimeout>>;
 }
 
 const rooms = new Map<string, TournamentRoom>();
@@ -207,9 +211,14 @@ function isBettingPhase(phase: string): boolean {
 }
 
 function publicTableState(room: TournamentRoom): TableState {
+  const state = room.table.getPublicState();
   return {
-    ...room.table.getPublicState(),
+    ...state,
     actionDeadlineAt: room.actionDeadlineAt,
+    seats: state.seats.map((seat) => ({
+      ...seat,
+      away: !room.playerSockets.has(seat.userId),
+    })),
   };
 }
 
@@ -248,7 +257,7 @@ function armActionTimer(tournamentId: string, room: TournamentRoom): void {
       }
       if (room.table.isSkipped(actorSeat)) return;
 
-      room.table.setSkipped(actorSeat, true);
+      room.table.setSkipped(actorSeat, true, "timeout");
       await afterAction(tournamentId, room);
     })();
   }, ACTION_TIMEOUT_MS);
@@ -284,6 +293,7 @@ function buildRoom(
     actionTimer: null,
     actionDeadlineAt: null,
     actionTimerGeneration: 0,
+    disconnectTimers: new Map(),
   };
 }
 
@@ -465,6 +475,43 @@ async function processTableEvents(
   await persistRoom(tournamentId, room);
 }
 
+function clearDisconnectTimer(room: TournamentRoom, userId: string): void {
+  const timer = room.disconnectTimers.get(userId);
+  if (timer) {
+    clearTimeout(timer);
+    room.disconnectTimers.delete(userId);
+  }
+}
+
+function clearAllDisconnectTimers(room: TournamentRoom): void {
+  for (const timer of room.disconnectTimers.values()) {
+    clearTimeout(timer);
+  }
+  room.disconnectTimers.clear();
+}
+
+async function sitOutDisconnectedPlayer(
+  tournamentId: string,
+  room: TournamentRoom,
+  userId: string
+): Promise<void> {
+  if (rooms.get(tournamentId) !== room) return;
+  if (room.playerSockets.has(userId)) return;
+
+  const seatId = room.seatByUserId.get(userId);
+  if (seatId === undefined) return;
+  if (room.table.getSkipReason(seatId) === "host") {
+    io.to(`tournament:${tournamentId}`).emit(
+      ServerEvents.TABLE_STATE,
+      publicTableState(room)
+    );
+    return;
+  }
+
+  room.table.setSkipped(seatId, true, "disconnect");
+  await afterAction(tournamentId, room);
+}
+
 async function afterAction(tournamentId: string, room: TournamentRoom): Promise<void> {
   armActionTimer(tournamentId, room);
   await processTableEvents(room, tournamentId);
@@ -505,6 +552,7 @@ async function clearGameRedis(tournamentId: string, gameNumber: number): Promise
 
 async function finishGame(tournamentId: string, room: TournamentRoom): Promise<void> {
   clearActionTimer(room);
+  clearAllDisconnectTimers(room);
 
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
@@ -610,6 +658,8 @@ async function finishGame(tournamentId: string, room: TournamentRoom): Promise<v
 async function teardownTournament(tournamentId: string): Promise<void> {
   const room = rooms.get(tournamentId);
   if (room) {
+    clearActionTimer(room);
+    clearAllDisconnectTimers(room);
     for (const userId of room.seatByUserId.keys()) {
       await redis.del(`player:${userId}:tournament`);
     }
@@ -799,10 +849,18 @@ io.on("connection", (socket) => {
       86400
     );
 
+    clearDisconnectTimer(room, user.userId);
     const seatId = room.seatByUserId.get(user.userId);
-    if (seatId !== undefined && room.table.isSkipped(seatId)) {
+    if (
+      seatId !== undefined &&
+      room.table.isSkipped(seatId) &&
+      shouldResumeOnReconnect(room.table.getSkipReason(seatId))
+    ) {
       room.table.setSkipped(seatId, false);
       await afterAction(tournamentId, room);
+    } else {
+      // Broadcast away=false so the rest of the table sees the seat return.
+      syncPlayerState(room, tournamentId);
     }
 
     await resyncSocket(socket, room, user.userId);
@@ -858,10 +916,19 @@ io.on("connection", (socket) => {
 
     if (state.nextDealerSeat !== seatId) {
       const nextDealer = state.nextDealerSeat;
+      const nextDealerUserId =
+        nextDealer != null
+          ? [...room.seatByUserId.entries()].find(
+              ([, seat]) => seat === nextDealer
+            )?.[0]
+          : undefined;
+      const nextDealerAway =
+        nextDealerUserId != null && !room.playerSockets.has(nextDealerUserId);
       const nextDealerSkipped =
         nextDealer != null && room.table.isSkipped(nextDealer);
       const hostCanDeal =
-        room.hostUserId === user.userId && nextDealerSkipped;
+        room.hostUserId === user.userId &&
+        (nextDealerSkipped || nextDealerAway);
       if (!hostCanDeal) {
         socket.emit(ServerEvents.ERROR, {
           message: "Only the next dealer can deal the next hand",
@@ -894,7 +961,7 @@ io.on("connection", (socket) => {
     }
 
     const { seatId } = parsed.data;
-    if (!room.table.setSkipped(seatId, true)) {
+    if (!room.table.setSkipped(seatId, true, "host")) {
       socket.emit(ServerEvents.ERROR, { message: "Could not skip that player" });
       return;
     }
@@ -925,6 +992,13 @@ io.on("connection", (socket) => {
         message: "Could not unskip that player",
       });
       return;
+    }
+
+    const seatedUserId = [...room.seatByUserId.entries()].find(
+      ([, seat]) => seat === seatId
+    )?.[0];
+    if (seatedUserId && !room.playerSockets.has(seatedUserId)) {
+      room.table.setSkipped(seatId, true, "disconnect");
     }
 
     await afterAction(tournamentId, room);
@@ -995,9 +1069,23 @@ io.on("connection", (socket) => {
     const tournamentId = socket.data.tournamentId as string | undefined;
     if (!tournamentId) return;
     const room = rooms.get(tournamentId);
-    if (room && room.playerSockets.get(user.userId) === socket.id) {
-      room.playerSockets.delete(user.userId);
-    }
+    if (!room) return;
+    if (room.playerSockets.get(user.userId) !== socket.id) return;
+
+    room.playerSockets.delete(user.userId);
+    io.to(`tournament:${tournamentId}`).emit(
+      ServerEvents.TABLE_STATE,
+      publicTableState(room)
+    );
+
+    if (socket.data.watchingOnly) return;
+
+    clearDisconnectTimer(room, user.userId);
+    const timer = setTimeout(() => {
+      room.disconnectTimers.delete(user.userId);
+      void sitOutDisconnectedPlayer(tournamentId, room, user.userId);
+    }, DISCONNECT_GRACE_MS);
+    room.disconnectTimers.set(user.userId, timer);
   });
 });
 

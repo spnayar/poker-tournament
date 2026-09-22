@@ -6,6 +6,7 @@ import type {
   PlayerAction,
   PotLayer,
   SeatPublic,
+  SkipReason,
   TablePhase,
   TableState,
 } from "@poker/protocol";
@@ -34,6 +35,7 @@ export interface TablePlayer {
   lastAction: string | null;
   /** Sit-out: still dealt/blinds; auto check or fold when action lands. */
   skipped: boolean;
+  skipReason: SkipReason | null;
 }
 
 export interface TableConfig {
@@ -102,6 +104,7 @@ export class TableEngine {
       eliminated: false,
       lastAction: null,
       skipped: false,
+      skipReason: null,
     });
   }
 
@@ -122,21 +125,45 @@ export class TableEngine {
     return this.players.get(seatId)?.skipped === true;
   }
 
+  getSkipReason(seatId: number): SkipReason | null {
+    return this.players.get(seatId)?.skipReason ?? null;
+  }
+
   /**
    * Mark a player as sitting out (or clear sit-out). When enabling, immediately
    * auto-acts if they are the current actor.
+   * Host sits are sticky: a later disconnect/timeout skip will not overwrite them.
    */
-  setSkipped(seatId: number, skipped: boolean): boolean {
+  setSkipped(
+    seatId: number,
+    skipped: boolean,
+    reason: SkipReason = "host"
+  ): boolean {
     const player = this.players.get(seatId);
     if (!player || player.eliminated) return false;
-    if (player.skipped === skipped) {
-      if (skipped) this.resolveSkippedActors();
+
+    if (!skipped) {
+      if (!player.skipped && player.skipReason === null) return true;
+      player.skipped = false;
+      player.skipReason = null;
+      this.emitState();
       return true;
     }
-    player.skipped = skipped;
-    if (skipped) {
+
+    if (player.skipped) {
+      if (reason === "host" && player.skipReason !== "host") {
+        player.skipReason = "host";
+        this.resolveSkippedActors();
+        this.emitState();
+        return true;
+      }
       this.resolveSkippedActors();
+      return true;
     }
+
+    player.skipped = true;
+    player.skipReason = reason;
+    this.resolveSkippedActors();
     this.emitState();
     return true;
   }
@@ -161,7 +188,7 @@ export class TableEngine {
         const ok = this.applyAction(
           seatId,
           toCall === 0 ? { type: "check" } : { type: "fold" },
-          { sitOut: true }
+          { sitOut: true, skipReason: player.skipReason }
         );
         if (!ok) break;
       }
@@ -211,6 +238,7 @@ export class TableEngine {
           ...p,
           holeCards: [...p.holeCards],
           skipped: p.skipped ?? false,
+          skipReason: p.skipReason ?? (p.skipped ? "host" : null),
         },
       ])
     );
@@ -540,7 +568,7 @@ export class TableEngine {
   applyAction(
     seatId: number,
     action: PlayerAction,
-    options?: { sitOut?: boolean }
+    options?: { sitOut?: boolean; skipReason?: SkipReason | null }
   ): boolean {
     if (this.currentActorSeat !== seatId) return false;
     const player = this.players.get(seatId);
@@ -548,7 +576,11 @@ export class TableEngine {
     if (player.skipped && !options?.sitOut) return false;
 
     const handSeats = this.getHandSeats();
-    const sitOutLabel = options?.sitOut ? " (sit-out)" : "";
+    const sitOutLabel = options?.sitOut
+      ? options.skipReason === "disconnect"
+        ? " (away)"
+        : " (sit-out)"
+      : "";
 
     switch (action.type) {
       case "fold":
@@ -1032,6 +1064,7 @@ export class TableEngine {
       if (!p.eliminated && p.chips === 0) {
         p.eliminated = true;
         p.skipped = false;
+        p.skipReason = null;
         this.eliminationOrder.push(p.seatId);
         this.pendingEvents.push({
           type: "elimination",
@@ -1149,6 +1182,8 @@ export class TableEngine {
         isSmallBlind: p.seatId === sbSeat,
         isBigBlind: p.seatId === bbSeat,
         lastAction: p.lastAction,
+        away: false,
+        skipReason: p.skipReason,
       }));
   }
 

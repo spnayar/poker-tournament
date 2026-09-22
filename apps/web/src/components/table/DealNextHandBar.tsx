@@ -5,6 +5,7 @@ interface DealNextHandBarProps {
   canDeal: boolean;
   pending: boolean;
   onDeal: () => void;
+  dealerAway?: boolean;
 }
 
 export function DealNextHandBar({
@@ -12,6 +13,7 @@ export function DealNextHandBar({
   canDeal,
   pending,
   onDeal,
+  dealerAway = false,
 }: DealNextHandBarProps) {
   return (
     <div className="w-full max-w-2xl mx-auto px-1">
@@ -19,7 +21,9 @@ export function DealNextHandBar({
         {canDeal ? (
           <>
             <p className="text-sm text-slate-300 text-center">
-              You have the button — deal when everyone is ready.
+              {dealerAway
+                ? `${dealerName} is away or sitting out — you can deal the next hand.`
+                : "You have the button — deal when everyone is ready."}
             </p>
             <button
               type="button"

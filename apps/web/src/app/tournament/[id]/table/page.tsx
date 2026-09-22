@@ -336,7 +336,12 @@ export default function TablePage() {
       syncTournamentConnection(socket!);
     };
 
+    const onDisconnect = () => {
+      setConnected(false);
+    };
+
     socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
     socket.on(ServerEvents.TABLE_STATE, handleTableState);
     socket.on(ServerEvents.PLAYER_CARDS, handlePlayerCards);
     socket.on(ServerEvents.ACTION_REQUIRED, handleActionRequired);
@@ -353,6 +358,7 @@ export default function TablePage() {
 
     return () => {
       socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
       socket.off(ServerEvents.TABLE_STATE, handleTableState);
       socket.off(ServerEvents.PLAYER_CARDS, handlePlayerCards);
       socket.off(ServerEvents.ACTION_REQUIRED, handleActionRequired);
@@ -461,11 +467,13 @@ export default function TablePage() {
     (s) => s.seatId === nextDealerSeat
   );
   const nextDealerSkipped = nextDealer?.skipped === true;
+  const nextDealerAway = nextDealer?.away === true;
+  const nextDealerUnavailable = nextDealerSkipped || nextDealerAway;
   const canDealNext =
     awaitingNextHand &&
     mySeat !== undefined &&
     (nextDealerSeat === mySeat.seatId ||
-      (Boolean(isHost) && nextDealerSkipped));
+      (Boolean(isHost) && nextDealerUnavailable));
   const isBetting =
     !gameFinished &&
     !awaitingNextHand &&
@@ -485,6 +493,11 @@ export default function TablePage() {
         </p>
         <SoundToggle enabled={soundEnabled} onToggle={toggleSound} />
       </div>
+      {tableState && !connected && (
+        <p className="text-center text-amber-300 text-sm mb-2">
+          Connection lost — reconnecting…
+        </p>
+      )}
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch justify-center max-w-7xl mx-auto w-full">
         {gameFinished && (
@@ -577,6 +590,11 @@ export default function TablePage() {
                 canDeal={canDealNext}
                 pending={dealNextPending}
                 onDeal={dealNextHand}
+                dealerAway={
+                  Boolean(isHost) &&
+                  nextDealerUnavailable &&
+                  nextDealerSeat !== mySeat?.seatId
+                }
               />
             )}
             {isBetting && (

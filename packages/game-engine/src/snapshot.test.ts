@@ -24,4 +24,22 @@ describe("TableEngine snapshot", () => {
     expect(restored.getPublicState().handNumber).toBe(handNumber);
     expect(restored.getPublicState().phase).toBe(phase);
   });
+
+  it("restores skipReason with the snapshot", () => {
+    const table = new TableEngine({
+      tournamentId: "test",
+      startingChips: 1000,
+      blindLevels: buildBlindLevels(1000, "turbo"),
+    });
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.setSkipped(0, true, "disconnect");
+
+    const restored = TableEngine.fromSnapshot(table.toSnapshot());
+    expect(restored.isSkipped(0)).toBe(true);
+    expect(restored.getSkipReason(0)).toBe("disconnect");
+    expect(restored.getPublicState().seats.find((s) => s.seatId === 0)!.skipReason).toBe(
+      "disconnect"
+    );
+  });
 });
