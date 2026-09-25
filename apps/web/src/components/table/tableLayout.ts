@@ -37,11 +37,11 @@ export function getSeatPosition(
   };
 }
 
-/** Shift the seat stack so top seats hang down and bottom seats hang up. */
+/** Shift top seats so chrome hangs down and does not cover host blind controls. */
 export function seatAnchorTransform(visualIndex: number, total: number): string {
   const angle = (visualIndex / total) * 2 * Math.PI - Math.PI / 2;
   const y = Math.sin(angle);
-  const ty = y < -0.25 ? "-18%" : y > 0.25 ? "-78%" : "-50%";
+  const ty = y < -0.25 ? "-18%" : "-50%";
   return `translate(-50%, ${ty})`;
 }
 
