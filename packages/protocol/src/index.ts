@@ -22,6 +22,8 @@ export type PlayerAction = z.infer<typeof PlayerActionSchema>;
 export const PotLayerSchema = z.object({
   amount: z.number().int().nonnegative(),
   eligibleSeatIds: z.array(z.number()),
+  /** How many players put money into this layer (includes folders). */
+  contributorCount: z.number().int().positive().optional(),
 });
 export type PotLayer = z.infer<typeof PotLayerSchema>;
 
@@ -92,6 +94,10 @@ export const TableStateSchema = z.object({
   board: z.array(CardSchema),
   pots: z.array(PotLayerSchema),
   totalPot: z.number().int().nonnegative(),
+  /** Uncalled chips not labeled as a side pot (live betting only). */
+  uncalledAmount: z.number().int().nonnegative().optional(),
+  /** Monotonic broadcast id so clients ignore stale TABLE_STATE. */
+  syncSeq: z.number().int().nonnegative().optional(),
   seats: z.array(SeatPublicSchema),
   dealerSeat: z.number(),
   currentActorSeat: z.number().nullable(),

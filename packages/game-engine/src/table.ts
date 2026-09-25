@@ -17,7 +17,12 @@ import {
   findPotWinners,
   splitPotAmount,
 } from "./handEval";
-import { buildSidePots, totalPotAmount, type PlayerContribution } from "./sidePots";
+import {
+  buildSidePots,
+  splitLivePots,
+  totalPotAmount,
+  type PlayerContribution,
+} from "./sidePots";
 
 export interface TablePlayer {
   seatId: number;
@@ -74,6 +79,8 @@ export class TableEngine {
   private postedSbSeat: number | null = null;
   private postedBbSeat: number | null = null;
   private resolvingSkipped = false;
+  /** Pot layers from the last showdown / fold-win, kept after bets reset. */
+  private lastAwardedPots: PotLayer[] = [];
 
   constructor(config: TableConfig) {
     this.config = config;
@@ -221,6 +228,11 @@ export class TableEngine {
       actionLogId: this.actionLogId,
       postedSbSeat: this.postedSbSeat,
       postedBbSeat: this.postedBbSeat,
+      lastAwardedPots: this.lastAwardedPots.map((p) => ({
+        amount: p.amount,
+        eligibleSeatIds: [...p.eligibleSeatIds],
+        contributorCount: p.contributorCount,
+      })),
     };
   }
 
@@ -259,6 +271,11 @@ export class TableEngine {
     this.actionLogId = snapshot.actionLogId;
     this.postedSbSeat = snapshot.postedSbSeat ?? null;
     this.postedBbSeat = snapshot.postedBbSeat ?? null;
+    this.lastAwardedPots = (snapshot.lastAwardedPots ?? []).map((p) => ({
+      amount: p.amount,
+      eligibleSeatIds: [...p.eligibleSeatIds],
+      contributorCount: p.contributorCount,
+    }));
     this.pendingEvents = [];
   }
 
@@ -282,6 +299,7 @@ export class TableEngine {
     this.lastRaiseSize = this.bigBlind;
     this.lastFullRaiseTo = this.bigBlind;
     this.bettingComplete = false;
+    this.lastAwardedPots = [];
 
     for (const p of this.players.values()) {
       if (!p.eliminated && p.chips > 0) {
@@ -805,12 +823,14 @@ export class TableEngine {
       if (nextActor !== null) {
         this.currentActorSeat = nextActor;
         this.emitState();
+        this.resolveSkippedActors();
         return;
       }
       const fallback = this.anyoneNeedsToAct(handSeats);
       if (fallback !== null) {
         this.currentActorSeat = fallback;
         this.emitState();
+        this.resolveSkippedActors();
         return;
       }
     }
@@ -897,6 +917,11 @@ export class TableEngine {
   private showdown(): void {
     this.phase = "showdown";
     const pots = this.computePots();
+    this.lastAwardedPots = pots.map((p) => ({
+      amount: p.amount,
+      eligibleSeatIds: [...p.eligibleSeatIds],
+      contributorCount: p.contributorCount,
+    }));
     const result = this.resolvePots(pots);
     this.phase = "hand-complete";
     this.pendingEvents.push({ type: "handResult", payload: result });
@@ -940,6 +965,11 @@ export class TableEngine {
     const winner = this.players.get(winnerSeat)!;
     this.returnUncalledToWinner(winnerSeat);
     const pots = this.computePots();
+    this.lastAwardedPots = pots.map((p) => ({
+      amount: p.amount,
+      eligibleSeatIds: [...p.eligibleSeatIds],
+      contributorCount: p.contributorCount,
+    }));
     const total = totalPotAmount(pots);
     winner.chips += total;
     this.logAction(winnerSeat, `Wins ${total}`);
@@ -1104,15 +1134,23 @@ export class TableEngine {
 
   getPublicState(): TableState {
     const seats = this.buildPublicSeats();
-    const pots = this.computePots();
-    const awaitingNextHand =
+    const reviewingHand =
       this.phase === "hand-complete" || this.phase === "showdown";
+    const rawPots =
+      reviewingHand && this.lastAwardedPots.length > 0
+        ? this.lastAwardedPots
+        : this.computePots();
+    const live = reviewingHand
+      ? { pots: rawPots, uncalledAmount: 0 }
+      : splitLivePots(rawPots);
+    const awaitingNextHand = reviewingHand;
     return {
       tournamentId: this.config.tournamentId,
       phase: this.phase,
       board: [...this.board],
-      pots,
-      totalPot: totalPotAmount(pots),
+      pots: live.pots,
+      totalPot: totalPotAmount(rawPots),
+      uncalledAmount: live.uncalledAmount,
       seats,
       dealerSeat: this.dealerSeat,
       currentActorSeat: this.currentActorSeat,

@@ -8,6 +8,8 @@ interface ActionLogPanelProps {
   actionLog: ActionLogEntry[];
   currentActorSeat: number | null;
   handNumber: number;
+  visibleBoard?: (string | undefined)[];
+  hideAwards?: boolean;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD_PX = 48;
@@ -75,6 +77,8 @@ export function ActionLogPanel({
   actionLog,
   currentActorSeat,
   handNumber,
+  visibleBoard,
+  hideAwards = false,
 }: ActionLogPanelProps) {
   const scrollRef = useRef<HTMLUListElement>(null);
   const stickToBottomRef = useRef(true);
@@ -96,7 +100,7 @@ export function ActionLogPanel({
   }, [actionLog]);
 
   return (
-    <aside className="w-full lg:w-72 shrink-0 bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col max-h-[min(70vh,520px)] min-h-[240px] overflow-hidden">
+    <aside className="w-full lg:w-72 shrink-0 bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col max-h-[min(70vh,520px)] min-h-[240px] max-sm:max-h-[min(36vh,260px)] max-sm:min-h-[128px] overflow-hidden">
       <div className="mb-3">
         <h2 className="text-sm font-semibold text-slate-200">Action Log</h2>
         <p className="text-xs text-slate-500 mt-0.5">
@@ -113,6 +117,10 @@ export function ActionLogPanel({
           className="space-y-1 overflow-y-auto flex-1 min-h-0 overscroll-contain"
         >
           {actionLog.map((entry, index) => {
+            if (hideAwards && entry.action.startsWith("Wins")) {
+              return null;
+            }
+
             if (entry.seatId === -1) {
               return (
                 <li key={entry.id}>
@@ -124,6 +132,23 @@ export function ActionLogPanel({
             }
 
             if (entry.seatId === -2 && entry.cards && entry.cards.length > 0) {
+              const revealedCount = visibleBoard
+                ? visibleBoard.filter(Boolean).length
+                : entry.cards.length;
+              const streetShown =
+                entry.street === "flop"
+                  ? Math.min(entry.cards.length, revealedCount)
+                  : entry.street === "turn"
+                    ? revealedCount >= 4
+                      ? entry.cards.length
+                      : 0
+                    : entry.street === "river"
+                      ? revealedCount >= 5
+                        ? entry.cards.length
+                        : 0
+                      : entry.cards.length;
+              if (streetShown <= 0) return null;
+              const cardsToShow = entry.cards.slice(0, streetShown);
               return (
                 <li key={entry.id}>
                   <div className="py-1.5 px-2 rounded-lg bg-slate-800/40">
@@ -131,7 +156,7 @@ export function ActionLogPanel({
                       {entry.action}
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {entry.cards.map((card, i) => (
+                      {cardsToShow.map((card, i) => (
                         <LogPlayingCard key={`${card}-${i}`} card={card} />
                       ))}
                     </div>

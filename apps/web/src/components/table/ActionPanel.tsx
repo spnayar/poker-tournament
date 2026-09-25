@@ -7,6 +7,7 @@ interface ActionPanelProps {
   legal: LegalActions | null;
   onAction: (action: unknown) => void;
   disabled?: boolean;
+  waitingLabel?: string;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -48,7 +49,12 @@ function wagerTargetForMultiplier(
   return raiseTo >= legal.minRaiseTo ? raiseTo : null;
 }
 
-export function ActionPanel({ legal, onAction, disabled }: ActionPanelProps) {
+export function ActionPanel({
+  legal,
+  onAction,
+  disabled,
+  waitingLabel = "Waiting for other players...",
+}: ActionPanelProps) {
   const canWager = legal?.canBet || legal?.canRaise;
   const wagerMin = legal?.canBet ? legal.minBet : (legal?.minRaiseTo ?? 0);
   const wagerMax = legal?.canBet
@@ -63,12 +69,14 @@ export function ActionPanel({ legal, onAction, disabled }: ActionPanelProps) {
 
   const [amountInput, setAmountInput] = useState("");
   const [showAllIn, setShowAllIn] = useState(false);
+  const [showCustomBet, setShowCustomBet] = useState(false);
 
   useEffect(() => {
     if (canWager) {
       setAmountInput(String(wagerMin));
     }
     setShowAllIn(false);
+    setShowCustomBet(false);
   }, [canWager, wagerMin, wagerMax, legal?.canBet, legal?.canRaise]);
 
   const parsedAmount = useMemo(() => {
@@ -110,19 +118,19 @@ export function ActionPanel({ legal, onAction, disabled }: ActionPanelProps) {
   if (!legal) {
     return (
       <div className="text-center text-slate-400 py-2 text-sm">
-        Waiting for other players...
+        {waitingLabel}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-3 p-2 sm:p-3">
-      <div className="flex flex-wrap gap-2 justify-center">
+    <div className="flex flex-col items-center gap-2 sm:gap-3 p-1.5 sm:p-3">
+      <div className="grid grid-cols-2 gap-1.5 w-full max-w-md sm:flex sm:flex-wrap sm:justify-center sm:gap-2">
         {legal.canFold && (
           <button
             onClick={() => onAction({ type: "fold" })}
             disabled={disabled}
-            className="px-6 py-2 bg-red-600/80 hover:bg-red-500 rounded-lg font-medium disabled:opacity-50"
+            className="px-4 py-2 sm:px-6 max-sm:text-sm bg-red-600/80 hover:bg-red-500 rounded-lg font-medium disabled:opacity-50"
           >
             Fold
           </button>
@@ -131,7 +139,7 @@ export function ActionPanel({ legal, onAction, disabled }: ActionPanelProps) {
           <button
             onClick={() => onAction({ type: "check" })}
             disabled={disabled}
-            className="px-6 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg font-medium disabled:opacity-50"
+            className="px-4 py-2 sm:px-6 max-sm:text-sm bg-slate-600 hover:bg-slate-500 rounded-lg font-medium disabled:opacity-50"
           >
             Check
           </button>
@@ -140,19 +148,19 @@ export function ActionPanel({ legal, onAction, disabled }: ActionPanelProps) {
           <button
             onClick={() => onAction({ type: "call" })}
             disabled={disabled}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-medium disabled:opacity-50"
+            className="px-4 py-2 sm:px-6 max-sm:text-sm bg-blue-600 hover:bg-blue-500 rounded-lg font-medium disabled:opacity-50"
           >
-            Call {legal.callAmount}
+            Call {legal.callAmount.toLocaleString()}
           </button>
         )}
         {showQuickRaises && raise2x !== null && (
           <button
             onClick={() => submitQuickRaise(raise2x)}
             disabled={disabled}
-            className="px-5 py-2 bg-emerald-700 hover:bg-emerald-600 rounded-lg font-medium disabled:opacity-50"
+            className="px-3 py-2 sm:px-5 max-sm:text-sm bg-emerald-700 hover:bg-emerald-600 rounded-lg font-medium disabled:opacity-50"
           >
             Raise 2×
-            <span className="text-emerald-200/80 text-xs ml-1">
+            <span className="text-emerald-200/80 text-xs ml-1 hidden sm:inline">
               ({raise2x.toLocaleString()})
             </span>
           </button>
@@ -161,18 +169,32 @@ export function ActionPanel({ legal, onAction, disabled }: ActionPanelProps) {
           <button
             onClick={() => submitQuickRaise(raise3x)}
             disabled={disabled}
-            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium disabled:opacity-50"
+            className="px-3 py-2 sm:px-5 max-sm:text-sm bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium disabled:opacity-50"
           >
             Raise 3×
-            <span className="text-emerald-200/80 text-xs ml-1">
+            <span className="text-emerald-200/80 text-xs ml-1 hidden sm:inline">
               ({raise3x.toLocaleString()})
             </span>
           </button>
         )}
       </div>
 
+      {canWager && !showCustomBet ? (
+        <button
+          type="button"
+          onClick={() => setShowCustomBet(true)}
+          className="sm:hidden text-xs text-slate-400 underline-offset-2 hover:underline"
+        >
+          Custom {legal.canBet ? "bet" : "raise"}
+        </button>
+      ) : null}
+
       {canWager && (
-        <div className="w-full max-w-sm flex flex-col gap-2">
+        <div
+          className={`w-full max-w-sm flex-col gap-2 ${
+            showCustomBet ? "flex" : "hidden sm:flex"
+          }`}
+        >
           <label className="text-sm text-slate-400">{wagerLabel}</label>
           <div className="flex items-center gap-2">
             <input
@@ -184,7 +206,7 @@ export function ActionPanel({ legal, onAction, disabled }: ActionPanelProps) {
               onChange={(e) => setAmountInput(e.target.value.replace(/[^0-9]/g, ""))}
               onKeyDown={handleInputKeyDown}
               disabled={disabled}
-              className="flex-1 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none font-mono text-lg disabled:opacity-50"
+              className="flex-1 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none font-mono text-base sm:text-lg disabled:opacity-50"
             />
             <button
               onClick={submitWager}

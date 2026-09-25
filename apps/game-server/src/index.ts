@@ -34,6 +34,8 @@ const SNAPSHOT_TTL_SEC = 60 * 60 * 24 * 7;
 const ACTION_TIMEOUT_MS = 60_000;
 /** Brief reconnect window so socket.io blips don't immediately fold a seat. */
 const DISCONNECT_GRACE_MS = 8_000;
+/** Current actor drop: fold quickly so the hand does not stall on Waiting. */
+const DISCONNECT_ACTOR_GRACE_MS = 1_500;
 
 /** Allow both apex and www (and optional CORS_ORIGINS) so domain forwarding doesn't break sockets. */
 function resolveCorsOrigins(): string[] {
@@ -80,6 +82,8 @@ const io = new Server(httpServer, {
 interface TournamentRoom {
   table: TableEngine;
   playerSockets: Map<string, string>;
+  /** Players who have JOINed this running game at least once (Away only after this). */
+  seenPlayers: Set<string>;
   seatByUserId: Map<string, number>;
   buyInCents: number;
   gameId: string;
@@ -92,6 +96,7 @@ interface TournamentRoom {
   actionDeadlineAt: number | null;
   actionTimerGeneration: number;
   disconnectTimers: Map<string, ReturnType<typeof setTimeout>>;
+  syncSeq: number;
 }
 
 const rooms = new Map<string, TournamentRoom>();
@@ -212,12 +217,16 @@ function isBettingPhase(phase: string): boolean {
 
 function publicTableState(room: TournamentRoom): TableState {
   const state = room.table.getPublicState();
+  room.syncSeq += 1;
   return {
     ...state,
     actionDeadlineAt: room.actionDeadlineAt,
+    syncSeq: room.syncSeq,
     seats: state.seats.map((seat) => ({
       ...seat,
-      away: !room.playerSockets.has(seat.userId),
+      away:
+        room.seenPlayers.has(seat.userId) &&
+        !room.playerSockets.has(seat.userId),
     })),
   };
 }
@@ -225,9 +234,17 @@ function publicTableState(room: TournamentRoom): TableState {
 function armActionTimer(tournamentId: string, room: TournamentRoom): void {
   clearActionTimer(room);
 
-  const state = room.table.getPublicState();
+  let state = room.table.getPublicState();
   if (!isBettingPhase(state.phase) || state.currentActorSeat === null) {
     return;
+  }
+
+  if (room.table.isSkipped(state.currentActorSeat)) {
+    room.table.resolveSkippedActors();
+    state = room.table.getPublicState();
+    if (!isBettingPhase(state.phase) || state.currentActorSeat === null) {
+      return;
+    }
   }
 
   const actorSeat = state.currentActorSeat;
@@ -282,6 +299,7 @@ function buildRoom(
   return {
     table,
     playerSockets: new Map(),
+    seenPlayers: new Set(),
     seatByUserId: buildSeatMap(table),
     buyInCents: tournament.buyInCents,
     gameId: game.id,
@@ -294,6 +312,7 @@ function buildRoom(
     actionDeadlineAt: null,
     actionTimerGeneration: 0,
     disconnectTimers: new Map(),
+    syncSeq: 0,
   };
 }
 
@@ -362,6 +381,7 @@ async function loadOrCreateRoom(tournamentId: string): Promise<TournamentRoom | 
       }
 
       const table = TableEngine.fromSnapshot(snapshot);
+      table.resolveSkippedActors();
       const timerRaw = await redis.get(
         blindTimerKey(tournamentId, runningGame.gameNumber)
       );
@@ -501,10 +521,7 @@ async function sitOutDisconnectedPlayer(
   const seatId = room.seatByUserId.get(userId);
   if (seatId === undefined) return;
   if (room.table.getSkipReason(seatId) === "host") {
-    io.to(`tournament:${tournamentId}`).emit(
-      ServerEvents.TABLE_STATE,
-      publicTableState(room)
-    );
+    await afterAction(tournamentId, room);
     return;
   }
 
@@ -839,6 +856,7 @@ io.on("connection", (socket) => {
     await socket.join(`tournament:${tournamentId}`);
     await socket.join(`tournament-watch:${tournamentId}`);
     room.playerSockets.set(user.userId, socket.id);
+    room.seenPlayers.add(user.userId);
     socket.data.tournamentId = tournamentId;
     socket.data.watchingOnly = false;
 
@@ -1081,10 +1099,15 @@ io.on("connection", (socket) => {
     if (socket.data.watchingOnly) return;
 
     clearDisconnectTimer(room, user.userId);
+    const seatId = room.seatByUserId.get(user.userId);
+    const isActor =
+      seatId !== undefined &&
+      room.table.getPublicState().currentActorSeat === seatId;
+    const graceMs = isActor ? DISCONNECT_ACTOR_GRACE_MS : DISCONNECT_GRACE_MS;
     const timer = setTimeout(() => {
       room.disconnectTimers.delete(user.userId);
       void sitOutDisconnectedPlayer(tournamentId, room, user.userId);
-    }, DISCONNECT_GRACE_MS);
+    }, graceMs);
     room.disconnectTimers.set(user.userId, timer);
   });
 });

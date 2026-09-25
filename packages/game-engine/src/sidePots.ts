@@ -26,7 +26,11 @@ export function buildSidePots(players: PlayerContribution[]): PotLayer[] {
       .map((p) => p.seatId);
 
     if (amount > 0) {
-      pots.push({ amount, eligibleSeatIds });
+      pots.push({
+        amount,
+        eligibleSeatIds,
+        contributorCount: contributors.length,
+      });
     }
     prevLevel = level;
   }
@@ -36,4 +40,25 @@ export function buildSidePots(players: PlayerContribution[]): PotLayer[] {
 
 export function totalPotAmount(pots: PotLayer[]): number {
   return pots.reduce((sum, p) => sum + p.amount, 0);
+}
+
+/**
+ * Live-table labeling: layers with only one eligible seat are uncalled chips,
+ * not a real side pot. Settlement still uses the full `buildSidePots` result.
+ */
+export function splitLivePots(pots: PotLayer[]): {
+  pots: PotLayer[];
+  uncalledAmount: number;
+} {
+  const matched: PotLayer[] = [];
+  let uncalledAmount = 0;
+  for (const pot of pots) {
+    const contributors = pot.contributorCount ?? pot.eligibleSeatIds.length;
+    if (contributors >= 2) {
+      matched.push(pot);
+    } else {
+      uncalledAmount += pot.amount;
+    }
+  }
+  return { pots: matched, uncalledAmount };
 }

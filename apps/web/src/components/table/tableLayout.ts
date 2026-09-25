@@ -21,15 +21,28 @@ export function getVisualSeatIndex(
 
 export function getSeatPosition(
   visualIndex: number,
-  total: number
+  total: number,
+  compact = false
 ): { x: number; y: number } {
   const angle = (visualIndex / total) * 2 * Math.PI - Math.PI / 2;
-  const rx = 42;
-  const ry = 38;
+  const rx = compact ? 34 : 42;
+  const ry = compact ? 30 : 38;
+  let y = 50 + ry * Math.sin(angle);
+  if (compact) {
+    y = Math.min(86, Math.max(22, y));
+  }
   return {
     x: 50 + rx * Math.cos(angle),
-    y: 50 + ry * Math.sin(angle),
+    y,
   };
+}
+
+/** Shift the seat stack so top seats hang down and bottom seats hang up. */
+export function seatAnchorTransform(visualIndex: number, total: number): string {
+  const angle = (visualIndex / total) * 2 * Math.PI - Math.PI / 2;
+  const y = Math.sin(angle);
+  const ty = y < -0.25 ? "-18%" : y > 0.25 ? "-78%" : "-50%";
+  return `translate(-50%, ${ty})`;
 }
 
 export function getViewerSortedSeatIndex(
@@ -48,12 +61,14 @@ export function getViewerSortedSeatIndex(
 export function getSeatPositionForViewer(
   sortedSeatIndex: number,
   total: number,
-  viewerSortedSeatIndex: number
-): { x: number; y: number } {
+  viewerSortedSeatIndex: number,
+  compact = false
+): { x: number; y: number; visualIndex: number } {
   const visualIndex = getVisualSeatIndex(
     sortedSeatIndex,
     total,
     viewerSortedSeatIndex
   );
-  return getSeatPosition(visualIndex, total);
+  const pos = getSeatPosition(visualIndex, total, compact);
+  return { ...pos, visualIndex };
 }
