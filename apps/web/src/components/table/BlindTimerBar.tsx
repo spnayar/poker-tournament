@@ -49,7 +49,7 @@ export function BlindTimerBar({
         : null;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 mb-3">
+    <div className="relative z-50 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 mb-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs text-slate-500 uppercase tracking-wide">

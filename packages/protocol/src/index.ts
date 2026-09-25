@@ -22,6 +22,8 @@ export type PlayerAction = z.infer<typeof PlayerActionSchema>;
 export const PotLayerSchema = z.object({
   amount: z.number().int().nonnegative(),
   eligibleSeatIds: z.array(z.number()),
+  /** How many players put money into this layer (includes folders). */
+  contributorCount: z.number().int().positive().optional(),
 });
 export type PotLayer = z.infer<typeof PotLayerSchema>;
 
@@ -37,12 +39,28 @@ export const SeatPublicSchema = z.object({
   allIn: z.boolean(),
   /** Host/AFK sit-out: still posts blinds, auto check/fold when facing action. */
   skipped: z.boolean(),
+  /** True while the player's live socket is gone (disconnected / dropped). */
+  away: z.boolean().optional().default(false),
+  /** Why the seat is sitting out. Host sits survive reconnect; others resume. */
+  skipReason: z
+    .enum(["host", "disconnect", "timeout"])
+    .nullable()
+    .optional()
+    .default(null),
   isDealer: z.boolean(),
   isSmallBlind: z.boolean(),
   isBigBlind: z.boolean(),
   lastAction: z.string().nullable(),
 });
 export type SeatPublic = z.infer<typeof SeatPublicSchema>;
+export type SkipReason = NonNullable<SeatPublic["skipReason"]>;
+
+/** Disconnect and action-timeout sits resume on reconnect; host sits do not. */
+export function shouldResumeOnReconnect(
+  reason: SkipReason | null | undefined
+): boolean {
+  return reason !== "host";
+}
 
 export const ActionLogEntrySchema = z.object({
   id: z.number(),
@@ -76,6 +94,10 @@ export const TableStateSchema = z.object({
   board: z.array(CardSchema),
   pots: z.array(PotLayerSchema),
   totalPot: z.number().int().nonnegative(),
+  /** Uncalled chips not labeled as a side pot (live betting only). */
+  uncalledAmount: z.number().int().nonnegative().optional(),
+  /** Monotonic broadcast id so clients ignore stale TABLE_STATE. */
+  syncSeq: z.number().int().nonnegative().optional(),
   seats: z.array(SeatPublicSchema),
   dealerSeat: z.number(),
   currentActorSeat: z.number().nullable(),

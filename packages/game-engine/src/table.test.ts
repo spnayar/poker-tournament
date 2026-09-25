@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildBlindLevels } from "@poker/protocol";
+import { buildBlindLevels, shouldResumeOnReconnect } from "@poker/protocol";
 import { TableEngine } from "./table";
 
 function testTableConfig(startingChips = 5000) {
@@ -732,5 +732,172 @@ describe("TableEngine", () => {
     expect(table2.getPublicState().seats.find((s) => s.seatId === actor)!.folded).toBe(
       true
     );
+  });
+
+  it("stores skipReason and auto-folds disconnect sits as away", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const actor = table.getPublicState().currentActorSeat!;
+    expect(table.setSkipped(actor, true, "disconnect")).toBe(true);
+    expect(table.getSkipReason(actor)).toBe("disconnect");
+
+    const state = table.getPublicState();
+    const seat = state.seats.find((s) => s.seatId === actor)!;
+    expect(seat.skipped).toBe(true);
+    expect(seat.skipReason).toBe("disconnect");
+    expect(seat.folded).toBe(true);
+    expect(
+      state.actionLog.some(
+        (e) => e.seatId === actor && e.action.includes("Fold (away)")
+      )
+    ).toBe(true);
+  });
+
+  it("does not let a disconnect skip overwrite a host sit-out", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const other = table
+      .getPublicState()
+      .seats.find(
+        (s) => s.seatId !== table.getPublicState().currentActorSeat
+      )!;
+    table.setSkipped(other.seatId, true, "host");
+    table.setSkipped(other.seatId, true, "disconnect");
+    expect(table.getSkipReason(other.seatId)).toBe("host");
+    expect(table.isSkipped(other.seatId)).toBe(true);
+  });
+
+  it("lets a host sit-out take over a disconnect sit", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const other = table
+      .getPublicState()
+      .seats.find(
+        (s) => s.seatId !== table.getPublicState().currentActorSeat
+      )!;
+    table.setSkipped(other.seatId, true, "disconnect");
+    expect(table.getSkipReason(other.seatId)).toBe("disconnect");
+    table.setSkipped(other.seatId, true, "host");
+    expect(table.getSkipReason(other.seatId)).toBe("host");
+  });
+
+  it("clears skipReason when the player is unsitted", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.setSkipped(0, true, "timeout");
+    expect(table.getSkipReason(0)).toBe("timeout");
+    table.setSkipped(0, false);
+    expect(table.getSkipReason(0)).toBeNull();
+    expect(table.isSkipped(0)).toBe(false);
+  });
+
+  it("resumes disconnect sits the way a reconnect would", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.setSkipped(1, true, "disconnect");
+    table.setSkipped(2, true, "host");
+
+    for (const seatId of [1, 2]) {
+      if (shouldResumeOnReconnect(table.getSkipReason(seatId))) {
+        table.setSkipped(seatId, false);
+      }
+    }
+
+    expect(table.isSkipped(1)).toBe(false);
+    expect(table.isSkipped(2)).toBe(true);
+    expect(table.getSkipReason(2)).toBe("host");
+  });
+
+  it("does not label an unmatched shove as a live side pot", () => {
+    const table = new TableEngine(testTableConfig(5000));
+    table.addPlayer(0, "u1", "Host", null, 5000);
+    table.addPlayer(1, "u2", "Guest", null, 5000);
+    table.addPlayer(2, "u3", "GuestBig", null, 5000);
+    table.startHand();
+
+    const actor = table.getPublicState().currentActorSeat!;
+    expect(table.applyAction(actor, { type: "all-in" })).toBe(true);
+
+    const state = table.getPublicState();
+    expect(state.phase).toBe("preflop");
+    expect(state.pots.every((p) => (p.contributorCount ?? 2) >= 2)).toBe(true);
+    expect(state.uncalledAmount).toBeGreaterThan(0);
+    expect(state.pots.some((p) => p.amount === 4950)).toBe(false);
+    expect((state.uncalledAmount ?? 0) + state.pots.reduce((s, p) => s + p.amount, 0)).toBe(
+      state.totalPot
+    );
+  });
+
+  it("keeps awarded pot labels after showdown resets bets", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 500);
+    table.addPlayer(1, "u2", "Bob", null, 1200);
+    table.addPlayer(2, "u3", "Carol", null, 1200);
+    table.startHand();
+
+    let guard = 0;
+    while (guard++ < 30) {
+      const st = table.getPublicState();
+      if (st.phase === "hand-complete" || st.currentActorSeat === null) break;
+      const legal = table.getLegalActions(st.currentActorSeat);
+      if (!legal) break;
+      if (legal.canAllIn) {
+        expect(table.applyAction(st.currentActorSeat, { type: "all-in" })).toBe(
+          true
+        );
+      } else if (legal.canCall) {
+        expect(table.applyAction(st.currentActorSeat, { type: "call" })).toBe(
+          true
+        );
+      } else if (legal.canCheck) {
+        expect(table.applyAction(st.currentActorSeat, { type: "check" })).toBe(
+          true
+        );
+      } else {
+        break;
+      }
+    }
+
+    const state = table.getPublicState();
+    expect(state.phase).toBe("hand-complete");
+    expect(state.totalPot).toBeGreaterThan(0);
+    expect(state.pots.length).toBeGreaterThanOrEqual(1);
+    expect(state.seats.every((s) => s.totalBet === 0)).toBe(true);
+  });
+
+  it("auto-acts a skipped actor restored from snapshot", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const actor = table.getPublicState().currentActorSeat!;
+    const snap = table.toSnapshot();
+    const player = snap.players.find((p) => p.seatId === actor)!;
+    player.skipped = true;
+    player.skipReason = "disconnect";
+    const restored = TableEngine.fromSnapshot(snap);
+    expect(restored.getPublicState().currentActorSeat).toBe(actor);
+
+    restored.resolveSkippedActors();
+    const after = restored.getPublicState();
+    expect(after.currentActorSeat).not.toBe(actor);
+    expect(after.seats.find((s) => s.seatId === actor)!.folded).toBe(true);
   });
 });

@@ -14,6 +14,7 @@ import { getAvatarUrl } from "@/lib/utils";
 import {
   getSeatPositionForViewer,
   getViewerSortedSeatIndex,
+  seatAnchorTransform,
 } from "./tableLayout";
 import type { HandResult, SeatPublic, ShownHand } from "@poker/protocol";
 
@@ -35,6 +36,8 @@ interface PlayerSeatProps {
   myCards?: string[];
   showCards?: boolean;
   position: { x: number; y: number };
+  visualIndex: number;
+  seatCount: number;
   isActive: boolean;
   animateDeal?: boolean;
   revealHoleCards?: boolean;
@@ -50,6 +53,8 @@ export function PlayerSeat({
   myCards,
   showCards,
   position,
+  visualIndex,
+  seatCount,
   isActive,
   animateDeal = true,
   revealHoleCards = false,
@@ -66,15 +71,24 @@ export function PlayerSeat({
         ? holeCards
         : [undefined, undefined];
 
+  const statusBadge =
+    seat.skipReason === "host" || seat.skipReason === "timeout"
+      ? "sit-out"
+      : seat.away
+        ? "away"
+        : seat.skipped
+          ? "sit-out"
+          : null;
+
   return (
     <motion.div
       className={`absolute flex flex-col items-center${revealHoleCards ? " z-20" : ""}`}
       style={{
         left: `${position.x}%`,
         top: `${position.y}%`,
-        transform: "translate(-50%, -50%)",
+        transform: seatAnchorTransform(visualIndex, seatCount),
       }}
-      animate={{ opacity: seat.folded ? 0.4 : seat.skipped ? 0.55 : 1 }}
+      animate={{ opacity: seat.folded ? 0.4 : statusBadge ? 0.55 : 1 }}
     >
       <div className="relative">
         {isActive && (
@@ -87,13 +101,21 @@ export function PlayerSeat({
         <img
           src={getAvatarUrl(seat.displayName, seat.avatarUrl)}
           alt={seat.displayName}
-          className={`w-14 h-14 rounded-full border-2 bg-slate-800 relative z-10 ${
-            seat.skipped ? "border-orange-500 grayscale" : "border-slate-600"
+          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 bg-slate-800 relative z-10 ${
+            statusBadge === "away"
+              ? "border-slate-400 grayscale"
+              : statusBadge === "sit-out"
+                ? "border-orange-500 grayscale"
+                : "border-slate-600"
           }`}
         />
-        {seat.skipped ? (
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1.5 py-0.5 rounded bg-orange-600 text-[9px] font-bold text-white whitespace-nowrap">
-            Sit-out
+        {statusBadge ? (
+          <span
+            className={`absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1.5 py-0.5 rounded text-[9px] font-bold text-white whitespace-nowrap ${
+              statusBadge === "away" ? "bg-slate-600" : "bg-orange-600"
+            }`}
+          >
+            {statusBadge === "away" ? "Away" : "Sit-out"}
           </span>
         ) : null}
         {isActive && actionSecondsLeft !== null && (
@@ -127,6 +149,11 @@ export function PlayerSeat({
       <p className="text-xs font-medium mt-1 max-w-[80px] truncate">
         {seat.displayName}
       </p>
+      {seat.lastAction ? (
+        <p className="text-[10px] text-slate-400 max-w-[88px] truncate">
+          {seat.lastAction}
+        </p>
+      ) : null}
       <p className="text-xs text-amber-400 font-mono">
         {seat.chipCount.toLocaleString()}
         {seat.allIn && " (AI)"}
@@ -140,11 +167,13 @@ export function PlayerSeat({
         <button
           type="button"
           onClick={() =>
-            seat.skipped ? onUnskip?.(seat.seatId) : onSkip?.(seat.seatId)
+            seat.skipReason === "host"
+              ? onUnskip?.(seat.seatId)
+              : onSkip?.(seat.seatId)
           }
           className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-600 bg-slate-900/80 hover:bg-slate-800 text-slate-300"
         >
-          {seat.skipped ? "Unskip" : "Skip"}
+          {seat.skipReason === "host" ? "Unskip" : "Skip"}
         </button>
       )}
 
@@ -168,6 +197,7 @@ interface PokerTableProps {
   board: string[];
   pots: { amount: number; eligibleSeatIds: number[] }[];
   totalPot: number;
+  uncalledAmount?: number;
   myUserId: string;
   myCards: string[];
   shownCards: ShownHand[];
@@ -177,6 +207,7 @@ interface PokerTableProps {
   phase: string;
   animateDeal?: boolean;
   onBoardRevealChange?: (revealing: boolean) => void;
+  onVisibleBoardChange?: (board: (string | undefined)[]) => void;
   isHost?: boolean;
   actionDeadlineAt?: number | null;
   onSkipPlayer?: (seatId: number) => void;
@@ -188,6 +219,7 @@ export function PokerTable({
   board,
   pots,
   totalPot,
+  uncalledAmount = 0,
   myUserId,
   myCards,
   shownCards,
@@ -197,6 +229,7 @@ export function PokerTable({
   phase,
   animateDeal = true,
   onBoardRevealChange,
+  onVisibleBoardChange,
   isHost = false,
   actionDeadlineAt = null,
   onSkipPlayer,
@@ -212,6 +245,20 @@ export function PokerTable({
     useState<(string | undefined)[]>(emptyBoard);
   const prevBoardRef = useRef<string[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [compactSeats, setCompactSeats] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const apply = () => setCompactSeats(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    onVisibleBoardChange?.(visibleBoard);
+  }, [visibleBoard, onVisibleBoardChange]);
 
   useLayoutEffect(() => {
     for (const t of timersRef.current) clearTimeout(t);
@@ -308,18 +355,23 @@ export function PokerTable({
           Pot: {totalPot.toLocaleString()}
         </motion.div>
 
-        {pots.length > 1 && (
-          <div className="flex gap-2 mt-2 flex-wrap justify-center">
+        {pots.length > 1 || uncalledAmount > 0 ? (
+          <div className="flex gap-2 mt-2 flex-wrap justify-center max-w-[16rem]">
             {pots.map((pot, i) => (
               <span
                 key={i}
                 className="text-xs bg-black/30 px-2 py-0.5 rounded text-slate-300"
               >
-                {i === 0 ? "Main" : `Side ${i}`}: {pot.amount}
+                {i === 0 ? "Main" : `Side ${i}`}: {pot.amount.toLocaleString()}
               </span>
             ))}
+            {uncalledAmount > 0 ? (
+              <span className="text-xs bg-black/30 px-2 py-0.5 rounded text-amber-300/90">
+                Uncalled: {uncalledAmount.toLocaleString()}
+              </span>
+            ) : null}
           </div>
-        )}
+        ) : null}
 
         <p className="text-xs text-slate-400 mt-2 capitalize">{phase}</p>
       </div>
@@ -328,7 +380,8 @@ export function PokerTable({
         const pos = getSeatPositionForViewer(
           i,
           sortedSeats.length,
-          viewerSeatIndex
+          viewerSeatIndex,
+          compactSeats
         );
         const shown = shownCards.find((s) => s.seatId === seat.seatId);
         const isMe = seat.userId === myUserId;
@@ -347,7 +400,9 @@ export function PokerTable({
             myCards={holeCardsForSeat}
             showCards={showHoleCards}
             revealHoleCards={showHoleCards && holeCardsForSeat.length > 0}
-            position={pos}
+            position={{ x: pos.x, y: pos.y }}
+            visualIndex={pos.visualIndex}
+            seatCount={sortedSeats.length}
             isActive={seat.seatId === currentActorSeat}
             animateDeal={animateDeal}
             isHost={isHost}

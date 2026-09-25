@@ -3,6 +3,7 @@ export { getBlindsForLevelFromStructure, type BlindLevel } from "./blinds";
 export {
   buildSidePots,
   totalPotAmount,
+  splitLivePots,
   type PlayerContribution,
 } from "./sidePots";
 export {

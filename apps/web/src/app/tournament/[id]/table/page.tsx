@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useLayoutEffect } from "react";
 import { io, Socket } from "socket.io-client";
 import { PokerTable } from "@/components/table/PokerTable";
 import { ActionPanel } from "@/components/table/ActionPanel";
@@ -70,6 +70,8 @@ export default function TablePage() {
   const viewerSeatIdRef = useRef<number | null>(null);
   const tableStateRef = useRef<TableState | null>(null);
   const actionLogRef = useRef<ActionLogEntry[]>([]);
+  const syncSeqRef = useRef(0);
+  const footerRef = useRef<HTMLDivElement>(null);
   const [tableState, setTableState] = useState<TableState | null>(null);
   const [actionLog, setActionLog] = useState<ActionLogEntry[]>([]);
   const [myCards, setMyCards] = useState<string[]>([]);
@@ -78,6 +80,8 @@ export default function TablePage() {
   const [handResult, setHandResult] = useState<HandResult | null>(null);
   const [showHandResult, setShowHandResult] = useState(false);
   const [boardRevealing, setBoardRevealing] = useState(false);
+  const [visibleBoard, setVisibleBoard] = useState<(string | undefined)[]>([]);
+  const [footerH, setFooterH] = useState(0);
   const [gameFinished, setGameFinished] = useState<GameFinished | null>(null);
   const [connected, setConnected] = useState(false);
   const [actionPending, setActionPending] = useState(false);
@@ -126,6 +130,26 @@ export default function TablePage() {
     setBoardRevealing(revealing);
   }, []);
 
+  const handleVisibleBoardChange = useCallback(
+    (next: (string | undefined)[]) => {
+      setVisibleBoard(next);
+    },
+    []
+  );
+
+  useLayoutEffect(() => {
+    const el = footerRef.current;
+    if (!el) {
+      setFooterH(0);
+      return;
+    }
+    const update = () => setFooterH(el.getBoundingClientRect().height);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
@@ -163,6 +187,16 @@ export default function TablePage() {
     if (status !== "authenticated" || !gameToken) return;
 
     const handleTableState = (state: TableState) => {
+      if (
+        typeof state.syncSeq === "number" &&
+        state.syncSeq < syncSeqRef.current
+      ) {
+        return;
+      }
+      if (typeof state.syncSeq === "number") {
+        syncSeqRef.current = state.syncSeq;
+      }
+
       const previousHand = handNumberRef.current;
       const handAdvanced = state.handNumber > previousHand;
       const isActivePhase =
@@ -227,6 +261,13 @@ export default function TablePage() {
         viewerSeatIdRef.current = mySeatInState.seatId;
         setViewerSeatId(mySeatInState.seatId);
       }
+      if (
+        !mySeatInState ||
+        mySeatInState.skipped ||
+        mySeatInState.seatId !== state.currentActorSeat
+      ) {
+        setLegalActions(null);
+      }
       setTableState(state);
       setActionPending(false);
     };
@@ -288,6 +329,7 @@ export default function TablePage() {
       handNumberRef.current = 0;
       actionLogRef.current = [];
       setActionLog([]);
+      syncSeqRef.current = 0;
       joinTournament(socket!);
     };
 
@@ -336,7 +378,12 @@ export default function TablePage() {
       syncTournamentConnection(socket!);
     };
 
+    const onDisconnect = () => {
+      setConnected(false);
+    };
+
     socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
     socket.on(ServerEvents.TABLE_STATE, handleTableState);
     socket.on(ServerEvents.PLAYER_CARDS, handlePlayerCards);
     socket.on(ServerEvents.ACTION_REQUIRED, handleActionRequired);
@@ -353,6 +400,7 @@ export default function TablePage() {
 
     return () => {
       socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
       socket.off(ServerEvents.TABLE_STATE, handleTableState);
       socket.off(ServerEvents.PLAYER_CARDS, handlePlayerCards);
       socket.off(ServerEvents.ACTION_REQUIRED, handleActionRequired);
@@ -461,30 +509,49 @@ export default function TablePage() {
     (s) => s.seatId === nextDealerSeat
   );
   const nextDealerSkipped = nextDealer?.skipped === true;
+  const nextDealerAway = nextDealer?.away === true;
+  const nextDealerUnavailable = nextDealerSkipped || nextDealerAway;
   const canDealNext =
     awaitingNextHand &&
     mySeat !== undefined &&
     (nextDealerSeat === mySeat.seatId ||
-      (Boolean(isHost) && nextDealerSkipped));
+      (Boolean(isHost) && nextDealerUnavailable));
   const isBetting =
     !gameFinished &&
     !awaitingNextHand &&
     tableState.phase !== "showdown" &&
     tableState.phase !== "waiting";
+  const actorName =
+    tableState.seats.find((s) => s.seatId === tableState.currentActorSeat)
+      ?.displayName ?? null;
+  const waitingLabel =
+    mySeat && mySeat.seatId === tableState.currentActorSeat
+      ? "Your turn — waiting for action buttons…"
+      : actorName
+        ? `Waiting for ${actorName}…`
+        : "Waiting for other players...";
 
   return (
-    <div
-      className={`min-h-screen p-4 flex flex-col${
-        isBetting || (awaitingNextHand && nextDealer) ? " pb-48" : ""
-      }`}
-      onPointerDownCapture={unlockTableSounds}
-    >
+      <div
+        className="min-h-screen p-4 flex flex-col"
+        style={
+          isBetting || (awaitingNextHand && nextDealer)
+            ? { paddingBottom: Math.max(footerH, 96) + 12 }
+            : undefined
+        }
+        onPointerDownCapture={unlockTableSounds}
+      >
       <div className="flex items-center justify-center gap-3 mb-2">
         <p className="text-center text-amber-400/70 text-xs">
           {LEDGER_DISCLAIMER}
         </p>
         <SoundToggle enabled={soundEnabled} onToggle={toggleSound} />
       </div>
+      {tableState && !connected && (
+        <p className="text-center text-amber-300 text-sm mb-2">
+          Connection lost — reconnecting…
+        </p>
+      )}
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch justify-center max-w-7xl mx-auto w-full">
         {gameFinished && (
@@ -522,6 +589,7 @@ export default function TablePage() {
                   board={tableState.board}
                   pots={tableState.pots}
                   totalPot={tableState.totalPot}
+                  uncalledAmount={tableState.uncalledAmount ?? 0}
                   myUserId={session?.user?.id ?? ""}
                   viewerSeatId={viewerSeatId}
                   myCards={myCards}
@@ -531,6 +599,7 @@ export default function TablePage() {
                   phase={tableState.phase}
                   animateDeal={animateDeal}
                   onBoardRevealChange={handleBoardRevealChange}
+                  onVisibleBoardChange={handleVisibleBoardChange}
                   isHost={Boolean(isHost)}
                   actionDeadlineAt={tableState.actionDeadlineAt ?? null}
                   onSkipPlayer={skipPlayer}
@@ -551,6 +620,8 @@ export default function TablePage() {
               actionLog={actionLog}
               currentActorSeat={tableState.currentActorSeat}
               handNumber={tableState.handNumber}
+              visibleBoard={visibleBoard}
+              hideAwards={boardRevealing}
             />
           </div>
 
@@ -569,7 +640,10 @@ export default function TablePage() {
       </div>
 
       {(isBetting || (awaitingNextHand && nextDealer)) && (
-        <div className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-700/80 bg-slate-950/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
+        <div
+          ref={footerRef}
+          className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-700/80 bg-slate-950/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(0,0,0,0.45)]"
+        >
           <div className="max-w-7xl mx-auto px-3 py-2 safe-area-pb">
             {awaitingNextHand && nextDealer && (
               <DealNextHandBar
@@ -577,6 +651,11 @@ export default function TablePage() {
                 canDeal={canDealNext}
                 pending={dealNextPending}
                 onDeal={dealNextHand}
+                dealerAway={
+                  Boolean(isHost) &&
+                  nextDealerUnavailable &&
+                  nextDealerSeat !== mySeat?.seatId
+                }
               />
             )}
             {isBetting && (
@@ -584,6 +663,7 @@ export default function TablePage() {
                 legal={legalActions}
                 onAction={sendAction}
                 disabled={actionPending}
+                waitingLabel={waitingLabel}
               />
             )}
           </div>
