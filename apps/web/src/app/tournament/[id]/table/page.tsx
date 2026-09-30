@@ -590,7 +590,7 @@ export default function TablePage() {
             />
           )}
           <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch min-h-0">
-            <div className="flex-1 flex items-center justify-center min-w-0 shrink-0 lg:min-h-0 max-sm:max-h-[min(42vh,280px)]">
+            <div className="flex-1 flex items-center justify-center min-w-0 shrink-0 lg:min-h-0 max-sm:max-h-[min(30vh,190px)]">
               <div
                 className={`relative w-full max-w-3xl${
                   shownCards.length > 0 ? " mb-4" : ""
@@ -641,7 +641,7 @@ export default function TablePage() {
             <HandResultOverlay result={handResult} shownCards={shownCards} />
           )}
 
-          <div className="text-center text-sm text-slate-400 mt-2 mb-2 shrink-0">
+          <div className="text-center text-sm text-slate-400 mt-2 mb-2 shrink-0 max-sm:text-xs max-sm:mt-1 max-sm:mb-1">
             Level {tableState.blindLevel} · Blinds {tableState.smallBlind}/
             {tableState.bigBlind} · Hand #{tableState.handNumber}
             {gameFinished && (
