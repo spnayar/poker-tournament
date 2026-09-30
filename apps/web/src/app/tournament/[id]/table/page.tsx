@@ -553,7 +553,7 @@ export default function TablePage() {
         }
         onPointerDownCapture={unlockTableSounds}
       >
-      <div className="flex items-center justify-center gap-3 mb-2">
+      <div className="flex items-center justify-center gap-3 mb-2 max-sm:mb-1">
         <p className="text-center text-amber-400/70 text-xs">
           {LEDGER_DISCLAIMER}
         </p>
@@ -641,7 +641,7 @@ export default function TablePage() {
             <HandResultOverlay result={handResult} shownCards={shownCards} />
           )}
 
-          <div className="text-center text-sm text-slate-400 mt-2 mb-2 shrink-0 max-sm:text-xs max-sm:mt-1 max-sm:mb-1">
+          <div className="text-center text-sm text-slate-400 mt-2 mb-2 shrink-0 max-sm:hidden">
             Level {tableState.blindLevel} · Blinds {tableState.smallBlind}/
             {tableState.bigBlind} · Hand #{tableState.handNumber}
             {gameFinished && (
