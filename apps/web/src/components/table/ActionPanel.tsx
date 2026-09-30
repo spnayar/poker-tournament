@@ -8,6 +8,7 @@ interface ActionPanelProps {
   onAction: (action: unknown) => void;
   disabled?: boolean;
   waitingLabel?: string;
+  awayBanner?: string | null;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -54,6 +55,7 @@ export function ActionPanel({
   onAction,
   disabled,
   waitingLabel = "Waiting for other players...",
+  awayBanner = null,
 }: ActionPanelProps) {
   const canWager = legal?.canBet || legal?.canRaise;
   const wagerMin = legal?.canBet ? legal.minBet : (legal?.minRaiseTo ?? 0);
@@ -116,9 +118,15 @@ export function ActionPanel({
   }
 
   if (!legal) {
+    const showWaiting = waitingLabel && waitingLabel !== awayBanner;
     return (
-      <div className="text-center text-slate-400 py-2 text-sm">
-        {waitingLabel}
+      <div className="text-center py-2 text-sm space-y-1">
+        {awayBanner ? (
+          <p className="text-amber-300 font-medium">{awayBanner}</p>
+        ) : null}
+        {showWaiting ? (
+          <p className="text-slate-400">{waitingLabel}</p>
+        ) : null}
       </div>
     );
   }

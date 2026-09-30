@@ -19,6 +19,7 @@ import {
   SeatIdPayloadSchema,
   resolveBlindLevels,
   shouldResumeOnReconnect,
+  applySocketAwayFlags,
   type BlindLevel,
   type TableState,
 } from "@poker/protocol";
@@ -222,12 +223,11 @@ function publicTableState(room: TournamentRoom): TableState {
     ...state,
     actionDeadlineAt: room.actionDeadlineAt,
     syncSeq: room.syncSeq,
-    seats: state.seats.map((seat) => ({
-      ...seat,
-      away:
-        room.seenPlayers.has(seat.userId) &&
-        !room.playerSockets.has(seat.userId),
-    })),
+    seats: applySocketAwayFlags(
+      state.seats,
+      room.seenPlayers,
+      room.playerSockets.keys()
+    ),
   };
 }
 
@@ -518,6 +518,7 @@ async function sitOutDisconnectedPlayer(
   if (rooms.get(tournamentId) !== room) return;
   if (room.playerSockets.has(userId)) return;
 
+  // Always the disconnected user's mapped seat — never currentActorSeat.
   const seatId = room.seatByUserId.get(userId);
   if (seatId === undefined) return;
   if (room.table.getSkipReason(seatId) === "host") {

@@ -62,6 +62,64 @@ export function shouldResumeOnReconnect(
   return reason !== "host";
 }
 
+/** Away is keyed by that seat's userId, never by who is to act. */
+export function applySocketAwayFlags<T extends { userId: string }>(
+  seats: T[],
+  seenUserIds: Iterable<string>,
+  connectedUserIds: Iterable<string>
+): (T & { away: boolean })[] {
+  const seen = seenUserIds instanceof Set ? seenUserIds : new Set(seenUserIds);
+  const connected =
+    connectedUserIds instanceof Set ? connectedUserIds : new Set(connectedUserIds);
+  return seats.map((seat) => ({
+    ...seat,
+    away: seen.has(seat.userId) && !connected.has(seat.userId),
+  }));
+}
+
+export function awayDisplayNames(
+  seats: Array<{ displayName: string; away?: boolean }>
+): string[] {
+  return seats.filter((s) => s.away).map((s) => s.displayName);
+}
+
+/** Banner copy for disconnected seats. Null when nobody is away. */
+export function formatAwayBanner(names: string[]): string | null {
+  if (names.length === 0) return null;
+  if (names.length === 1) return `${names[0]} is away…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are away…`;
+  const rest = names.slice(0, -1).join(", ");
+  return `${rest}, and ${names[names.length - 1]} are away…`;
+}
+
+export function formatActorWaitingLabel(opts: {
+  isViewerActor: boolean;
+  actorName: string | null;
+  actorAway?: boolean;
+  actorSkipped?: boolean;
+}): string {
+  if (opts.isViewerActor) {
+    return "Your turn — waiting for action buttons…";
+  }
+  if (!opts.actorName) {
+    return "Waiting for other players...";
+  }
+  if (opts.actorAway) {
+    return `${opts.actorName} is away…`;
+  }
+  if (opts.actorSkipped) {
+    return `Waiting for ${opts.actorName} (sitting out)…`;
+  }
+  return `Waiting for ${opts.actorName}…`;
+}
+
+/** Host Skip vs Unskip: Unskip any sat-out seat, including disconnect/timeout. */
+export function hostSeatControl(
+  seat: { skipped: boolean }
+): "skip" | "unskip" {
+  return seat.skipped ? "unskip" : "skip";
+}
+
 export const ActionLogEntrySchema = z.object({
   id: z.number(),
   seatId: z.number(),
