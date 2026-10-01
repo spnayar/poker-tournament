@@ -31,6 +31,9 @@ import {
   type ActionLogEntry,
   type ShownHand,
   type BlindTimerState,
+  awayDisplayNames,
+  formatActorWaitingLabel,
+  formatAwayBanner,
 } from "@poker/protocol";
 
 const GAME_SERVER_WS =
@@ -148,7 +151,7 @@ export default function TablePage() {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  });
+  }, [tableState?.phase, tableState?.currentActorSeat, legalActions]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -521,27 +524,36 @@ export default function TablePage() {
     !awaitingNextHand &&
     tableState.phase !== "showdown" &&
     tableState.phase !== "waiting";
-  const actorName =
-    tableState.seats.find((s) => s.seatId === tableState.currentActorSeat)
-      ?.displayName ?? null;
-  const waitingLabel =
-    mySeat && mySeat.seatId === tableState.currentActorSeat
-      ? "Your turn — waiting for action buttons…"
-      : actorName
-        ? `Waiting for ${actorName}…`
-        : "Waiting for other players...";
+  const actorSeat = tableState.seats.find(
+    (s) => s.seatId === tableState.currentActorSeat
+  );
+  const actorName = actorSeat?.displayName ?? null;
+  const awayBanner = formatAwayBanner(awayDisplayNames(tableState.seats));
+  const waitingLabel = formatActorWaitingLabel({
+    isViewerActor: Boolean(
+      mySeat && mySeat.seatId === tableState.currentActorSeat
+    ),
+    actorName,
+    actorAway: actorSeat?.away === true,
+    actorSkipped: actorSeat?.skipped === true,
+  });
+  const showFooter = isBetting || (awaitingNextHand && nextDealer);
+  const footerPad = showFooter ? Math.max(footerH, 96) + 12 : 0;
 
   return (
       <div
-        className="min-h-screen p-4 flex flex-col"
+        className="min-h-screen p-4 flex flex-col max-sm:h-[100dvh] max-sm:min-h-0 max-sm:overflow-hidden"
         style={
-          isBetting || (awaitingNextHand && nextDealer)
-            ? { paddingBottom: Math.max(footerH, 96) + 12 }
+          showFooter
+            ? {
+                paddingBottom: footerPad,
+                ["--table-footer-h" as string]: `${Math.max(footerH, 96)}px`,
+              }
             : undefined
         }
         onPointerDownCapture={unlockTableSounds}
       >
-      <div className="flex items-center justify-center gap-3 mb-2">
+      <div className="flex items-center justify-center gap-3 mb-2 max-sm:mb-1">
         <p className="text-center text-amber-400/70 text-xs">
           {LEDGER_DISCLAIMER}
         </p>
@@ -553,7 +565,7 @@ export default function TablePage() {
         </p>
       )}
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch justify-center max-w-7xl mx-auto w-full">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch justify-center max-w-7xl mx-auto w-full min-h-0">
         {gameFinished && (
           <GameEndSidebar
             tournamentId={tournamentId}
@@ -566,7 +578,7 @@ export default function TablePage() {
           />
         )}
 
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {blindTimer && !gameFinished && (
             <BlindTimerBar
               timer={blindTimer}
@@ -577,8 +589,8 @@ export default function TablePage() {
               actionLoading={timerActionLoading}
             />
           )}
-          <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch">
-            <div className="flex-1 flex items-center justify-center min-w-0">
+          <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch min-h-0">
+            <div className="flex-1 flex items-center justify-center min-w-0 shrink-0 lg:min-h-0 max-sm:max-h-[min(30vh,190px)]">
               <div
                 className={`relative w-full max-w-3xl${
                   shownCards.length > 0 ? " mb-4" : ""
@@ -629,7 +641,7 @@ export default function TablePage() {
             <HandResultOverlay result={handResult} shownCards={shownCards} />
           )}
 
-          <div className="text-center text-sm text-slate-400 mt-2 mb-2">
+          <div className="text-center text-sm text-slate-400 mt-2 mb-2 shrink-0 max-sm:hidden">
             Level {tableState.blindLevel} · Blinds {tableState.smallBlind}/
             {tableState.bigBlind} · Hand #{tableState.handNumber}
             {gameFinished && (
@@ -639,12 +651,17 @@ export default function TablePage() {
         </div>
       </div>
 
-      {(isBetting || (awaitingNextHand && nextDealer)) && (
+      {showFooter && (
         <div
           ref={footerRef}
           className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-700/80 bg-slate-950/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(0,0,0,0.45)]"
         >
           <div className="max-w-7xl mx-auto px-3 py-2 safe-area-pb">
+            {awayBanner && awaitingNextHand ? (
+              <p className="text-center text-amber-300 text-sm font-medium mb-2">
+                {awayBanner}
+              </p>
+            ) : null}
             {awaitingNextHand && nextDealer && (
               <DealNextHandBar
                 dealerName={nextDealer.displayName}
@@ -664,6 +681,7 @@ export default function TablePage() {
                 onAction={sendAction}
                 disabled={actionPending}
                 waitingLabel={waitingLabel}
+                awayBanner={awayBanner}
               />
             )}
           </div>

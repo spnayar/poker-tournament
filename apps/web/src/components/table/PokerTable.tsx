@@ -17,6 +17,7 @@ import {
   seatAnchorTransform,
 } from "./tableLayout";
 import type { HandResult, SeatPublic, ShownHand } from "@poker/protocol";
+import { hostSeatControl } from "@poker/protocol";
 
 function emptyBoard(): (string | undefined)[] {
   return [undefined, undefined, undefined, undefined, undefined];
@@ -167,13 +168,13 @@ export function PlayerSeat({
         <button
           type="button"
           onClick={() =>
-            seat.skipReason === "host"
+            hostSeatControl(seat) === "unskip"
               ? onUnskip?.(seat.seatId)
               : onSkip?.(seat.seatId)
           }
           className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-600 bg-slate-900/80 hover:bg-slate-800 text-slate-300"
         >
-          {seat.skipReason === "host" ? "Unskip" : "Skip"}
+          {hostSeatControl(seat) === "unskip" ? "Unskip" : "Skip"}
         </button>
       )}
 

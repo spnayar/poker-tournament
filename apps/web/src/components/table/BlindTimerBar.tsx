@@ -49,19 +49,19 @@ export function BlindTimerBar({
         : null;
 
   return (
-    <div className="relative z-50 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 mb-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="relative z-50 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 mb-3 max-sm:px-3 max-sm:py-2 max-sm:mb-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:gap-2">
         <div>
           <p className="text-xs text-slate-500 uppercase tracking-wide">
             Blinds · Level {timer.levelNumber}
           </p>
-          <p className="text-lg font-semibold text-emerald-400">
+          <p className="text-lg font-semibold text-emerald-400 max-sm:text-base">
             {timer.currentSb} / {timer.currentBb}
           </p>
         </div>
 
         <div className="text-center">
-          <p className="text-xs text-slate-500 uppercase tracking-wide">
+          <p className="text-xs text-slate-500 uppercase tracking-wide max-sm:text-[10px]">
             {timer.increasePending
               ? "Next level on next hand"
               : timer.paused
@@ -69,7 +69,7 @@ export function BlindTimerBar({
                 : "Next level in"}
           </p>
           <p
-            className={`text-2xl font-mono font-bold ${
+            className={`text-2xl font-mono font-bold max-sm:text-xl ${
               timer.increasePending ? "text-amber-400" : "text-white"
             }`}
           >
@@ -77,7 +77,7 @@ export function BlindTimerBar({
           </p>
         </div>
 
-        <div className="text-right text-sm">
+        <div className="text-right text-sm max-sm:hidden">
           {timer.nextBb !== null ? (
             <>
               <p className="text-slate-500">Up next</p>

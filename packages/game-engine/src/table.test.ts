@@ -37,6 +37,13 @@ describe("TableEngine", () => {
     const state = table.getPublicState();
     const json = JSON.stringify(state);
     expect(json).not.toMatch(/"[2-9TJQKA][cdhs]"/);
+    expect(state.seats.every((s) => !("holeCards" in s))).toBe(true);
+
+    const dealEvents = table.drainEvents().filter((e) => e.type === "deal");
+    expect(dealEvents.length).toBeGreaterThan(0);
+    for (const event of dealEvents) {
+      expect(JSON.stringify(event.payload)).not.toMatch(/"[2-9TJQKA][cdhs]"/);
+    }
   });
 
   it("assigns action when only one player can still bet preflop", () => {
@@ -732,6 +739,37 @@ describe("TableEngine", () => {
     expect(table2.getPublicState().seats.find((s) => s.seatId === actor)!.folded).toBe(
       true
     );
+  });
+
+  it("sits out a non-actor disconnect without touching the current actor", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Host Bot", null, 5000);
+    table.addPlayer(1, "u2", "Guest Bot", null, 5000);
+    table.addPlayer(2, "u3", "Guest Big", null, 5000);
+    table.startHand();
+
+    const actor = table.getPublicState().currentActorSeat!;
+    const bb = table.getPublicState().seats.find((s) => s.isBigBlind)!;
+    expect(bb.seatId).not.toBe(actor);
+
+    const beforeLog = table.getPublicState().actionLog.map((e) => e.id);
+    expect(table.setSkipped(bb.seatId, true, "disconnect")).toBe(true);
+
+    const state = table.getPublicState();
+    expect(state.currentActorSeat).toBe(actor);
+    expect(state.seats.find((s) => s.seatId === bb.seatId)!.skipped).toBe(true);
+    expect(state.seats.find((s) => s.seatId === bb.seatId)!.skipReason).toBe(
+      "disconnect"
+    );
+    expect(state.seats.find((s) => s.seatId === actor)!.skipped).toBe(false);
+    expect(state.seats.find((s) => s.seatId === actor)!.folded).toBe(false);
+    expect(
+      state.actionLog.filter(
+        (e) =>
+          !beforeLog.includes(e.id) &&
+          (e.action.includes("sit-out") || e.action.includes("away"))
+      )
+    ).toEqual([]);
   });
 
   it("stores skipReason and auto-folds disconnect sits as away", () => {

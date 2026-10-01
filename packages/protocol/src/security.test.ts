@@ -25,4 +25,11 @@ describe("wire protocol security", () => {
   it("action:required is player-scoped not broadcast", () => {
     expect(publicEvents).not.toContain(ServerEvents.ACTION_REQUIRED);
   });
+
+  it("hand:result is the only public event that may carry shown hole cards", () => {
+    expect(ServerEvents.HAND_RESULT).toBe("hand:result");
+    expect(publicEvents.filter((e) => e === ServerEvents.HAND_RESULT)).toEqual([
+      ServerEvents.HAND_RESULT,
+    ]);
+  });
 });
