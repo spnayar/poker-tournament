@@ -8,6 +8,7 @@ import { formatCents, getAvatarUrl } from "@/lib/utils";
 import { BrandLockup } from "@/components/BrandMark";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import type { AvatarOption } from "@/lib/avatars";
+import { needsProfileSetup } from "@/lib/profileSetup";
 
 interface Stats {
   tournamentsPlayed: number;
@@ -25,6 +26,7 @@ interface HistoryItem {
 
 interface ProfileUser {
   displayName: string;
+  displayNameSet: boolean;
   email: string;
   avatarUrl: string | null;
 }
@@ -74,7 +76,7 @@ export default function ProfilePage() {
 
   async function saveDisplayName() {
     const trimmed = nameDraft.trim();
-    if (trimmed === user?.displayName) return;
+    if (trimmed === user?.displayName && user.displayNameSet) return;
 
     setNameSaving(true);
     setNameError("");
@@ -123,6 +125,9 @@ export default function ProfilePage() {
       : 0;
 
   const avatarSrc = getAvatarUrl(user.displayName, user.avatarUrl);
+  const setupNeeded = needsProfileSetup(user);
+  const nameUnconfirmed = !user.displayNameSet;
+  const avatarUnpicked = !user.avatarUrl;
 
   return (
     <div className="min-h-screen p-6 max-w-2xl mx-auto">
@@ -133,6 +138,19 @@ export default function ProfilePage() {
         </Link>
       </div>
 
+      {setupNeeded && (
+        <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <p className="font-semibold text-amber-300">
+            Set your display name and avatar
+          </p>
+          <p className="text-sm text-slate-300 mt-1">
+            We suggested a name from your email. Confirm or change it, then pick
+            an avatar so friends recognize you at the table. You can keep
+            playing without this.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center gap-4 mt-4 mb-6">
         <img
           src={avatarSrc}
@@ -142,13 +160,26 @@ export default function ProfilePage() {
         <div>
           <h1 className="text-2xl font-bold">{user.displayName}</h1>
           <p className="text-slate-400">{user.email}</p>
+          {nameUnconfirmed && (
+            <p className="text-xs text-amber-400/90 mt-1">
+              Suggested from your email — save a name below
+            </p>
+          )}
         </div>
       </div>
 
-      <section className="mb-8 bg-slate-900 rounded-xl p-4 border border-slate-800">
+      <section
+        className={`mb-8 rounded-xl p-4 border ${
+          nameUnconfirmed
+            ? "bg-slate-900 border-amber-500/40"
+            : "bg-slate-900 border-slate-800"
+        }`}
+      >
         <h2 className="text-sm font-semibold text-slate-400 mb-3">Display name</h2>
         <p className="text-xs text-slate-500 mb-3">
-          Shown at the table and on game night rosters.
+          {nameUnconfirmed
+            ? "Prefill is the part of your email before @. Save it or pick something friends will recognize."
+            : "Shown at the table and on game night rosters."}
         </p>
         <div className="flex flex-col sm:flex-row gap-2">
           <input
@@ -161,7 +192,7 @@ export default function ProfilePage() {
             }}
             maxLength={32}
             className="flex-1 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
-            placeholder="Your name"
+            placeholder={user.displayName || "Your name"}
           />
           <button
             type="button"
@@ -169,7 +200,7 @@ export default function ProfilePage() {
             disabled={
               nameSaving ||
               nameDraft.trim().length < 2 ||
-              nameDraft.trim() === user.displayName
+              (nameDraft.trim() === user.displayName && user.displayNameSet)
             }
             className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium text-sm disabled:opacity-50 shrink-0"
           >
@@ -184,7 +215,11 @@ export default function ProfilePage() {
         )}
       </section>
 
-      <AvatarPicker currentUrl={user.avatarUrl} onSelect={handleAvatarSelect} />
+      <AvatarPicker
+        currentUrl={user.avatarUrl}
+        onSelect={handleAvatarSelect}
+        prompt={avatarUnpicked}
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         {[

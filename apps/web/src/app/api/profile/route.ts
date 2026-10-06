@@ -17,7 +17,13 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { displayName: true, email: true, avatarUrl: true, createdAt: true },
+    select: {
+      displayName: true,
+      displayNameSet: true,
+      email: true,
+      avatarUrl: true,
+      createdAt: true,
+    },
   });
 
   const gameResults = await prisma.gameResult.findMany({
@@ -58,7 +64,11 @@ export async function PATCH(req: Request) {
   const body = await req.json();
   const { avatarUrl, displayName } = body;
 
-  const data: { avatarUrl?: string; displayName?: string } = {};
+  const data: {
+    avatarUrl?: string;
+    displayName?: string;
+    displayNameSet?: boolean;
+  } = {};
 
   if (displayName !== undefined) {
     if (typeof displayName !== "string") {
@@ -72,6 +82,7 @@ export async function PATCH(req: Request) {
       );
     }
     data.displayName = trimmed;
+    data.displayNameSet = true;
   }
 
   if (avatarUrl !== undefined) {
@@ -94,7 +105,12 @@ export async function PATCH(req: Request) {
   const user = await prisma.user.update({
     where: { id: session.user.id },
     data,
-    select: { displayName: true, email: true, avatarUrl: true },
+    select: {
+      displayName: true,
+      displayNameSet: true,
+      email: true,
+      avatarUrl: true,
+    },
   });
 
   return NextResponse.json({ user });

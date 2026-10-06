@@ -9,7 +9,6 @@ import { REGISTER_SEND_ERROR, magicLinkSendFailed } from "@/lib/magicLinkUi";
 export default function RegisterPage() {
   const [form, setForm] = useState({
     email: "",
-    displayName: "",
     inviteCode: "",
   });
   const [error, setError] = useState("");
@@ -52,7 +51,6 @@ export default function RegisterPage() {
   }
 
   const fields = [
-    { key: "displayName" as const, label: "Display Name", type: "text" },
     { key: "email" as const, label: "Email", type: "email" },
     { key: "inviteCode" as const, label: "Invite Code", type: "text" },
   ];
@@ -66,7 +64,8 @@ export default function RegisterPage() {
         <h1 className="text-3xl font-bold text-center mb-2">Join Poker Night</h1>
         <p className="text-slate-400 text-center mb-8 text-sm">
           Invite-only registration for friends. We&apos;ll email you a login
-          link — no password.
+          link — no password. You can set your name and avatar after you sign
+          in.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -82,13 +81,7 @@ export default function RegisterPage() {
                   setForm((f) => ({ ...f, [field.key]: e.target.value }))
                 }
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
-                autoComplete={
-                  field.key === "email"
-                    ? "email"
-                    : field.key === "displayName"
-                      ? "nickname"
-                      : "off"
-                }
+                autoComplete={field.key === "email" ? "email" : "off"}
                 required
               />
             </div>

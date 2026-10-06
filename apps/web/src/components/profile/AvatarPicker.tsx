@@ -11,9 +11,10 @@ import {
 interface AvatarPickerProps {
   currentUrl: string | null;
   onSelect: (avatar: AvatarOption) => Promise<void>;
+  prompt?: boolean;
 }
 
-export function AvatarPicker({ currentUrl, onSelect }: AvatarPickerProps) {
+export function AvatarPicker({ currentUrl, onSelect, prompt }: AvatarPickerProps) {
   const [category, setCategory] = useState<AvatarCategory | "all">("all");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -37,10 +38,18 @@ export function AvatarPicker({ currentUrl, onSelect }: AvatarPickerProps) {
   }
 
   return (
-    <section className="mb-8">
+    <section
+      className={`mb-8 ${
+        prompt
+          ? "rounded-xl border border-amber-500/40 bg-amber-500/5 p-4"
+          : ""
+      }`}
+    >
       <h2 className="text-lg font-semibold mb-1">Avatar</h2>
       <p className="text-slate-400 text-sm mb-4">
-        Pick a cartoony look — guys, gals, animals, and more.
+        {prompt
+          ? "Pick a cartoony look so friends recognize you at the table."
+          : "Pick a cartoony look — guys, gals, animals, and more."}
       </p>
 
       <div className="flex flex-wrap gap-2 mb-4">

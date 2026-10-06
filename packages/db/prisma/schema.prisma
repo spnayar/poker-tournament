@@ -11,6 +11,8 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   displayName   String
+  /// False until the player confirms a display name on profile. Existing accounts stay true.
+  displayNameSet Boolean  @default(true)
   /// Legacy password logins only. New accounts have none.
   passwordHash  String?
   avatarUrl     String?

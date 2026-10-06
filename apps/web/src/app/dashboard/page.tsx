@@ -19,6 +19,10 @@ import {
   buildBlindLevels,
   type BlindPace,
 } from "@poker/protocol";
+import {
+  needsProfileSetup,
+  PROFILE_PROMPT_DISMISS_KEY,
+} from "@/lib/profileSetup";
 
 interface Tournament {
   id: string;
@@ -41,6 +45,12 @@ interface Stats {
   totalPayoutCents: number;
 }
 
+interface DashboardUser {
+  displayName: string;
+  displayNameSet: boolean;
+  avatarUrl: string | null;
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -56,6 +66,10 @@ export default function DashboardPage() {
   const [lastHostedDefaults, setLastHostedDefaults] =
     useState<LastHostedDefaults | null>(null);
   const [form, setForm] = useState(() => createGameNightFormDefaults());
+  const [dashboardUser, setDashboardUser] = useState<DashboardUser | null>(
+    null
+  );
+  const [profilePromptDismissed, setProfilePromptDismissed] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -63,6 +77,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
+      try {
+        setProfilePromptDismissed(
+          sessionStorage.getItem(PROFILE_PROMPT_DISMISS_KEY) === "1"
+        );
+      } catch {
+        // ignore sessionStorage failures
+      }
       fetch("/api/tournaments")
         .then(async (r) => {
           const data = await r.json().catch(() => ({}));
@@ -75,6 +96,13 @@ export default function DashboardPage() {
           const defaults = data.lastHostedDefaults ?? null;
           setLastHostedDefaults(defaults);
           setForm(createGameNightFormDefaults(defaults));
+          if (data.user) {
+            setDashboardUser({
+              displayName: data.user.displayName,
+              displayNameSet: data.user.displayNameSet !== false,
+              avatarUrl: data.user.avatarUrl ?? null,
+            });
+          }
         });
     }
   }, [status]);
@@ -203,6 +231,44 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {dashboardUser &&
+        needsProfileSetup(dashboardUser) &&
+        !profilePromptDismissed && (
+          <div className="mb-6 rounded-xl border border-amber-500/30 bg-slate-900 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-amber-300">
+                Finish your profile
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Set a display name and avatar so friends recognize you at the
+                table.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                href="/profile"
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium"
+              >
+                Set up
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setProfilePromptDismissed(true);
+                  try {
+                    sessionStorage.setItem(PROFILE_PROMPT_DISMISS_KEY, "1");
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-slate-200"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        )}
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
