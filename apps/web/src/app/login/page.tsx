@@ -1,34 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-export default function LoginPage() {
-  const router = useRouter();
+function loginErrorMessage(code: string | null): string {
+  if (code === "Verification") {
+    return "That login link is invalid or expired. Request a new one.";
+  }
+  if (code === "AccessDenied") {
+    return "Could not sign you in. Request a new login link.";
+  }
+  if (code) {
+    return "Could not sign you in. Request a new login link.";
+  }
+  return "";
+}
+
+function LoginForm() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    loginErrorMessage(searchParams.get("error"))
+  );
   const [loading, setLoading] = useState(false);
+
+  const callbackUrl = useMemo(
+    () => searchParams.get("callbackUrl") || "/dashboard",
+    [searchParams]
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
+    await signIn("email", {
       email,
-      password,
+      callbackUrl,
       redirect: false,
     });
 
     setLoading(false);
-    if (result?.error) {
-      setError("Invalid email or password");
-    } else {
-      router.push("/dashboard");
-    }
+    const next = new URL("/check-email", window.location.origin);
+    next.searchParams.set("email", email.trim().toLowerCase());
+    window.location.assign(next.toString());
   }
 
   return (
@@ -47,16 +64,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
+              autoComplete="email"
               required
             />
           </div>
@@ -68,7 +76,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-semibold transition disabled:opacity-50"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? "Sending link..." : "Email me a login link"}
           </button>
         </form>
 
@@ -80,5 +88,19 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-slate-400">
+          Loading…
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

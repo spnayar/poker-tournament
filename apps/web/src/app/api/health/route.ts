@@ -11,6 +11,8 @@ export async function GET() {
       NEXTAUTH_URL: Boolean(process.env["NEXTAUTH_URL"]),
       DATABASE_URL: Boolean(process.env["DATABASE_URL"]),
       JWT_SECRET: Boolean(process.env["JWT_SECRET"]),
+      RESEND_API_KEY: Boolean(process.env["RESEND_API_KEY"]),
+      EMAIL_FROM: Boolean(process.env["EMAIL_FROM"]),
     },
   });
 }
