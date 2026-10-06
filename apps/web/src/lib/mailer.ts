@@ -1,7 +1,11 @@
 import { Resend } from "resend";
 
-/** Used until mail.pokertableclub.com is verified in Resend. */
-export const RESEND_TEST_FROM = "Poker Night <beth.t@example.com>";
+/** Production from-address for the verified mail.pokertableclub.com Resend domain. Overridable via EMAIL_FROM. */
+export const DEFAULT_EMAIL_FROM =
+  "Poker Night <noreply@mail.pokertableclub.com>";
+
+/** Human inbox (M365). Replies to app mail land here, not on the noreply sender. */
+export const EMAIL_REPLY_TO = "info@pokertableclub.com";
 
 export type SendAppEmailInput = {
   to: string;
@@ -17,7 +21,7 @@ export type SendAppEmailResult =
 export function getEmailFromAddress(): string {
   const from = process.env["EMAIL_FROM"]?.trim();
   if (from) return from;
-  return RESEND_TEST_FROM;
+  return DEFAULT_EMAIL_FROM;
 }
 
 /**
@@ -45,6 +49,7 @@ export async function sendAppEmail(
     subject: input.subject,
     html: input.html,
     text: input.text,
+    replyTo: EMAIL_REPLY_TO,
   });
 
   if (result.error) {
