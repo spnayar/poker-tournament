@@ -1,8 +1,13 @@
 import {
   BLIND_LEVEL_MINUTE_OPTIONS,
+  defaultPayoutPercents,
+  payoutPercentsToFormFields,
   resolveBlindPace,
+  resolveHostPayoutPercents,
   type BlindPace,
 } from "@poker/protocol";
+
+export { defaultPayoutPercents };
 
 export function defaultTournamentName(date = new Date()): string {
   const formatted = date.toLocaleDateString("en-US", {
@@ -16,10 +21,6 @@ export function defaultTournamentName(date = new Date()): string {
 
 /** @deprecated use defaultTournamentName — kept for imports */
 export const defaultGameNightName = defaultTournamentName;
-
-export function defaultPayoutPercents(): number[] {
-  return [50, 30, 20];
-}
 
 function toPositivePercents(values: (string | number)[]): number[] {
   return values
@@ -87,11 +88,7 @@ function formatBuyInDollars(cents: number): string {
 export function createGameNightFormDefaults(
   lastHosted?: LastHostedDefaults | null
 ): CreateGameNightForm {
-  const payouts =
-    lastHosted?.payoutPercents?.length &&
-    validatePayoutPercents(lastHosted.payoutPercents) === null
-      ? lastHosted.payoutPercents
-      : defaultPayoutPercents();
+  const payouts = resolveHostPayoutPercents(lastHosted?.payoutPercents);
 
   const blindPace = resolveBlindPace(
     lastHosted?.blindPace,
@@ -105,6 +102,8 @@ export function createGameNightFormDefaults(
       ? lastHosted.blindLevelMinutes
       : 12;
 
+  const [payout1, payout2, payout3] = payoutPercentsToFormFields(payouts);
+
   return {
     name: defaultTournamentName(),
     buyInDollars: formatBuyInDollars(lastHosted?.buyInCents ?? 2000),
@@ -112,8 +111,8 @@ export function createGameNightFormDefaults(
     maxPlayers: String(lastHosted?.maxPlayers ?? 9),
     blindPace,
     blindLevelMinutes,
-    payout1: String(payouts[0] ?? 50),
-    payout2: String(payouts[1] ?? 30),
-    payout3: String(payouts[2] ?? 20),
+    payout1,
+    payout2,
+    payout3,
   };
 }

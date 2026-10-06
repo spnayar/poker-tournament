@@ -7,6 +7,7 @@ import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
 import {
   createGameNightFormDefaults,
+  parsePayoutPercents,
   payoutPercentsSum,
   validatePayoutPercents,
   type LastHostedDefaults,
@@ -96,11 +97,7 @@ export default function DashboardPage() {
         maxPlayers: parseInt(form.maxPlayers, 10),
         blindPace: form.blindPace,
         blindLevelMinutes: form.blindLevelMinutes,
-        payoutPercents: [
-          parseInt(form.payout1, 10),
-          parseInt(form.payout2, 10),
-          parseInt(form.payout3, 10),
-        ],
+        payoutPercents: parsePayoutPercents(payoutValues) ?? [],
       }),
     });
     const tournament = await res.json().catch(() => ({}));

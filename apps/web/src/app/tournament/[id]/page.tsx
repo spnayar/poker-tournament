@@ -5,14 +5,16 @@ import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
-import { computePayoutsFromPercents, type NightLedgerEntry } from "@poker/protocol";
-import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
-import { formatSessionLabelShort } from "@/lib/labels";
 import {
   BLIND_PACE_LABELS,
+  computePayoutsFromPercents,
+  defaultPayoutPercents,
   resolveBlindLevels,
   type BlindPace,
+  type NightLedgerEntry,
 } from "@poker/protocol";
+import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
+import { formatSessionLabelShort } from "@/lib/labels";
 
 interface Player {
   userId: string;
@@ -62,7 +64,9 @@ export default function TournamentLobbyPage() {
     null
   );
   const [payouts, setPayouts] = useState<number[]>([]);
-  const [payoutPercents, setPayoutPercents] = useState<number[]>([50, 30, 20]);
+  const [payoutPercents, setPayoutPercents] = useState<number[]>(() =>
+    defaultPayoutPercents()
+  );
   const [ledger, setLedger] = useState<NightLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -87,13 +91,13 @@ export default function TournamentLobbyPage() {
     if (res.ok) {
       setTournament(data.tournament);
       setRunningGame(data.runningGame);
-      setPayoutPercents(data.payoutPercents ?? [50, 30, 20]);
+      setPayoutPercents(data.payoutPercents ?? defaultPayoutPercents());
       setLedger(data.ledger ?? []);
       setPayouts(
         data.payouts ??
           computePayoutsFromPercents(
             data.tournament.buyInCents * data.tournament.players.length,
-            data.payoutPercents ?? [50, 30, 20],
+            data.payoutPercents ?? defaultPayoutPercents(),
             data.tournament.players.length
           )
       );

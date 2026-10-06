@@ -318,7 +318,50 @@ export function computePayouts(
   return payouts;
 }
 
-/** Compute place payouts from host-configured percentages (e.g. [50, 30, 20]). */
+/**
+ * Host-configured integer percent splits for 1–3 paying places.
+ * Each split sums to 100 so the create-night form can submit as-is.
+ */
+export const DEFAULT_PAYOUT_PERCENTS_BY_PLACES: Record<number, readonly number[]> =
+  {
+    1: [100],
+    2: [80, 20],
+    3: [70, 20, 10],
+  };
+
+export function defaultPayoutPercents(placeCount = 3): number[] {
+  const n = Math.min(Math.max(Math.trunc(placeCount) || 3, 1), 3);
+  return [...DEFAULT_PAYOUT_PERCENTS_BY_PLACES[n]!];
+}
+
+/**
+ * Map a paying-place split onto the three create-form fields.
+ * Unused places stay empty so a 2-place 80/20 is not padded to 80/20/20.
+ */
+export function payoutPercentsToFormFields(
+  payouts: number[]
+): [string, string, string] {
+  return [
+    payouts[0] != null ? String(payouts[0]) : "",
+    payouts[1] != null ? String(payouts[1]) : "",
+    payouts[2] != null ? String(payouts[2]) : "",
+  ];
+}
+
+/** Reuse a last-hosted split only when it already totals 100%; otherwise the 3-place default. */
+export function resolveHostPayoutPercents(
+  lastHostedPercents?: number[] | null
+): number[] {
+  if (!lastHostedPercents?.length) return defaultPayoutPercents();
+  const positive = lastHostedPercents.filter(
+    (n) => Number.isFinite(n) && n > 0
+  );
+  const sum = positive.reduce((a, b) => a + b, 0);
+  if (positive.length > 0 && sum === 100) return positive;
+  return defaultPayoutPercents();
+}
+
+/** Compute place payouts from host-configured percentages (e.g. [70, 20, 10]). */
 export function computePayoutsFromPercents(
   prizePoolCents: number,
   payoutPercents: number[],

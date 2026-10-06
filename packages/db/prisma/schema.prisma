@@ -52,7 +52,7 @@ model Tournament {
   buyInCents     Int
   startingChips  Int
   maxPlayers     Int              @default(9)
-  payoutPercents Json @default("[50, 30, 20]")
+  payoutPercents Json @default("[70, 20, 10]")
   blindPreset    String           @default("gradual")
   blindPace      String           @default("gradual")
   blindLevelMinutes Int           @default(12)
