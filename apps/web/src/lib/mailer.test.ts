@@ -57,6 +57,24 @@ describe("sendAppEmail", () => {
     );
   });
 
+  it("treats blank EMAIL_FROM as unset", async () => {
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.EMAIL_FROM = "   ";
+    sendMock.mockResolvedValue({ data: { id: "msg_blank" }, error: null });
+    vi.resetModules();
+    const { sendAppEmail, DEFAULT_EMAIL_FROM, getEmailFromAddress } =
+      await import("./mailer");
+    expect(getEmailFromAddress()).toBe(DEFAULT_EMAIL_FROM);
+    await sendAppEmail({
+      to: "a@example.com",
+      subject: "Hello",
+      html: "<p>Hi</p>",
+    });
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({ from: DEFAULT_EMAIL_FROM })
+    );
+  });
+
   it("uses EMAIL_FROM when set and still sets Reply-To", async () => {
     process.env.RESEND_API_KEY = "re_test";
     process.env.EMAIL_FROM = "Custom Night <custom@mail.pokertableclub.com>";

@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 
-/** Production from-address once mail.pokertableclub.com is verified in Resend. Overridable via EMAIL_FROM. */
+/** Production from-address for the verified mail.pokertableclub.com Resend domain. Overridable via EMAIL_FROM. */
 export const DEFAULT_EMAIL_FROM =
   "Poker Night <noreply@mail.pokertableclub.com>";
 
