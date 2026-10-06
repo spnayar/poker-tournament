@@ -38,7 +38,9 @@ Default invite code: `friends-only` (set `INVITE_CODE` in `.env`)
 
 There is no customer password. Register with display name, email, and the invite code. Sign-in emails a one-time link (15 minutes). After you click it, the session cookie on that browser lasts about a year.
 
-Set `RESEND_API_KEY` to send mail through Resend. `EMAIL_FROM` defaults to `Poker Night <noreply@mail.pokertableclub.com>` (overridable). Reply-To is `info@pokertableclub.com`. If the key is missing, non-production still prints the callback URL in the **web server console** so you can paste it into the matching browser profile. Do not open a Host inbox in a Guest profile.
+Set `RESEND_API_KEY` in the **repo-root** `.env` (the same file as `DATABASE_URL`) so Next.js, Prisma, and the game server all see it. `EMAIL_FROM` defaults to `Poker Night <noreply@mail.pokertableclub.com>` (overridable). Reply-To is `info@pokertableclub.com`. Restart `pnpm dev` after changing env.
+
+Confirm the web process loaded the key: open http://localhost:3000/api/health — `env.RESEND_API_KEY` must be `true`. Then register or request a link. Resend → Emails should show subject **Your Poker Night login link**. If the key is missing, non-production prints `[auth] Magic link callback URL (non-prod):` in the **web** terminal (not the game-server terminal) and Resend is never called.
 
 Leave Microsoft 365 on the apex domain; app mail uses the `mail.` subdomain.
 

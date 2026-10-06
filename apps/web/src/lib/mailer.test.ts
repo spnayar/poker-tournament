@@ -75,6 +75,23 @@ describe("sendAppEmail", () => {
     );
   });
 
+  it("throws when Resend returns an error", async () => {
+    process.env.RESEND_API_KEY = "re_bad";
+    sendMock.mockResolvedValue({
+      data: null,
+      error: { message: "Invalid API key", name: "validation_error" },
+    });
+    vi.resetModules();
+    const { sendAppEmail } = await import("./mailer");
+    await expect(
+      sendAppEmail({
+        to: "a@example.com",
+        subject: "Hello",
+        html: "<p>Hi</p>",
+      })
+    ).rejects.toThrow("Invalid API key");
+  });
+
   it("uses EMAIL_FROM when set and still sets Reply-To", async () => {
     process.env.RESEND_API_KEY = "re_test";
     process.env.EMAIL_FROM = "Custom Night <custom@mail.pokertableclub.com>";

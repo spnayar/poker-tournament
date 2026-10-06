@@ -5,6 +5,10 @@ import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
+import {
+  MAGIC_LINK_SEND_ERROR,
+  magicLinkSendFailed,
+} from "@/lib/magicLinkUi";
 
 function loginErrorMessage(code: string | null): string {
   if (code === "Verification") {
@@ -12,6 +16,9 @@ function loginErrorMessage(code: string | null): string {
   }
   if (code === "AccessDenied") {
     return "Could not sign you in. Request a new login link.";
+  }
+  if (code === "EmailSignin") {
+    return MAGIC_LINK_SEND_ERROR;
   }
   if (code) {
     return "Could not sign you in. Request a new login link.";
@@ -37,11 +44,17 @@ function LoginForm() {
     setLoading(true);
     setError("");
 
-    await signIn("email", {
-      email,
+    const signInResult = await signIn("email", {
+      email: email.trim().toLowerCase(),
       callbackUrl,
       redirect: false,
     });
+
+    if (magicLinkSendFailed(signInResult)) {
+      setLoading(false);
+      setError(MAGIC_LINK_SEND_ERROR);
+      return;
+    }
 
     setLoading(false);
     const next = new URL("/check-email", window.location.origin);

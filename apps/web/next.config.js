@@ -1,4 +1,7 @@
 const path = require("path");
+const { loadRootEnv } = require("./load-root-env.cjs");
+
+loadRootEnv(path.join(__dirname, "../../.env"));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

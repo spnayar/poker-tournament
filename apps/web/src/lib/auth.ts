@@ -4,24 +4,17 @@ import jwt from "jsonwebtoken";
 import { headers } from "next/headers";
 import { prisma } from "@poker/db";
 import { createAuthAdapter } from "./auth-adapter";
-import { sendAppEmail } from "./mailer";
-import { sendLinkLimiter } from "./rateLimit";
+import { deliverMagicLink, emailMaxAgeSec } from "./sendMagicLink";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 /** Match NextAuth session length; refresh near expiry so sockets stay valid. */
 const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 365; // 1 year
 const GAME_TOKEN_EXPIRES_IN = "365d";
 const GAME_TOKEN_REFRESH_WITHIN_MS = 60 * 60 * 24 * 7; // refresh within last week
-const DEFAULT_EMAIL_MAX_AGE_SEC = 900; // 15 minutes
 
 /** Read at request time — bracket access avoids Next.js build-time inlining. */
 export function readAuthSecret(): string | undefined {
   return process.env["NEXTAUTH_SECRET"] ?? process.env["AUTH_SECRET"];
-}
-
-function emailMaxAgeSec(): number {
-  const raw = Number(process.env["AUTH_EMAIL_MAX_AGE"]);
-  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_EMAIL_MAX_AGE_SEC;
 }
 
 function signGameToken(
@@ -43,10 +36,6 @@ function gameTokenNeedsRefresh(gameToken: unknown): boolean {
   return payload.exp * 1000 < Date.now() + GAME_TOKEN_REFRESH_WITHIN_MS;
 }
 
-function isProduction(): boolean {
-  return process.env.NODE_ENV === "production";
-}
-
 async function clientIp(): Promise<string> {
   try {
     const h = await headers();
@@ -60,17 +49,6 @@ async function clientIp(): Promise<string> {
   }
 }
 
-function magicLinkHtml(url: string, minutes: number): string {
-  return `<div style="font-family:Helvetica,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:24px;">
-  <div style="max-width:480px;margin:0 auto;background:#1e293b;border-radius:16px;padding:32px;border:1px solid #334155;">
-    <h1 style="color:#f8fafc;font-size:22px;margin:0 0 12px;">Poker Night</h1>
-    <p style="color:#94a3b8;font-size:14px;line-height:1.5;">Use this one-time link to sign in. It expires in ${minutes} minutes.</p>
-    <p style="margin:28px 0;"><a href="${url}" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block;">Sign in</a></p>
-    <p style="color:#64748b;font-size:12px;line-height:1.4;">If you did not request this, you can ignore the email.</p>
-  </div>
-</div>`;
-}
-
 export const authOptions: NextAuthOptions = {
   adapter: createAuthAdapter(),
   secret: readAuthSecret(),
@@ -79,41 +57,7 @@ export const authOptions: NextAuthOptions = {
       maxAge: emailMaxAgeSec(),
       async sendVerificationRequest({ identifier, url }) {
         const ip = await clientIp();
-        const { allowed } = await sendLinkLimiter.consume(identifier, ip);
-        if (!allowed) {
-          console.warn("[auth] Magic-link send rate-limited", {
-            email: identifier,
-          });
-          return;
-        }
-
-        const existing = await prisma.user.findUnique({
-          where: { email: identifier },
-          select: { id: true },
-        });
-        if (!existing) {
-          // Same client message either way — do not send or log a link.
-          return;
-        }
-
-        if (!isProduction()) {
-          console.log("[auth] Magic link callback URL (non-prod):", url);
-        }
-
-        const minutes = Math.round(emailMaxAgeSec() / 60);
-        try {
-          await sendAppEmail({
-            to: identifier,
-            subject: "Your Poker Night login link",
-            html: magicLinkHtml(url, minutes),
-            text: `Sign in to Poker Night (expires in ${minutes} minutes):\n${url}\n`,
-          });
-        } catch (err) {
-          console.error(
-            "[auth] Failed to send magic-link email",
-            err instanceof Error ? err.message : err
-          );
-        }
+        await deliverMagicLink({ identifier, url, ip });
       },
     }),
   ],
