@@ -13,6 +13,7 @@ import { GameEndSidebar } from "@/components/table/GameEndSidebar";
 import { BlindTimerBar } from "@/components/table/BlindTimerBar";
 import { DealNextHandBar } from "@/components/table/DealNextHandBar";
 import { SoundToggle } from "@/components/table/SoundToggle";
+import { DashboardLink } from "@/components/table/DashboardLink";
 import { useSoundPreference } from "@/hooks/useSoundPreference";
 import {
   playHandEndCheer,
@@ -493,10 +494,15 @@ export default function TablePage() {
 
   if (!tableState) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-slate-400">
-          {connected ? "Loading table..." : "Connecting to game server..."}
-        </p>
+      <div className="min-h-screen flex flex-col">
+        <div className="p-4">
+          <DashboardLink />
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <p className="text-slate-400">
+            {connected ? "Loading table..." : "Connecting to game server..."}
+          </p>
+        </div>
       </div>
     );
   }
@@ -553,8 +559,9 @@ export default function TablePage() {
         }
         onPointerDownCapture={unlockTableSounds}
       >
-      <div className="flex items-center justify-center gap-3 mb-2 max-sm:mb-1">
-        <p className="text-center text-amber-400/70 text-xs">
+      <div className="flex items-center gap-2 mb-2 max-sm:mb-1">
+        <DashboardLink />
+        <p className="flex-1 text-center text-amber-400/70 text-xs min-w-0 truncate">
           {LEDGER_DISCLAIMER}
         </p>
         <SoundToggle enabled={soundEnabled} onToggle={toggleSound} />
