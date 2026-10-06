@@ -101,6 +101,7 @@ describe("deliverMagicLink", () => {
   it("sends when the user exists and Resend accepts the message", async () => {
     findUnique.mockResolvedValue({ id: "user_1" });
     sendAppEmail.mockResolvedValue({ skipped: false, id: "msg_1" });
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
     const { deliverMagicLink } = await import("./sendMagicLink");
     const result = await deliverMagicLink({
       identifier: "spnayar+test1@gmail.com",
@@ -114,5 +115,80 @@ describe("deliverMagicLink", () => {
         subject: "Your Poker Night login link",
       })
     );
+    const html = sendAppEmail.mock.calls[0]?.[0]?.html as string;
+    expect(html).toContain(
+      'src="https://www.pokertableclub.com/poker-table-club-logo.png"'
+    );
+    expect(html).toContain('alt="Poker Table Club chip logo"');
+  });
+});
+
+describe("clubLogoAbsoluteUrl", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("uses NEXTAUTH_URL origin when it is public HTTPS", async () => {
+    process.env.NEXTAUTH_URL = "https://www.pokertableclub.com/";
+    const { clubLogoAbsoluteUrl } = await import("./sendMagicLink");
+    expect(clubLogoAbsoluteUrl()).toBe(
+      "https://www.pokertableclub.com/poker-table-club-logo.png"
+    );
+  });
+
+  it("uses a public HTTPS staging origin from NEXTAUTH_URL", async () => {
+    process.env.NEXTAUTH_URL = "https://poker-web.up.railway.app";
+    const { clubLogoAbsoluteUrl } = await import("./sendMagicLink");
+    expect(clubLogoAbsoluteUrl()).toBe(
+      "https://poker-web.up.railway.app/poker-table-club-logo.png"
+    );
+  });
+
+  it("falls back when NEXTAUTH_URL is localhost or http", async () => {
+    const { clubLogoAbsoluteUrl, CLUB_LOGO_FALLBACK_ORIGIN } =
+      await import("./sendMagicLink");
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+    expect(clubLogoAbsoluteUrl()).toBe(
+      `${CLUB_LOGO_FALLBACK_ORIGIN}/poker-table-club-logo.png`
+    );
+    process.env.NEXTAUTH_URL = "https://localhost:3000";
+    expect(clubLogoAbsoluteUrl()).toBe(
+      `${CLUB_LOGO_FALLBACK_ORIGIN}/poker-table-club-logo.png`
+    );
+    process.env.NEXTAUTH_URL = "http://example.com";
+    expect(clubLogoAbsoluteUrl()).toBe(
+      `${CLUB_LOGO_FALLBACK_ORIGIN}/poker-table-club-logo.png`
+    );
+    delete process.env.NEXTAUTH_URL;
+    expect(clubLogoAbsoluteUrl()).toBe(
+      `${CLUB_LOGO_FALLBACK_ORIGIN}/poker-table-club-logo.png`
+    );
+  });
+});
+
+describe("magicLinkHtml", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("embeds a small absolute HTTPS chip with alt text", async () => {
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+    const { magicLinkHtml } = await import("./sendMagicLink");
+    const html = magicLinkHtml(
+      "https://www.pokertableclub.com/api/auth/callback/email?token=abc",
+      15
+    );
+    expect(html).toContain(
+      'src="https://www.pokertableclub.com/poker-table-club-logo.png"'
+    );
+    expect(html).toContain('alt="Poker Table Club chip logo"');
+    expect(html).toContain('width="48"');
+    expect(html).toContain('height="48"');
+    expect(html).not.toMatch(/src="\//);
+    expect(html).not.toMatch(/localhost/);
   });
 });
