@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { REGISTER_SEND_ERROR, magicLinkSendFailed } from "@/lib/magicLinkUi";
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -31,14 +32,21 @@ export default function RegisterPage() {
       return;
     }
 
-    await signIn("email", {
-      email: form.email,
+    const email = data.email as string;
+    const signInResult = await signIn("email", {
+      email,
       callbackUrl: "/dashboard",
       redirect: false,
     });
 
+    if (magicLinkSendFailed(signInResult)) {
+      setLoading(false);
+      setError(REGISTER_SEND_ERROR);
+      return;
+    }
+
     const next = new URL("/check-email", window.location.origin);
-    next.searchParams.set("email", form.email.trim().toLowerCase());
+    next.searchParams.set("email", email);
     window.location.assign(next.toString());
   }
 

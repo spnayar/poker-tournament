@@ -4,6 +4,10 @@ import { Suspense, useMemo, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import {
+  MAGIC_LINK_SEND_ERROR,
+  magicLinkSendFailed,
+} from "@/lib/magicLinkUi";
 
 function CheckEmailForm() {
   const searchParams = useSearchParams();
@@ -19,12 +23,16 @@ function CheckEmailForm() {
     if (!email || sending || cooldown > 0) return;
     setSending(true);
     setMessage("");
-    await signIn("email", {
+    const signInResult = await signIn("email", {
       email,
       callbackUrl: "/dashboard",
       redirect: false,
     });
     setSending(false);
+    if (magicLinkSendFailed(signInResult)) {
+      setMessage(MAGIC_LINK_SEND_ERROR);
+      return;
+    }
     setMessage("If that email is registered, we sent another link.");
     setCooldown(60);
     const started = Date.now();
@@ -54,7 +62,9 @@ function CheckEmailForm() {
         )}
         <p className="text-slate-500 text-center text-xs mb-8">
           After you click the link, this browser stays signed in for about a
-          year. A new device or cleared cookies needs a new link.
+          year. A new device or cleared cookies needs a new link. Running
+          locally without Resend? The link is printed in the terminal that
+          runs <span className="font-mono">pnpm dev</span>.
         </p>
         {message && (
           <p className="text-amber-300 text-sm text-center mb-4">{message}</p>
