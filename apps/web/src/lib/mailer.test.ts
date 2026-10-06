@@ -32,13 +32,16 @@ describe("sendAppEmail", () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("uses Resend onboarding from-address when EMAIL_FROM is unset", async () => {
+  it("defaults from-address to Poker Night noreply when EMAIL_FROM is unset", async () => {
     process.env.RESEND_API_KEY = "re_test";
     sendMock.mockResolvedValue({ data: { id: "msg_1" }, error: null });
     vi.resetModules();
-    const { sendAppEmail, RESEND_TEST_FROM, getEmailFromAddress } =
+    const { sendAppEmail, DEFAULT_EMAIL_FROM, EMAIL_REPLY_TO, getEmailFromAddress } =
       await import("./mailer");
-    expect(getEmailFromAddress()).toBe(RESEND_TEST_FROM);
+    expect(getEmailFromAddress()).toBe(DEFAULT_EMAIL_FROM);
+    expect(DEFAULT_EMAIL_FROM).toBe(
+      "Poker Night <noreply@mail.pokertableclub.com>"
+    );
     await sendAppEmail({
       to: "a@example.com",
       subject: "Hello",
@@ -47,18 +50,19 @@ describe("sendAppEmail", () => {
     });
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        from: RESEND_TEST_FROM,
+        from: DEFAULT_EMAIL_FROM,
         to: "a@example.com",
+        replyTo: EMAIL_REPLY_TO,
       })
     );
   });
 
-  it("uses EMAIL_FROM when set", async () => {
+  it("uses EMAIL_FROM when set and still sets Reply-To", async () => {
     process.env.RESEND_API_KEY = "re_test";
-    process.env.EMAIL_FROM = "Poker Night <noreply@mail.pokertableclub.com>";
+    process.env.EMAIL_FROM = "Custom Night <custom@mail.pokertableclub.com>";
     sendMock.mockResolvedValue({ data: { id: "msg_2" }, error: null });
     vi.resetModules();
-    const { sendAppEmail } = await import("./mailer");
+    const { sendAppEmail, EMAIL_REPLY_TO } = await import("./mailer");
     await sendAppEmail({
       to: "a@example.com",
       subject: "Hello",
@@ -66,8 +70,10 @@ describe("sendAppEmail", () => {
     });
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        from: "Poker Night <noreply@mail.pokertableclub.com>",
+        from: "Custom Night <custom@mail.pokertableclub.com>",
+        replyTo: EMAIL_REPLY_TO,
       })
     );
+    expect(EMAIL_REPLY_TO).toBe("info@pokertableclub.com");
   });
 });
