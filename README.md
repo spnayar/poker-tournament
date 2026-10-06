@@ -34,6 +34,14 @@ pnpm dev
 
 Default invite code: `friends-only` (set `INVITE_CODE` in `.env`)
 
+## Auth (magic link)
+
+There is no customer password. Register with display name, email, and the invite code. Sign-in emails a one-time link (15 minutes). After you click it, the session cookie on that browser lasts about a year.
+
+Set `RESEND_API_KEY` and `EMAIL_FROM` to send mail through Resend (`Poker Night <noreply@mail.pokertableclub.com>` once `mail.pokertableclub.com` is verified). Until then, or if the key is missing, non-production still prints the callback URL in the **web server console** so you can paste it into the matching browser profile. Do not open a Host inbox in a Guest profile.
+
+Leave Microsoft 365 on the apex domain; app mail uses the `mail.` subdomain.
+
 ## Development
 
 ```bash

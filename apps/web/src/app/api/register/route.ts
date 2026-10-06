@@ -1,21 +1,22 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { prisma } from "@poker/db";
 import { getAvatarUrl } from "@/lib/utils";
+import { parseRegisterInput } from "@/lib/register";
 
 const INVITE_CODE = process.env.INVITE_CODE ?? "friends-only";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, password, displayName, inviteCode } = body;
-
-    if (!email || !password || !displayName || !inviteCode) {
+    const parsed = parseRegisterInput(body);
+    if (!parsed.ok) {
       return NextResponse.json(
-        { error: "All fields are required" },
-        { status: 400 }
+        { error: parsed.error },
+        { status: parsed.status }
       );
     }
+
+    const { email, displayName, inviteCode } = parsed.data;
 
     if (inviteCode !== INVITE_CODE) {
       return NextResponse.json({ error: "Invalid invite code" }, { status: 403 });
@@ -29,14 +30,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
     const avatarUrl = getAvatarUrl(displayName);
 
     const user = await prisma.user.create({
       data: {
         email,
         displayName,
-        passwordHash,
         avatarUrl,
         stats: { create: {} },
       },
