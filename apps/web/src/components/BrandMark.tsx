@@ -23,7 +23,7 @@ export function BrandMark({
     <img
       src={CLUB_LOGO_SRC}
       alt={CLUB_LOGO_ALT}
-      className={`${SIZE_CLASS[size]} shrink-0 object-contain ${className}`.trim()}
+      className={`${SIZE_CLASS[size]} shrink-0 object-contain rounded-full ${className}`.trim()}
     />
   );
 }
