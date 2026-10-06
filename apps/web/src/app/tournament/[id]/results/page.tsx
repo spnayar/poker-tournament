@@ -5,6 +5,7 @@ import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
+import { BrandLockup } from "@/components/BrandMark";
 import type { NightLedgerEntry } from "@poker/protocol";
 import { normalizeGamePayouts } from "@poker/protocol";
 import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
@@ -180,6 +181,9 @@ function ResultsContent() {
 
   return (
     <div className="min-h-screen p-6 max-w-lg mx-auto">
+      <div className="flex justify-center mb-6">
+        <BrandLockup />
+      </div>
       <h1 className="text-3xl font-bold text-center mb-2">
         {isClosed
           ? "Game Night Complete"

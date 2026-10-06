@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
+import { BrandLockup } from "@/components/BrandMark";
 import {
   BLIND_PACE_LABELS,
   computePayoutsFromPercents,
@@ -211,9 +212,12 @@ export default function TournamentLobbyPage() {
 
   return (
     <div className="min-h-screen p-6 max-w-2xl mx-auto">
-      <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline">
-        ← Back to dashboard
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <BrandLockup />
+        <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline shrink-0">
+          ← Back to dashboard
+        </Link>
+      </div>
 
       <h1 className="text-3xl font-bold mt-4 mb-2">{tournament.name}</h1>
       <p className="text-amber-400/80 text-xs mb-6">{LEDGER_DISCLAIMER}</p>

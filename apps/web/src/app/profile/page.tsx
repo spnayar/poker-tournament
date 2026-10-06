@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl } from "@/lib/utils";
+import { BrandLockup } from "@/components/BrandMark";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import type { AvatarOption } from "@/lib/avatars";
 
@@ -125,9 +126,12 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen p-6 max-w-2xl mx-auto">
-      <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline">
-        ← Back
-      </Link>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <BrandLockup />
+        <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline shrink-0">
+          ← Back
+        </Link>
+      </div>
 
       <div className="flex items-center gap-4 mt-4 mb-6">
         <img

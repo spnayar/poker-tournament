@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { BrandMark } from "@/components/BrandMark";
 
 function loginErrorMessage(code: string | null): string {
   if (code === "Verification") {
@@ -51,6 +52,9 @@ function LoginForm() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-slate-900 rounded-2xl p-8 shadow-xl border border-slate-800">
+        <div className="flex justify-center mb-5">
+          <BrandMark size="lg" />
+        </div>
         <h1 className="text-3xl font-bold text-center mb-2">Poker Night</h1>
         <p className="text-slate-400 text-center mb-8 text-sm">
           Texas Hold&apos;em game nights with friends

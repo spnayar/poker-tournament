@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
+import { BrandLockup } from "@/components/BrandMark";
 import {
   createGameNightFormDefaults,
   parsePayoutPercents,
@@ -172,7 +173,24 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen p-6 max-w-4xl mx-auto">
-      <header className="flex items-center justify-between mb-8">
+      <header className="mb-8">
+        <div className="flex items-center justify-between gap-3 mb-6">
+          <BrandLockup />
+          <div className="flex gap-3 shrink-0">
+            <Link
+              href="/profile"
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
+            >
+              Profile
+            </Link>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
         <div className="flex items-center gap-4">
           <img
             src={getAvatarUrl(session?.user?.name ?? "user", session?.user?.image)}
@@ -183,20 +201,6 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold">{session?.user?.name}</h1>
             <p className="text-slate-400 text-sm">{session?.user?.email}</p>
           </div>
-        </div>
-        <div className="flex gap-3">
-          <Link
-            href="/profile"
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
-          >
-            Profile
-          </Link>
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
-          >
-            Sign Out
-          </button>
         </div>
       </header>
 
