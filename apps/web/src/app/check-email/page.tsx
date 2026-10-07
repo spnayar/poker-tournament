@@ -16,6 +16,10 @@ function CheckEmailForm() {
     () => searchParams.get("email")?.trim().toLowerCase() ?? "",
     [searchParams]
   );
+  const callbackUrl = useMemo(
+    () => searchParams.get("callbackUrl") || "/dashboard",
+    [searchParams]
+  );
   const [sending, setSending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [message, setMessage] = useState("");
@@ -26,7 +30,7 @@ function CheckEmailForm() {
     setMessage("");
     const signInResult = await signIn("email", {
       email,
-      callbackUrl: "/dashboard",
+      callbackUrl,
       redirect: false,
     });
     setSending(false);
@@ -47,6 +51,11 @@ function CheckEmailForm() {
       }
     }, 1000);
   }
+
+  const loginHref =
+    callbackUrl && callbackUrl !== "/dashboard"
+      ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
+      : "/login";
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -87,7 +96,7 @@ function CheckEmailForm() {
         </button>
         <p className="text-center mt-6 text-slate-400 text-sm">
           Wrong address?{" "}
-          <Link href="/login" className="text-emerald-400 hover:underline">
+          <Link href={loginHref} className="text-emerald-400 hover:underline">
             Use a different email
           </Link>
         </p>

@@ -16,6 +16,7 @@ import {
 } from "@poker/protocol";
 import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
 import { formatSessionLabelShort } from "@/lib/labels";
+import { InvitePlayersPanel } from "@/components/InvitePlayersPanel";
 
 interface Player {
   userId: string;
@@ -239,6 +240,10 @@ export default function TournamentLobbyPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {isHost && tournament.status !== "FINISHED" && (
+        <InvitePlayersPanel tournamentId={tournament.id} />
       )}
 
       <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 mb-6">

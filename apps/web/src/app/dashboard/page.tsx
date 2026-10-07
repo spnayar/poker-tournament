@@ -159,7 +159,13 @@ export default function DashboardPage() {
       setJoinError(data.error || "Could not join game night");
       return;
     }
-    router.push(`/tournament/${data.tournamentId}`);
+    const dest =
+      data.destination === "table"
+        ? `/tournament/${data.tournamentId}/table`
+        : data.destination === "results"
+          ? `/tournament/${data.tournamentId}/results`
+          : `/tournament/${data.tournamentId}`;
+    router.push(dest);
   }
 
   async function deleteTournament(tournamentId: string, name: string) {

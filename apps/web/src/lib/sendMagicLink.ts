@@ -1,50 +1,23 @@
 import { prisma } from "@poker/db";
 import { sendAppEmail } from "./mailer";
 import { sendLinkLimiter } from "./rateLimit";
+import {
+  CLUB_LOGO_FALLBACK_ORIGIN,
+  clubEmailHtml,
+  clubLogoAbsoluteUrl,
+  emailBody,
+  emailCta,
+  emailFinePrint,
+  isProduction,
+} from "./emailLayout";
+
+export { CLUB_LOGO_FALLBACK_ORIGIN, clubLogoAbsoluteUrl, isProduction };
 
 const DEFAULT_EMAIL_MAX_AGE_SEC = 900;
-const CLUB_LOGO_PATH = "/poker-table-club-logo.png";
-const CLUB_LOGO_ALT = "Poker Table Club chip logo";
-/** Public host that already serves the chip; used when NEXTAUTH_URL is local/http. */
-export const CLUB_LOGO_FALLBACK_ORIGIN = "https://www.pokertableclub.com";
 
 export function emailMaxAgeSec(): number {
   const raw = Number(process.env["AUTH_EMAIL_MAX_AGE"]);
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_EMAIL_MAX_AGE_SEC;
-}
-
-/**
- * Absolute HTTPS URL for the club chip in HTML email.
- * Gmail/M365 cannot load relative or localhost srcs — only a public https origin.
- * Prefer NEXTAUTH_URL when it is public HTTPS; otherwise the production site.
- */
-export function clubLogoAbsoluteUrl(): string {
-  return `${publicHttpsOrigin(process.env["NEXTAUTH_URL"]) ?? CLUB_LOGO_FALLBACK_ORIGIN}${CLUB_LOGO_PATH}`;
-}
-
-function publicHttpsOrigin(raw: string | undefined): string | null {
-  const value = raw?.trim();
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:") return null;
-    const host = url.hostname.toLowerCase();
-    if (
-      host === "localhost" ||
-      host === "127.0.0.1" ||
-      host === "::1" ||
-      host.endsWith(".local")
-    ) {
-      return null;
-    }
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-export function isProduction(): boolean {
-  return process.env.NODE_ENV === "production";
 }
 
 export type DeliverMagicLinkResult =
@@ -55,18 +28,16 @@ export type DeliverMagicLinkResult =
     };
 
 export function magicLinkHtml(url: string, minutes: number): string {
-  const logoSrc = clubLogoAbsoluteUrl();
-  return `<div style="font-family:Helvetica,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:24px;">
-  <div style="max-width:480px;margin:0 auto;background:#1e293b;border-radius:16px;padding:32px;border:1px solid #334155;">
-    <p style="margin:0 0 16px;text-align:center;line-height:0;">
-      <img src="${logoSrc}" alt="${CLUB_LOGO_ALT}" width="48" height="48" style="width:48px;height:48px;border:0;border-radius:50%;display:inline-block;" />
-    </p>
-    <h1 style="color:#f8fafc;font-size:22px;margin:0 0 12px;">Poker Night</h1>
-    <p style="color:#94a3b8;font-size:14px;line-height:1.5;">Use this one-time link to sign in. It expires in ${minutes} minutes.</p>
-    <p style="margin:28px 0;"><a href="${url}" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block;">Sign in</a></p>
-    <p style="color:#64748b;font-size:12px;line-height:1.4;">If you did not request this, you can ignore the email.</p>
-  </div>
-</div>`;
+  return clubEmailHtml({
+    heading: "Poker Night",
+    innerHtml: [
+      emailBody(
+        `Use this one-time link to sign in. It expires in ${minutes} minutes.`
+      ),
+      emailCta(url, "Sign in"),
+      emailFinePrint("If you did not request this, you can ignore the email."),
+    ].join("\n    "),
+  });
 }
 
 /**
