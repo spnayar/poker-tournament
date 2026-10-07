@@ -7,9 +7,23 @@ export type RegisterParseResult =
   | { ok: true; data: RegisterInput }
   | { ok: false; error: string; status: number };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DISPLAY_NAME_MAX = 32;
 const DISPLAY_NAME_FALLBACK = "Player";
+
+export function expectedInviteCode(): string {
+  return process.env.INVITE_CODE ?? "friends-only";
+}
+
+/** Prisma create payload for invite-only signup (no display-name field). */
+export function invitedUserCreateData(email: string) {
+  return {
+    email,
+    displayName: placeholderDisplayName(email),
+    displayNameSet: false,
+    stats: { create: {} },
+  };
+}
 
 /**
  * Suggested table name from the email local-part.
