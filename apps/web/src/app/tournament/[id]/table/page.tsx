@@ -549,14 +549,12 @@ export default function TablePage() {
   return (
       <div
         className="min-h-screen p-4 flex flex-col max-sm:h-[100dvh] max-sm:min-h-0 max-sm:overflow-hidden"
-        style={
-          showFooter
-            ? {
-                paddingBottom: footerPad,
-                ["--table-footer-h" as string]: `${Math.max(footerH, 96)}px`,
-              }
-            : undefined
-        }
+        style={{
+          ...(showFooter ? { paddingBottom: footerPad } : {}),
+          ["--table-footer-h" as string]: showFooter
+            ? `${Math.max(footerH, 96)}px`
+            : "0px",
+        }}
         onPointerDownCapture={unlockTableSounds}
       >
       <div className="flex items-center gap-2 mb-2 max-sm:mb-1">
@@ -597,7 +595,7 @@ export default function TablePage() {
             />
           )}
           <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch min-h-0">
-            <div className="flex-1 flex items-center justify-center min-w-0 shrink-0 lg:min-h-0 max-sm:max-h-[min(30vh,190px)]">
+            <div className="flex-1 flex items-center justify-center min-w-0 min-h-0 lg:min-h-0 max-sm:flex-none max-sm:h-[min(26dvh,170px)] max-sm:max-h-[min(26dvh,170px)] max-sm:overflow-hidden">
               <div
                 className={`relative w-full max-w-3xl${
                   shownCards.length > 0 ? " mb-4" : ""
