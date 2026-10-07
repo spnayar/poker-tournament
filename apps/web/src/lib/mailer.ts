@@ -25,8 +25,7 @@ export function getEmailFromAddress(): string {
 }
 
 /**
- * Thin Resend wrapper for app mail. Login is the only sender today;
- * later results/invite mail can reuse this.
+ * Thin Resend wrapper for app mail (magic-link login and game-night invites).
  */
 export async function sendAppEmail(
   input: SendAppEmailInput

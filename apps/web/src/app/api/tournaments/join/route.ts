@@ -2,6 +2,49 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@poker/db";
+import {
+  decideJoinNight,
+  normalizeJoinCode,
+  publicJoinPreview,
+} from "@/lib/joinNight";
+
+async function loadJoinTournament(joinCode: string) {
+  return prisma.tournament.findUnique({
+    where: { inviteCode: joinCode },
+    include: {
+      host: { select: { displayName: true } },
+      players: { select: { userId: true } },
+    },
+  });
+}
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const joinCode = normalizeJoinCode(url.searchParams.get("code"));
+  if (!joinCode) {
+    return NextResponse.json(
+      { error: "Join code must be 4 characters" },
+      { status: 400 }
+    );
+  }
+
+  const tournament = await loadJoinTournament(joinCode);
+  if (!tournament) {
+    return NextResponse.json({ error: "Invalid join code" }, { status: 404 });
+  }
+
+  return NextResponse.json(
+    publicJoinPreview({
+      name: tournament.name,
+      hostDisplayName: tournament.host.displayName,
+      buyInCents: tournament.buyInCents,
+      status: tournament.status,
+      joinCode: tournament.inviteCode,
+      playerCount: tournament.players.length,
+      maxPlayers: tournament.maxPlayers,
+    })
+  );
+}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -10,67 +53,56 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const joinCode = (body.joinCode as string)?.trim().toUpperCase();
+  const joinCode = normalizeJoinCode(body.joinCode as string);
 
-  if (!joinCode || joinCode.length !== 4) {
+  if (!joinCode) {
     return NextResponse.json(
       { error: "Join code must be 4 characters" },
       { status: 400 }
     );
   }
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { inviteCode: joinCode },
-    include: { players: true },
-  });
+  const tournament = await loadJoinTournament(joinCode);
 
   if (!tournament) {
     return NextResponse.json({ error: "Invalid join code" }, { status: 404 });
   }
 
-  if (tournament.status === "FINISHED") {
-    return NextResponse.json(
-      { error: "This game night has ended" },
-      { status: 400 }
-    );
-  }
-
   const runningGame = await prisma.game.findFirst({
     where: { tournamentId: tournament.id, status: "RUNNING" },
   });
-  if (runningGame) {
-    return NextResponse.json(
-      { error: "A tournament is in progress — join between tournaments" },
-      { status: 400 }
-    );
-  }
-
-  if (tournament.players.length >= tournament.maxPlayers) {
-    return NextResponse.json({ error: "Game night is full" }, { status: 400 });
-  }
 
   const alreadyJoined = tournament.players.some(
     (p) => p.userId === session.user!.id
   );
 
-  if (alreadyJoined) {
-    return NextResponse.json({
-      ok: true,
-      tournamentId: tournament.id,
-      alreadyJoined: true,
-    });
+  const decision = decideJoinNight({
+    status: tournament.status,
+    hasRunningGame: Boolean(runningGame),
+    alreadyJoined,
+    isFull: tournament.players.length >= tournament.maxPlayers,
+  });
+
+  if (!decision.ok) {
+    return NextResponse.json(
+      { error: decision.error },
+      { status: decision.status }
+    );
   }
 
-  await prisma.tournamentPlayer.create({
-    data: {
-      tournamentId: tournament.id,
-      userId: session.user.id,
-    },
-  });
+  if (!alreadyJoined) {
+    await prisma.tournamentPlayer.create({
+      data: {
+        tournamentId: tournament.id,
+        userId: session.user.id,
+      },
+    });
+  }
 
   return NextResponse.json({
     ok: true,
     tournamentId: tournament.id,
-    alreadyJoined: false,
+    alreadyJoined,
+    destination: decision.destination,
   });
 }
