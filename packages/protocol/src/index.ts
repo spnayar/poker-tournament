@@ -329,9 +329,19 @@ export const DEFAULT_PAYOUT_PERCENTS_BY_PLACES: Record<number, readonly number[]
     3: [70, 20, 10],
   };
 
+export type PaidPlaceCount = 1 | 2 | 3;
+
 export function defaultPayoutPercents(placeCount = 3): number[] {
   const n = Math.min(Math.max(Math.trunc(placeCount) || 3, 1), 3);
   return [...DEFAULT_PAYOUT_PERCENTS_BY_PLACES[n]!];
+}
+
+/** How many paying places a host split uses (blank/zero percents do not count). */
+export function paidPlaceCount(payouts: number[]): PaidPlaceCount {
+  const n = payouts.filter((v) => Number.isFinite(v) && v > 0).length;
+  if (n <= 1) return 1;
+  if (n === 2) return 2;
+  return 3;
 }
 
 /**

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   defaultPayoutPercents,
+  paidPlaceCount,
   payoutPercentsToFormFields,
   resolveHostPayoutPercents,
 } from "./index";
@@ -27,6 +28,14 @@ describe("defaultPayoutPercents", () => {
   it("returns 100 for a single paying place", () => {
     expect(defaultPayoutPercents(1)).toEqual([100]);
     expect(positiveSum(defaultPayoutPercents(1))).toBe(100);
+  });
+});
+
+describe("paidPlaceCount", () => {
+  it("maps 80/20 to two paying places and 70/20/10 to three", () => {
+    expect(paidPlaceCount([80, 20])).toBe(2);
+    expect(paidPlaceCount([70, 20, 10])).toBe(3);
+    expect(paidPlaceCount([100])).toBe(1);
   });
 });
 

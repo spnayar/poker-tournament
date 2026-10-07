@@ -43,10 +43,14 @@ function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Enter your email");
+      return;
+    }
+
     setLoading(true);
     setError("");
-
-    const normalizedEmail = email.trim().toLowerCase();
     try {
       const startRes = await fetch("/api/login/start", {
         method: "POST",
@@ -103,7 +107,7 @@ function LoginForm() {
           Texas Hold&apos;em game nights with friends
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label className="block text-sm text-slate-400 mb-1">Email</label>
             <input
@@ -111,7 +115,7 @@ function LoginForm() {
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
-                if (needsInvite) setError("");
+                setError("");
               }}
               className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
               autoComplete="email"
@@ -126,7 +130,10 @@ function LoginForm() {
               <input
                 type="text"
                 value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
+                onChange={(e) => {
+                  setInviteCode(e.target.value);
+                  setError("");
+                }}
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
                 autoComplete="off"
                 required

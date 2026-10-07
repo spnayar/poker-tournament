@@ -77,9 +77,10 @@ export default function RegisterPage() {
               <input
                 type={field.type}
                 value={form[field.key]}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, [field.key]: e.target.value }))
-                }
+                onChange={(e) => {
+                  setError("");
+                  setForm((f) => ({ ...f, [field.key]: e.target.value }));
+                }}
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
                 autoComplete={field.key === "email" ? "email" : "off"}
                 required

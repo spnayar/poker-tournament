@@ -330,7 +330,7 @@ export function PokerTable({
       : null;
 
   return (
-    <div className="relative w-full max-w-3xl mx-auto aspect-[4/3]">
+    <div className="relative w-full max-w-3xl mx-auto aspect-[4/3] max-sm:h-full max-sm:w-auto max-sm:max-w-full">
       <div className="absolute inset-0 rounded-[50%] bg-gradient-to-b from-felt-light to-felt-dark border-8 border-amber-900/60 shadow-2xl shadow-black/50" />
 
       <div className="absolute inset-[8%] rounded-[50%] border-2 border-felt/50" />

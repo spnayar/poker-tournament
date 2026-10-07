@@ -1,10 +1,12 @@
 import {
   BLIND_LEVEL_MINUTE_OPTIONS,
   defaultPayoutPercents,
+  paidPlaceCount,
   payoutPercentsToFormFields,
   resolveBlindPace,
   resolveHostPayoutPercents,
   type BlindPace,
+  type PaidPlaceCount,
 } from "@poker/protocol";
 
 export { defaultPayoutPercents };
@@ -74,10 +76,33 @@ export type CreateGameNightForm = {
   maxPlayers: string;
   blindPace: BlindPace;
   blindLevelMinutes: number;
+  paidPlaces: PaidPlaceCount;
   payout1: string;
   payout2: string;
   payout3: string;
 };
+
+const PAYOUT_FIELD_KEYS = ["payout1", "payout2", "payout3"] as const;
+
+/** Default 100% split for a paid-place count: 100 · 80/20 · 70/20/10. */
+export function payoutFormForPaidPlaces(placeCount: PaidPlaceCount): {
+  paidPlaces: PaidPlaceCount;
+  payout1: string;
+  payout2: string;
+  payout3: string;
+} {
+  const [payout1, payout2, payout3] = payoutPercentsToFormFields(
+    defaultPayoutPercents(placeCount)
+  );
+  return { paidPlaces: placeCount, payout1, payout2, payout3 };
+}
+
+/** Percents for the currently selected paid places (unused rows stay blank). */
+export function payoutValuesForPaidPlaces(
+  form: Pick<CreateGameNightForm, "paidPlaces" | "payout1" | "payout2" | "payout3">
+): string[] {
+  return PAYOUT_FIELD_KEYS.slice(0, form.paidPlaces).map((key) => form[key]);
+}
 
 function formatBuyInDollars(cents: number): string {
   const dollars = cents / 100;
@@ -89,6 +114,7 @@ export function createGameNightFormDefaults(
   lastHosted?: LastHostedDefaults | null
 ): CreateGameNightForm {
   const payouts = resolveHostPayoutPercents(lastHosted?.payoutPercents);
+  const paidPlaces = paidPlaceCount(payouts);
 
   const blindPace = resolveBlindPace(
     lastHosted?.blindPace,
@@ -111,6 +137,7 @@ export function createGameNightFormDefaults(
     maxPlayers: String(lastHosted?.maxPlayers ?? 9),
     blindPace,
     blindLevelMinutes,
+    paidPlaces,
     payout1,
     payout2,
     payout3,

@@ -9,7 +9,9 @@ import { BrandLockup } from "@/components/BrandMark";
 import {
   createGameNightFormDefaults,
   parsePayoutPercents,
+  payoutFormForPaidPlaces,
   payoutPercentsSum,
+  payoutValuesForPaidPlaces,
   validatePayoutPercents,
   type LastHostedDefaults,
 } from "@/lib/tournament";
@@ -18,6 +20,7 @@ import {
   BLIND_PACE_LABELS,
   buildBlindLevels,
   type BlindPace,
+  type PaidPlaceCount,
 } from "@poker/protocol";
 import {
   needsProfileSetup,
@@ -70,12 +73,17 @@ export default function DashboardPage() {
     null
   );
   const [profilePromptDismissed, setProfilePromptDismissed] = useState(false);
+  const [nightsReady, setNightsReady] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
   useEffect(() => {
+    if (status === "unauthenticated") {
+      setNightsReady(false);
+      return;
+    }
     if (status === "authenticated") {
       try {
         setProfilePromptDismissed(
@@ -84,6 +92,7 @@ export default function DashboardPage() {
       } catch {
         // ignore sessionStorage failures
       }
+      setNightsReady(false);
       fetch("/api/tournaments")
         .then(async (r) => {
           const data = await r.json().catch(() => ({}));
@@ -103,12 +112,13 @@ export default function DashboardPage() {
               avatarUrl: data.user.avatarUrl ?? null,
             });
           }
-        });
+        })
+        .finally(() => setNightsReady(true));
     }
   }, [status]);
 
   async function createTournament() {
-    const payoutValues = [form.payout1, form.payout2, form.payout3];
+    const payoutValues = payoutValuesForPaidPlaces(form);
     const payoutError = validatePayoutPercents(payoutValues);
     if (payoutError) {
       alert(payoutError);
@@ -175,9 +185,16 @@ export default function DashboardPage() {
     }
   }
 
-  const payoutValues = [form.payout1, form.payout2, form.payout3];
+  const payoutValues = payoutValuesForPaidPlaces(form);
   const payoutTotal = payoutPercentsSum(payoutValues);
   const payoutError = validatePayoutPercents(payoutValues);
+  const payoutFields = (
+    [
+      { key: "payout1" as const, label: "1st place", place: 1 },
+      { key: "payout2" as const, label: "2nd place", place: 2 },
+      { key: "payout3" as const, label: "3rd place", place: 3 },
+    ] as const
+  ).filter((field) => field.place <= form.paidPlaces);
   const startingChipsNum = parseInt(form.startingChips, 10) || 5000;
   const blindPreview = buildBlindLevels(startingChipsNum, form.blindPace).slice(
     0,
@@ -473,14 +490,39 @@ export default function DashboardPage() {
           </div>
           <div className="mb-4">
             <label className="block text-sm text-slate-400 mb-2">
+              Paid places
+            </label>
+            <div className="flex gap-2 mb-3">
+              {([1, 2, 3] as PaidPlaceCount[]).map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  onClick={() =>
+                    setForm((f) => ({ ...f, ...payoutFormForPaidPlaces(count) }))
+                  }
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition ${
+                    form.paidPlaces === count
+                      ? "bg-emerald-600 border-emerald-500 text-white"
+                      : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  {count === 1 ? "1 place" : `${count} places`}
+                </button>
+              ))}
+            </div>
+            <label className="block text-sm text-slate-400 mb-2">
               Payout split (% — must total 100)
             </label>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { key: "payout1" as const, label: "1st place" },
-                { key: "payout2" as const, label: "2nd place" },
-                { key: "payout3" as const, label: "3rd place" },
-              ].map(({ key, label }) => (
+            <div
+              className={`grid gap-3 ${
+                form.paidPlaces === 1
+                  ? "grid-cols-1 max-w-[8rem]"
+                  : form.paidPlaces === 2
+                    ? "grid-cols-2"
+                    : "grid-cols-3"
+              }`}
+            >
+              {payoutFields.map(({ key, label }) => (
                 <div key={key}>
                   <label className="block text-xs text-slate-500 mb-1">
                     {label}
@@ -517,7 +559,12 @@ export default function DashboardPage() {
       )}
 
       <div className="space-y-3">
-        {tournaments.length === 0 && (
+        {!nightsReady && tournaments.length === 0 && (
+          <p className="text-slate-400 text-center py-8">
+            Loading game nights…
+          </p>
+        )}
+        {nightsReady && tournaments.length === 0 && (
           <p className="text-slate-400 text-center py-8">
             No game nights yet. Create one or join with a code from a friend.
           </p>
