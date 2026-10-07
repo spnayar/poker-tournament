@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseRegisterInput, placeholderDisplayName } from "./register";
+import {
+  expectedInviteCode,
+  invitedUserCreateData,
+  parseRegisterInput,
+  placeholderDisplayName,
+} from "./register";
 
 describe("placeholderDisplayName", () => {
   it("uses the local-part and strips plus tags", () => {
@@ -15,6 +20,22 @@ describe("placeholderDisplayName", () => {
   it("truncates long local-parts to 32 characters", () => {
     const long = `${"n".repeat(40)}@example.com`;
     expect(placeholderDisplayName(long)).toBe("n".repeat(32));
+  });
+});
+
+describe("expectedInviteCode", () => {
+  it("defaults to friends-only", () => {
+    expect(expectedInviteCode()).toBe("friends-only");
+  });
+});
+
+describe("invitedUserCreateData", () => {
+  it("uses a placeholder name and leaves displayNameSet false", () => {
+    expect(invitedUserCreateData("alex+tag@example.com")).toMatchObject({
+      email: "alex+tag@example.com",
+      displayName: "alex",
+      displayNameSet: false,
+    });
   });
 });
 

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@poker/db";
-import { parseRegisterInput, placeholderDisplayName } from "@/lib/register";
-
-const INVITE_CODE = process.env.INVITE_CODE ?? "friends-only";
+import {
+  expectedInviteCode,
+  invitedUserCreateData,
+  parseRegisterInput,
+} from "@/lib/register";
 
 export async function POST(req: Request) {
   try {
@@ -17,7 +19,7 @@ export async function POST(req: Request) {
 
     const { email, inviteCode } = parsed.data;
 
-    if (inviteCode !== INVITE_CODE) {
+    if (inviteCode !== expectedInviteCode()) {
       return NextResponse.json({ error: "Invalid invite code" }, { status: 403 });
     }
 
@@ -29,15 +31,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const displayName = placeholderDisplayName(email);
-
     const user = await prisma.user.create({
-      data: {
-        email,
-        displayName,
-        displayNameSet: false,
-        stats: { create: {} },
-      },
+      data: invitedUserCreateData(email),
     });
 
     return NextResponse.json({

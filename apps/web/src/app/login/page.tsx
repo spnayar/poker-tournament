@@ -29,6 +29,8 @@ function loginErrorMessage(code: string | null): string {
 function LoginForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [needsInvite, setNeedsInvite] = useState(false);
   const [error, setError] = useState(() =>
     loginErrorMessage(searchParams.get("error"))
   );
@@ -44,22 +46,50 @@ function LoginForm() {
     setLoading(true);
     setError("");
 
-    const signInResult = await signIn("email", {
-      email: email.trim().toLowerCase(),
-      callbackUrl,
-      redirect: false,
-    });
+    const normalizedEmail = email.trim().toLowerCase();
+    try {
+      const startRes = await fetch("/api/login/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          inviteCode: needsInvite ? inviteCode : undefined,
+        }),
+      });
+      const startData = (await startRes.json().catch(() => ({}))) as {
+        status?: string;
+        error?: string;
+      };
 
-    if (magicLinkSendFailed(signInResult)) {
+      if (startData.status === "needs_invite") {
+        setNeedsInvite(true);
+        return;
+      }
+
+      if (!startRes.ok) {
+        setError(startData.error || "Could not start login");
+        return;
+      }
+
+      const signInResult = await signIn("email", {
+        email: normalizedEmail,
+        callbackUrl,
+        redirect: false,
+      });
+
+      if (magicLinkSendFailed(signInResult)) {
+        setError(MAGIC_LINK_SEND_ERROR);
+        return;
+      }
+
+      const next = new URL("/check-email", window.location.origin);
+      next.searchParams.set("email", normalizedEmail);
+      window.location.assign(next.toString());
+    } catch {
+      setError("Could not start login");
+    } finally {
       setLoading(false);
-      setError(MAGIC_LINK_SEND_ERROR);
-      return;
     }
-
-    setLoading(false);
-    const next = new URL("/check-email", window.location.origin);
-    next.searchParams.set("email", email.trim().toLowerCase());
-    window.location.assign(next.toString());
   }
 
   return (
@@ -79,12 +109,36 @@ function LoginForm() {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (needsInvite) setError("");
+              }}
               className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
               autoComplete="email"
               required
             />
           </div>
+          {needsInvite && (
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">
+                Invite Code
+              </label>
+              <input
+                type="text"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
+                autoComplete="off"
+                required
+                autoFocus
+              />
+              <p className="text-slate-500 text-xs mt-2">
+                New here? Enter the invite code and we&apos;ll create your
+                account, then email a login link. You can set your name after
+                you sign in.
+              </p>
+            </div>
+          )}
           {error && (
             <p className="text-red-400 text-sm text-center">{error}</p>
           )}
@@ -93,7 +147,11 @@ function LoginForm() {
             disabled={loading}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-semibold transition disabled:opacity-50"
           >
-            {loading ? "Sending link..." : "Email me a login link"}
+            {loading
+              ? needsInvite
+                ? "Creating account..."
+                : "Sending link..."
+              : "Email me a login link"}
           </button>
         </form>
 
