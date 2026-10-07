@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   AVATAR_CATEGORIES,
   AVATAR_LIBRARY,
+  resolveAvatarUrl,
   type AvatarCategory,
   type AvatarOption,
 } from "@/lib/avatars";
@@ -71,13 +72,16 @@ export function AvatarPicker({ currentUrl, onSelect, prompt }: AvatarPickerProps
 
       <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 max-h-80 overflow-y-auto pr-1">
         {filtered.map((avatar) => {
-          const selected = avatar.url === currentUrl;
+          const selected =
+            avatar.url === currentUrl ||
+            avatar.url === resolveAvatarUrl(currentUrl);
           const saving = savingId === avatar.id;
           return (
             <button
               key={avatar.id}
               type="button"
               title={avatar.label}
+              data-avatar-id={avatar.id}
               disabled={!!savingId}
               onClick={() => handleSelect(avatar)}
               className={`relative rounded-xl p-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${

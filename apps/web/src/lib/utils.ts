@@ -1,5 +1,8 @@
+import { resolveAvatarUrl } from "./avatars";
+
 export function getAvatarUrl(seed: string, avatarUrl?: string | null): string {
-  if (avatarUrl) return avatarUrl;
+  const resolved = resolveAvatarUrl(avatarUrl);
+  if (resolved) return resolved;
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}`;
 }
 

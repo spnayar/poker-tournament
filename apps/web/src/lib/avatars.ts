@@ -1,6 +1,6 @@
-/** Curated cartoony avatars via DiceBear (already used for defaults). */
+/** Curated cartoony avatars from DiceBear (CC BY 4.0), served from /public/avatars. */
 
-const BASE = "https://api.dicebear.com/7.x";
+const DICEBEAR_BASE = "https://api.dicebear.com/7.x";
 
 export type AvatarCategory = "men" | "women" | "animals" | "fun";
 
@@ -11,22 +11,105 @@ export interface AvatarOption {
   url: string;
 }
 
+interface AvatarSource {
+  id: string;
+  label: string;
+  category: AvatarCategory;
+  style: string;
+  seed: string;
+  backgroundColor?: string;
+}
+
 function dicebear(style: string, seed: string, backgroundColor?: string): string {
   const params = new URLSearchParams({ seed });
   if (backgroundColor) params.set("backgroundColor", backgroundColor);
-  return `${BASE}/${style}/svg?${params.toString()}`;
+  return `${DICEBEAR_BASE}/${style}/svg?${params.toString()}`;
 }
 
-function entry(
-  id: string,
-  label: string,
-  category: AvatarCategory,
-  style: string,
-  seed: string,
-  backgroundColor?: string
-): AvatarOption {
-  return { id, label, category, url: dicebear(style, seed, backgroundColor) };
+function localPath(id: string): string {
+  return `/avatars/${id}.svg`;
 }
+
+/** Style/seed pairs used to generate the checked-in SVGs (and to map legacy API URLs). */
+export const AVATAR_SOURCES: AvatarSource[] = [
+  // Guys — adventurer & avataaars
+  { id: "man-jack", label: "Jack", category: "men", style: "adventurer", seed: "Jack" },
+  { id: "man-mike", label: "Mike", category: "men", style: "adventurer", seed: "Mike" },
+  { id: "man-carlos", label: "Carlos", category: "men", style: "adventurer", seed: "Carlos" },
+  { id: "man-omar", label: "Omar", category: "men", style: "adventurer", seed: "Omar" },
+  { id: "man-diego", label: "Diego", category: "men", style: "adventurer", seed: "Diego" },
+  { id: "man-marcus", label: "Marcus", category: "men", style: "adventurer", seed: "Marcus" },
+  { id: "man-tyler", label: "Tyler", category: "men", style: "adventurer", seed: "Tyler" },
+  { id: "man-vince", label: "Vince", category: "men", style: "adventurer", seed: "Vince" },
+  { id: "man-rex", label: "Rex", category: "men", style: "adventurer", seed: "Rex" },
+  { id: "man-brock", label: "Brock", category: "men", style: "adventurer", seed: "Brock" },
+  { id: "man-felix", label: "Felix", category: "men", style: "avataaars", seed: "Felix" },
+  { id: "man-oliver", label: "Oliver", category: "men", style: "avataaars", seed: "Oliver" },
+  { id: "man-james", label: "James", category: "men", style: "avataaars", seed: "James" },
+  { id: "man-ethan", label: "Ethan", category: "men", style: "avataaars", seed: "Ethan" },
+  { id: "man-mason", label: "Mason", category: "men", style: "avataaars", seed: "Mason" },
+  { id: "man-aiden", label: "Aiden", category: "men", style: "micah", seed: "Aiden" },
+  { id: "man-noah", label: "Noah", category: "men", style: "micah", seed: "Noah" },
+  { id: "man-liam", label: "Liam", category: "men", style: "micah", seed: "Liam" },
+  { id: "man-jake", label: "Jake", category: "men", style: "micah", seed: "Jake" },
+  { id: "man-ryan", label: "Ryan", category: "men", style: "micah", seed: "Ryan" },
+  { id: "man-victor", label: "Victor", category: "men", style: "personas", seed: "Victor" },
+  { id: "man-stefan", label: "Stefan", category: "men", style: "personas", seed: "Stefan" },
+  { id: "man-arthur", label: "Arthur", category: "men", style: "notionists", seed: "Arthur" },
+  { id: "man-bruce", label: "Bruce", category: "men", style: "notionists", seed: "Bruce" },
+
+  // Gals — lorelei & neutral styles
+  { id: "woman-sophia", label: "Sophia", category: "women", style: "lorelei", seed: "Sophia" },
+  { id: "woman-emma", label: "Emma", category: "women", style: "lorelei", seed: "Emma" },
+  { id: "woman-olivia", label: "Olivia", category: "women", style: "lorelei", seed: "Olivia" },
+  { id: "woman-mia", label: "Mia", category: "women", style: "lorelei", seed: "Mia" },
+  { id: "woman-zoe", label: "Zoe", category: "women", style: "lorelei", seed: "Zoe" },
+  { id: "woman-luna", label: "Luna", category: "women", style: "lorelei", seed: "Luna" },
+  { id: "woman-chloe", label: "Chloe", category: "women", style: "lorelei", seed: "Chloe" },
+  { id: "woman-grace", label: "Grace", category: "women", style: "lorelei", seed: "Grace" },
+  { id: "woman-nina", label: "Nina", category: "women", style: "lorelei", seed: "Nina" },
+  { id: "woman-ruby", label: "Ruby", category: "women", style: "lorelei", seed: "Ruby" },
+  { id: "woman-aria", label: "Aria", category: "women", style: "avataaars-neutral", seed: "Aria" },
+  { id: "woman-bella", label: "Bella", category: "women", style: "avataaars-neutral", seed: "Bella" },
+  { id: "woman-jade", label: "Jade", category: "women", style: "avataaars-neutral", seed: "Jade" },
+  { id: "woman-alex", label: "Alex", category: "women", style: "adventurer-neutral", seed: "Alex" },
+  { id: "woman-sam", label: "Sam", category: "women", style: "adventurer-neutral", seed: "Sam" },
+  { id: "woman-jordan", label: "Jordan", category: "women", style: "adventurer-neutral", seed: "Jordan" },
+  { id: "woman-casey", label: "Casey", category: "women", style: "adventurer-neutral", seed: "Casey" },
+  { id: "woman-riley", label: "Riley", category: "women", style: "micah", seed: "Riley" },
+  { id: "woman-quinn", label: "Quinn", category: "women", style: "micah", seed: "Quinn" },
+
+  // Animals — fun-emoji & big-ears cartoony critters
+  { id: "animal-cat", label: "Cat", category: "animals", style: "fun-emoji", seed: "Cat", backgroundColor: "ffd5dc" },
+  { id: "animal-dog", label: "Dog", category: "animals", style: "fun-emoji", seed: "Dog", backgroundColor: "c0aede" },
+  { id: "animal-lion", label: "Lion", category: "animals", style: "fun-emoji", seed: "Lion", backgroundColor: "ffdfbf" },
+  { id: "animal-bear", label: "Bear", category: "animals", style: "fun-emoji", seed: "Bear", backgroundColor: "d1d4f9" },
+  { id: "animal-fox", label: "Fox", category: "animals", style: "fun-emoji", seed: "Fox", backgroundColor: "ffd5dc" },
+  { id: "animal-panda", label: "Panda", category: "animals", style: "fun-emoji", seed: "Panda", backgroundColor: "c0aede" },
+  { id: "animal-owl", label: "Owl", category: "animals", style: "fun-emoji", seed: "Owl", backgroundColor: "ffdfbf" },
+  { id: "animal-frog", label: "Frog", category: "animals", style: "fun-emoji", seed: "Frog", backgroundColor: "b6e3f4" },
+  { id: "animal-monkey", label: "Monkey", category: "animals", style: "fun-emoji", seed: "Monkey", backgroundColor: "ffd5dc" },
+  { id: "animal-rabbit", label: "Rabbit", category: "animals", style: "fun-emoji", seed: "Rabbit", backgroundColor: "c0aede" },
+  { id: "animal-tiger", label: "Tiger", category: "animals", style: "fun-emoji", seed: "Tiger", backgroundColor: "ffdfbf" },
+  { id: "animal-wolf", label: "Wolf", category: "animals", style: "fun-emoji", seed: "Wolf", backgroundColor: "d1d4f9" },
+  { id: "animal-koala", label: "Koala", category: "animals", style: "big-ears", seed: "Koala", backgroundColor: "b6e3f4" },
+  { id: "animal-bunny", label: "Bunny", category: "animals", style: "big-ears", seed: "Bunny", backgroundColor: "ffd5dc" },
+  { id: "animal-mouse", label: "Mouse", category: "animals", style: "big-ears", seed: "Mouse", backgroundColor: "c0aede" },
+
+  // Fun — robots, doodles, big smiles
+  { id: "fun-robot-1", label: "Robot", category: "fun", style: "bottts", seed: "Robot-1", backgroundColor: "b6e3f4" },
+  { id: "fun-robot-2", label: "Bot", category: "fun", style: "bottts", seed: "Bot-2", backgroundColor: "c0aede" },
+  { id: "fun-robot-3", label: "Droid", category: "fun", style: "bottts", seed: "Droid-3", backgroundColor: "d1d4f9" },
+  { id: "fun-robot-4", label: "Mech", category: "fun", style: "bottts", seed: "Mech-4", backgroundColor: "ffdfbf" },
+  { id: "fun-doodle-1", label: "Doodle", category: "fun", style: "croodles", seed: "Doodle-1", backgroundColor: "ffd5dc" },
+  { id: "fun-doodle-2", label: "Sketch", category: "fun", style: "croodles", seed: "Sketch-2", backgroundColor: "b6e3f4" },
+  { id: "fun-doodle-3", label: "Scribble", category: "fun", style: "croodles", seed: "Scribble-3", backgroundColor: "c0aede" },
+  { id: "fun-smile-1", label: "Sunny", category: "fun", style: "big-smile", seed: "Sunny-1", backgroundColor: "ffdfbf" },
+  { id: "fun-smile-2", label: "Cheery", category: "fun", style: "big-smile", seed: "Cheery-2", backgroundColor: "ffd5dc" },
+  { id: "fun-smile-3", label: "Grin", category: "fun", style: "big-smile", seed: "Grin-3", backgroundColor: "b6e3f4" },
+  { id: "fun-pixel-1", label: "Pixel", category: "fun", style: "pixel-art", seed: "Pixel-1", backgroundColor: "c0aede" },
+  { id: "fun-pixel-2", label: "8-Bit", category: "fun", style: "pixel-art", seed: "8-Bit-2", backgroundColor: "d1d4f9" },
+];
 
 export const AVATAR_CATEGORIES: { id: AvatarCategory | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -36,93 +119,37 @@ export const AVATAR_CATEGORIES: { id: AvatarCategory | "all"; label: string }[] 
   { id: "fun", label: "Fun" },
 ];
 
-export const AVATAR_LIBRARY: AvatarOption[] = [
-  // Guys — adventurer & avataaars
-  entry("man-jack", "Jack", "men", "adventurer", "Jack"),
-  entry("man-mike", "Mike", "men", "adventurer", "Mike"),
-  entry("man-carlos", "Carlos", "men", "adventurer", "Carlos"),
-  entry("man-omar", "Omar", "men", "adventurer", "Omar"),
-  entry("man-diego", "Diego", "men", "adventurer", "Diego"),
-  entry("man-marcus", "Marcus", "men", "adventurer", "Marcus"),
-  entry("man-tyler", "Tyler", "men", "adventurer", "Tyler"),
-  entry("man-vince", "Vince", "men", "adventurer", "Vince"),
-  entry("man-rex", "Rex", "men", "adventurer", "Rex"),
-  entry("man-brock", "Brock", "men", "adventurer", "Brock"),
-  entry("man-felix", "Felix", "men", "avataaars", "Felix"),
-  entry("man-oliver", "Oliver", "men", "avataaars", "Oliver"),
-  entry("man-james", "James", "men", "avataaars", "James"),
-  entry("man-ethan", "Ethan", "men", "avataaars", "Ethan"),
-  entry("man-mason", "Mason", "men", "avataaars", "Mason"),
-  entry("man-aiden", "Aiden", "men", "micah", "Aiden"),
-  entry("man-noah", "Noah", "men", "micah", "Noah"),
-  entry("man-liam", "Liam", "men", "micah", "Liam"),
-  entry("man-jake", "Jake", "men", "micah", "Jake"),
-  entry("man-ryan", "Ryan", "men", "micah", "Ryan"),
-  entry("man-victor", "Victor", "men", "personas", "Victor"),
-  entry("man-stefan", "Stefan", "men", "personas", "Stefan"),
-  entry("man-arthur", "Arthur", "men", "notionists", "Arthur"),
-  entry("man-bruce", "Bruce", "men", "notionists", "Bruce"),
+export const AVATAR_LIBRARY: AvatarOption[] = AVATAR_SOURCES.map((source) => ({
+  id: source.id,
+  label: source.label,
+  category: source.category,
+  url: localPath(source.id),
+}));
 
-  // Gals — lorelei & neutral styles
-  entry("woman-sophia", "Sophia", "women", "lorelei", "Sophia"),
-  entry("woman-emma", "Emma", "women", "lorelei", "Emma"),
-  entry("woman-olivia", "Olivia", "women", "lorelei", "Olivia"),
-  entry("woman-mia", "Mia", "women", "lorelei", "Mia"),
-  entry("woman-zoe", "Zoe", "women", "lorelei", "Zoe"),
-  entry("woman-luna", "Luna", "women", "lorelei", "Luna"),
-  entry("woman-chloe", "Chloe", "women", "lorelei", "Chloe"),
-  entry("woman-grace", "Grace", "women", "lorelei", "Grace"),
-  entry("woman-nina", "Nina", "women", "lorelei", "Nina"),
-  entry("woman-ruby", "Ruby", "women", "lorelei", "Ruby"),
-  entry("woman-aria", "Aria", "women", "avataaars-neutral", "Aria"),
-  entry("woman-bella", "Bella", "women", "avataaars-neutral", "Bella"),
-  entry("woman-jade", "Jade", "women", "avataaars-neutral", "Jade"),
-  entry("woman-alex", "Alex", "women", "adventurer-neutral", "Alex"),
-  entry("woman-sam", "Sam", "women", "adventurer-neutral", "Sam"),
-  entry("woman-jordan", "Jordan", "women", "adventurer-neutral", "Jordan"),
-  entry("woman-casey", "Casey", "women", "adventurer-neutral", "Casey"),
-  entry("woman-riley", "Riley", "women", "micah", "Riley"),
-  entry("woman-quinn", "Quinn", "women", "micah", "Quinn"),
+const LEGACY_TO_LOCAL = new Map(
+  AVATAR_SOURCES.map((source) => [
+    dicebear(source.style, source.seed, source.backgroundColor),
+    localPath(source.id),
+  ])
+);
 
-  // Animals — fun-emoji & big-ears cartoony critters
-  entry("animal-cat", "Cat", "animals", "fun-emoji", "Cat", "ffd5dc"),
-  entry("animal-dog", "Dog", "animals", "fun-emoji", "Dog", "c0aede"),
-  entry("animal-lion", "Lion", "animals", "fun-emoji", "Lion", "ffdfbf"),
-  entry("animal-bear", "Bear", "animals", "fun-emoji", "Bear", "d1d4f9"),
-  entry("animal-fox", "Fox", "animals", "fun-emoji", "Fox", "ffd5dc"),
-  entry("animal-panda", "Panda", "animals", "fun-emoji", "Panda", "c0aede"),
-  entry("animal-owl", "Owl", "animals", "fun-emoji", "Owl", "ffdfbf"),
-  entry("animal-frog", "Frog", "animals", "fun-emoji", "Frog", "b6e3f4"),
-  entry("animal-monkey", "Monkey", "animals", "fun-emoji", "Monkey", "ffd5dc"),
-  entry("animal-rabbit", "Rabbit", "animals", "fun-emoji", "Rabbit", "c0aede"),
-  entry("animal-tiger", "Tiger", "animals", "fun-emoji", "Tiger", "ffdfbf"),
-  entry("animal-wolf", "Wolf", "animals", "fun-emoji", "Wolf", "d1d4f9"),
-  entry("animal-koala", "Koala", "animals", "big-ears", "Koala", "b6e3f4"),
-  entry("animal-bunny", "Bunny", "animals", "big-ears", "Bunny", "ffd5dc"),
-  entry("animal-mouse", "Mouse", "animals", "big-ears", "Mouse", "c0aede"),
-
-  // Fun — robots, doodles, big smiles
-  entry("fun-robot-1", "Robot", "fun", "bottts", "Robot-1", "b6e3f4"),
-  entry("fun-robot-2", "Bot", "fun", "bottts", "Bot-2", "c0aede"),
-  entry("fun-robot-3", "Droid", "fun", "bottts", "Droid-3", "d1d4f9"),
-  entry("fun-robot-4", "Mech", "fun", "bottts", "Mech-4", "ffdfbf"),
-  entry("fun-doodle-1", "Doodle", "fun", "croodles", "Doodle-1", "ffd5dc"),
-  entry("fun-doodle-2", "Sketch", "fun", "croodles", "Sketch-2", "b6e3f4"),
-  entry("fun-doodle-3", "Scribble", "fun", "croodles", "Scribble-3", "c0aede"),
-  entry("fun-smile-1", "Sunny", "fun", "big-smile", "Sunny-1", "ffdfbf"),
-  entry("fun-smile-2", "Cheery", "fun", "big-smile", "Cheery-2", "ffd5dc"),
-  entry("fun-smile-3", "Grin", "fun", "big-smile", "Grin-3", "b6e3f4"),
-  entry("fun-pixel-1", "Pixel", "fun", "pixel-art", "Pixel-1", "c0aede"),
-  entry("fun-pixel-2", "8-Bit", "fun", "pixel-art", "8-Bit-2", "d1d4f9"),
-];
-
-const ALLOWED_URLS = new Set(AVATAR_LIBRARY.map((a) => a.url));
+const ALLOWED_URLS = new Set<string>([
+  ...AVATAR_LIBRARY.map((avatar) => avatar.url),
+  ...LEGACY_TO_LOCAL.keys(),
+]);
 
 export function isAllowedAvatarUrl(url: string): boolean {
   return ALLOWED_URLS.has(url);
 }
 
+/** Map a previously saved DiceBear HTTP URL onto the local asset. */
+export function resolveAvatarUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  return LEGACY_TO_LOCAL.get(url) ?? url;
+}
+
 export function findAvatarByUrl(url: string | null | undefined): AvatarOption | undefined {
-  if (!url) return undefined;
-  return AVATAR_LIBRARY.find((a) => a.url === url);
+  const resolved = resolveAvatarUrl(url);
+  if (!resolved) return undefined;
+  return AVATAR_LIBRARY.find((avatar) => avatar.url === resolved);
 }
