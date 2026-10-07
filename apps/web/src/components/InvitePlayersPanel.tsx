@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getAvatarUrl } from "@/lib/utils";
-import { EMAIL_RE } from "@/lib/register";
 import type { PastPlayer, InviteEmailResult } from "@/lib/gameNightInvite";
-
-function addEmail(list: string[], raw: string): string[] {
-  const email = raw.trim().toLowerCase();
-  if (!email || !EMAIL_RE.test(email) || list.includes(email)) return list;
-  return [...list, email];
-}
+import {
+  addInvite,
+  addInviteFromEmail,
+  hasInvite,
+  inviteEmails,
+  inviteFromPastPlayer,
+  removeInvite,
+  type InviteDraft,
+} from "@/lib/inviteList";
 
 export function InvitePlayersPanel({ tournamentId }: { tournamentId: string }) {
   const [suggestions, setSuggestions] = useState<PastPlayer[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [invites, setInvites] = useState<InviteDraft[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -40,32 +42,36 @@ export function InvitePlayersPanel({ tournamentId }: { tournamentId: string }) {
     };
   }, [tournamentId]);
 
-  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const inviteCount = invites.length;
 
-  function toggleSuggestion(email: string) {
+  function queuePastPlayer(player: PastPlayer) {
     setResults(null);
     setError("");
-    setSelected((prev) =>
-      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
-    );
+    setInvites((prev) => addInvite(prev, inviteFromPastPlayer(player)));
   }
 
-  function commitDraft() {
-    const next = addEmail(selected, draft);
-    if (next === selected && draft.trim()) {
+  function queueDraft() {
+    const { list, ok } = addInviteFromEmail(invites, draft, suggestions);
+    if (!ok) {
       setError("Enter a valid email");
       return;
     }
     setDraft("");
     setError("");
-    setSelected(next);
+    setResults(null);
+    setInvites(list);
+  }
+
+  function dropInvite(email: string) {
+    setResults(null);
+    setError("");
+    setInvites((prev) => removeInvite(prev, email));
   }
 
   async function sendInvites() {
-    const fromDraft = addEmail(selected, draft);
-    const emails = fromDraft;
+    const emails = inviteEmails(invites);
     if (emails.length === 0) {
-      setError("Pick a past player or type an email");
+      setError("Add people to the invite list first");
       return;
     }
     setSending(true);
@@ -82,7 +88,7 @@ export function InvitePlayersPanel({ tournamentId }: { tournamentId: string }) {
       setError(data.error || "Could not send invites");
       return;
     }
-    setSelected([]);
+    setInvites([]);
     setDraft("");
     setResults(data.results ?? []);
     setPreviewHtml(typeof data.previewHtml === "string" ? data.previewHtml : null);
@@ -96,8 +102,8 @@ export function InvitePlayersPanel({ tournamentId }: { tournamentId: string }) {
     <div className="bg-slate-900 rounded-xl p-5 border border-slate-800 mb-6">
       <h3 className="font-semibold mb-1">Invite players</h3>
       <p className="text-slate-400 text-sm mb-4">
-        Re-add people from nights you hosted or played, or type a new email.
-        We&apos;ll send the join code and a one-click link.
+        Build the invite list, then send once. We email the join code and a
+        one-click link.
       </p>
 
       {loaded && suggestions.length > 0 && (
@@ -105,16 +111,22 @@ export function InvitePlayersPanel({ tournamentId }: { tournamentId: string }) {
           <p className="text-xs text-slate-500 mb-2">Past players</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((player) => {
-              const on = selectedSet.has(player.email);
+              const queued = hasInvite(invites, player.email);
               return (
                 <button
                   key={player.userId}
                   type="button"
-                  onClick={() => toggleSuggestion(player.email)}
+                  onClick={() => queuePastPlayer(player)}
+                  disabled={queued}
+                  title={
+                    queued
+                      ? `${player.displayName} is already on the invite list`
+                      : `Add ${player.displayName} to the invite list`
+                  }
                   className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition ${
-                    on
-                      ? "bg-emerald-600 border-emerald-500 text-white"
-                      : "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                    queued
+                      ? "bg-slate-800/60 border-slate-700 text-slate-500 cursor-default"
+                      : "bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 hover:border-emerald-600/60"
                   }`}
                 >
                   <img
@@ -136,27 +148,57 @@ export function InvitePlayersPanel({ tournamentId }: { tournamentId: string }) {
         </p>
       )}
 
-      {selected.filter(
-        (email) => !suggestions.some((p) => p.email === email)
-      ).length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {selected
-            .filter((email) => !suggestions.some((p) => p.email === email))
-            .map((email) => (
-              <button
-                key={email}
-                type="button"
-                onClick={() => toggleSuggestion(email)}
-                className="inline-flex items-center gap-1 rounded-full bg-emerald-600/20 border border-emerald-700/50 text-emerald-300 text-xs px-3 py-1"
-              >
-                {email}
-                <span aria-hidden="true">×</span>
-              </button>
-            ))}
+      <div className="rounded-lg border border-slate-700 bg-slate-950/70 mb-3">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Invites
+          </p>
+          <p className="text-xs text-slate-500">
+            {inviteCount === 0
+              ? "None yet"
+              : `${inviteCount} to email`}
+          </p>
         </div>
-      )}
+        {inviteCount === 0 ? (
+          <p className="px-3 py-4 text-sm text-slate-500">
+            Click a past player or add an email. Nothing is sent until you hit
+            Send.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-800">
+            {invites.map((row) => (
+              <li
+                key={row.email}
+                className="flex items-center gap-3 px-3 py-2"
+              >
+                <img
+                  src={getAvatarUrl(row.displayName ?? row.email, row.avatarUrl)}
+                  alt=""
+                  className="w-7 h-7 rounded-full shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-100 truncate">
+                    {row.displayName ?? row.email}
+                  </p>
+                  {row.displayName && (
+                    <p className="text-xs text-slate-500 truncate">{row.email}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dropInvite(row.email)}
+                  className="text-slate-500 hover:text-red-400 text-sm px-2 py-1 rounded-md"
+                  aria-label={`Remove ${row.displayName ?? row.email}`}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 mb-3">
         <input
           type="email"
           value={draft}
@@ -167,28 +209,34 @@ export function InvitePlayersPanel({ tournamentId }: { tournamentId: string }) {
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === ",") {
               e.preventDefault();
-              commitDraft();
+              queueDraft();
             }
-          }}
-          onBlur={() => {
-            if (draft.trim()) commitDraft();
           }}
           placeholder="friend@email.com"
           className="flex-1 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none text-sm"
         />
         <button
           type="button"
-          onClick={sendInvites}
-          disabled={sending || (selected.length === 0 && !draft.trim())}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium disabled:opacity-50 shrink-0"
+          onClick={queueDraft}
+          disabled={!draft.trim()}
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-sm font-medium disabled:opacity-50 shrink-0"
         >
-          {sending
-            ? "Sending…"
-            : selected.length > 0
-              ? `Send ${selected.length + (EMAIL_RE.test(draft.trim().toLowerCase()) && !selected.includes(draft.trim().toLowerCase()) ? 1 : 0)}`
-              : "Send invites"}
+          Add
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={sendInvites}
+        disabled={sending || inviteCount === 0}
+        className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium disabled:opacity-50"
+      >
+        {sending
+          ? "Sending…"
+          : inviteCount === 0
+            ? "Send invites"
+            : `Send ${inviteCount} invite${inviteCount === 1 ? "" : "s"}`}
+      </button>
       {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
 
       {results && (
