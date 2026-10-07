@@ -32,8 +32,20 @@ describe("parseLoginStartInput", () => {
   });
 
   it("rejects missing or invalid email", () => {
-    expect(parseLoginStartInput({}).ok).toBe(false);
-    expect(parseLoginStartInput({ email: "not-an-email" }).ok).toBe(false);
+    expect(parseLoginStartInput({})).toEqual({
+      ok: false,
+      error: "Enter your email",
+      status: 400,
+    });
+    expect(parseLoginStartInput({ email: "   " })).toEqual({
+      ok: false,
+      error: "Enter your email",
+      status: 400,
+    });
+    expect(parseLoginStartInput({ email: "not-an-email" })).toMatchObject({
+      ok: false,
+      error: "Enter a valid email",
+    });
   });
 });
 

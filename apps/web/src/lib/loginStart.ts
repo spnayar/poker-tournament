@@ -28,7 +28,7 @@ export function parseLoginStartInput(body: unknown): LoginStartParseResult {
   const inviteCode = inviteRaw.length > 0 ? inviteRaw : null;
 
   if (!email) {
-    return { ok: false, error: "Enter a valid email", status: 400 };
+    return { ok: false, error: "Enter your email", status: 400 };
   }
   if (!EMAIL_RE.test(email)) {
     return { ok: false, error: "Enter a valid email", status: 400 };
