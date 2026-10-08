@@ -10,7 +10,11 @@ import cors from "cors";
 import jwt from "jsonwebtoken";
 import Redis from "ioredis";
 import { prisma, incrementHandsPlayed } from "@poker/db";
-import { TableEngine, type TableSnapshot } from "@poker/game-engine";
+import {
+  TableEngine,
+  mapTableFunStatsToGame,
+  type TableSnapshot,
+} from "@poker/game-engine";
 import {
   ClientEvents,
   ServerEvents,
@@ -656,12 +660,22 @@ async function finishGame(tournamentId: string, room: TournamentRoom): Promise<v
     });
   }
 
+  const userIdBySeat = new Map<number, string>();
+  for (const [userId, seatId] of room.seatByUserId) {
+    userIdBySeat.set(seatId, userId);
+  }
+  const funStats = mapTableFunStatsToGame(
+    room.table.getFunStats(),
+    userIdBySeat
+  );
+
   await prisma.game.update({
     where: { id: room.gameId },
     data: {
       status: "FINISHED",
       finishedAt: new Date(),
       prizePoolCents: prizePool,
+      funStats,
     },
   });
 

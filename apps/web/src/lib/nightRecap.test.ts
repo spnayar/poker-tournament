@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildNightRecapHtml, buildNightRecapText } from "./nightRecap";
+import {
+  aggregateNightFunFacts,
+  buildNightRecapHtml,
+  buildNightRecapText,
+  formatCardsPlain,
+} from "./nightRecap";
 import type { NightRecapPayload } from "./nightRecap";
 import { LEDGER_DISCLAIMER } from "./utils";
 import { SETTLE_UP_DISCLAIMER } from "./settleUp";
@@ -48,6 +53,27 @@ function samplePayload(): NightRecapPayload {
         { displayName: "Alice", gameNumber: 2, payoutCents: 3000 },
       ],
       itm: [{ displayName: "Alice", count: 2 }],
+      handsWon: [
+        { displayName: "Alice", count: 28 },
+        { displayName: "Bob", count: 19 },
+      ],
+      knockouts: [
+        { displayName: "Alice", count: 3 },
+        { displayName: "Bob", count: 1 },
+      ],
+      largestPot: {
+        amountChips: 12400,
+        winnerNames: ["Alice"],
+        gameNumber: 2,
+        handNumber: 18,
+      },
+      bestHand: {
+        displayName: "Bob",
+        handName: "Four of a Kind, Aces",
+        cards: ["As", "Ah", "Ad", "Ac", "Kh"],
+        gameNumber: 1,
+        handNumber: 9,
+      },
     },
     createUrl: "https://www.pokertableclub.com/dashboard",
   };
@@ -72,11 +98,110 @@ describe("night recap email", () => {
     );
   });
 
-  it("builds plain text with pay-outs and CTA", () => {
+  it("includes fun facts after settlement", () => {
+    const html = buildNightRecapHtml(samplePayload());
+    expect(html).toContain("Fun facts");
+    expect(html).toContain("Best hand of the night");
+    expect(html).toContain("Four of a Kind, Aces");
+    expect(html).toContain("A♠ A♥ A♦ A♣ K♥");
+    expect(html).toContain("Largest pot");
+    expect(html).toContain("12,400");
+    expect(html).toContain("Hands won");
+    expect(html).toContain("Knockout kings");
+    expect(html.indexOf("Night settlement")).toBeLessThan(
+      html.indexOf("Fun facts")
+    );
+  });
+
+  it("builds plain text with pay-outs, fun facts, and CTA", () => {
     const text = buildNightRecapText(samplePayload());
     expect(text).toContain("Suggested pay-outs:");
     expect(text).toContain("Bob → Alice: $30.00");
     expect(text).toContain("Venmo: @alice-pays");
+    expect(text).toContain("Best hand of the night: Bob");
+    expect(text).toContain("Hands won: Alice 28, Bob 19");
+    expect(text).toContain("Most knockouts: Alice 3, Bob 1");
+    expect(text).toContain("Largest pot: 12,400 chips");
     expect(text).toContain("Run your own game night:");
+  });
+
+  it("formats showdown cards for email", () => {
+    expect(formatCardsPlain(["As", "Ah", "Ad", "Ac", "Kh"])).toBe(
+      "A♠ A♥ A♦ A♣ K♥"
+    );
+  });
+});
+
+describe("aggregateNightFunFacts", () => {
+  it("merges hands won / knockouts and picks best hand + largest pot", () => {
+    const names = new Map([
+      ["alice", "Alice"],
+      ["bob", "Bob"],
+    ]);
+    const result = aggregateNightFunFacts(
+      [
+        {
+          gameNumber: 1,
+          funStats: {
+            handsWonByUserId: { alice: 10, bob: 8 },
+            knockoutsByUserId: { alice: 1 },
+            largestPot: {
+              amountChips: 5000,
+              winnerUserIds: ["bob"],
+              handNumber: 4,
+            },
+            bestHand: {
+              userId: "bob",
+              handName: "Pair, Aces",
+              cards: ["As", "Ah", "9d", "5c", "2h"],
+              handNumber: 3,
+            },
+          },
+        },
+        {
+          gameNumber: 2,
+          funStats: {
+            handsWonByUserId: { alice: 12, bob: 7 },
+            knockoutsByUserId: { alice: 2, bob: 1 },
+            largestPot: {
+              amountChips: 12400,
+              winnerUserIds: ["alice"],
+              handNumber: 18,
+            },
+            bestHand: {
+              userId: "alice",
+              handName: "Four of a Kind, Aces",
+              cards: ["As", "Ah", "Ad", "Ac", "Kh"],
+              handNumber: 9,
+            },
+          },
+        },
+      ],
+      names
+    );
+
+    expect(result.handsWon).toEqual([
+      { displayName: "Alice", count: 22 },
+      { displayName: "Bob", count: 15 },
+    ]);
+    expect(result.knockouts).toEqual([
+      { displayName: "Alice", count: 3 },
+      { displayName: "Bob", count: 1 },
+    ]);
+    expect(result.largestPot?.amountChips).toBe(12400);
+    expect(result.largestPot?.winnerNames).toEqual(["Alice"]);
+    expect(result.bestHand?.displayName).toBe("Alice");
+    expect(result.bestHand?.handName).toContain("Four of a Kind");
+  });
+
+  it("returns empty fun facts when games have no stats yet", () => {
+    const result = aggregateNightFunFacts(
+      [{ gameNumber: 1, funStats: {} }],
+      new Map([["alice", "Alice"]])
+    );
+    expect(result.handsWon).toEqual([]);
+    expect(result.knockouts).toEqual([]);
+    expect(result.largestPot).toBeNull();
+    expect(result.bestHand).toBeNull();
   });
 });

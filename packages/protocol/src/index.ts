@@ -575,4 +575,42 @@ export function parseSettleUpMethods(raw: unknown): SettleUpMethod[] {
   return parsed.success ? parsed.data : [];
 }
 
+/** Persisted per-game fun facts for night recap (user-keyed; showdown cards only). */
+export const GameFunStatsSchema = z.object({
+  handsWonByUserId: z.record(z.string(), z.number().int().nonnegative()),
+  knockoutsByUserId: z.record(z.string(), z.number().int().nonnegative()),
+  largestPot: z
+    .object({
+      amountChips: z.number().int().nonnegative(),
+      winnerUserIds: z.array(z.string()),
+      handNumber: z.number().int().nonnegative(),
+    })
+    .nullable(),
+  bestHand: z
+    .object({
+      userId: z.string(),
+      handName: z.string(),
+      cards: z.array(CardSchema).length(5),
+      handNumber: z.number().int().nonnegative(),
+    })
+    .nullable(),
+});
+
+export type GameFunStats = z.infer<typeof GameFunStatsSchema>;
+
+export function emptyGameFunStats(): GameFunStats {
+  return {
+    handsWonByUserId: {},
+    knockoutsByUserId: {},
+    largestPot: null,
+    bestHand: null,
+  };
+}
+
+/** Parse stored Game.funStats JSON; invalid → empty. */
+export function parseGameFunStats(raw: unknown): GameFunStats {
+  const parsed = GameFunStatsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : emptyGameFunStats();
+}
+
 export * from "./blinds";
