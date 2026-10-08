@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T20:50:00.000Z",
+  "title": "Design System: Poker Table Club",
+  "extensions": {
+    "colorMeta": {
+      "emerald-600": {
+        "role": "primary",
+        "displayName": "Felt Emerald",
+        "canonical": "#059669"
+      },
+      "amber-400": {
+        "role": "secondary",
+        "displayName": "Chip Amber",
+        "canonical": "#fbbf24"
+      },
+      "felt": {
+        "role": "tertiary",
+        "displayName": "Table Felt",
+        "canonical": "#1a5c38",
+        "tonalRamp": ["#0f3d25", "#1a5c38", "#2d7a4f"]
+      },
+      "slate-950": {
+        "role": "neutral",
+        "displayName": "Club Void",
+        "canonical": "#020617"
+      },
+      "slate-900": {
+        "role": "neutral",
+        "displayName": "Club Panel",
+        "canonical": "#0f172a"
+      }
+    },
+    "northStar": "Home-Game Clubhouse",
+    "rules": [
+      "Two-Accent Rule: emerald = act/confirm; amber = money/chips/time",
+      "No-AI-Slop Rule: no purple-indigo gradients, cream beige canvases, or Inter-as-brand",
+      "Viewport Table Rule: never page-scroll to see cards or take actions; single horizontal action bar",
+      "Stakes-Are-Mono Rule: chips, pots, join codes, ledger figures use mono"
+    ],
+    "motion": {
+      "table": "Framer Motion for deals/chips; purposeful, short; no bounce/elastic defaults"
+    },
+    "breakpoints": {
+      "note": "Table layout compresses seats/cards for narrow phones; action bar stays one horizontal row"
+    }
+  }
+}
