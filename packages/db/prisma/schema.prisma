@@ -33,6 +33,8 @@ model User {
   accountStatus AccountStatus  @default(FREE)
   lastLoginAt   DateTime?
   loginCount    Int            @default(0)
+  /// Preferred off-site settle-up methods ({ provider, contact }[]). Site never moves money.
+  settleUpMethods Json         @default("[]")
 
   hostedTournaments Tournament[]       @relation("Host")
   tournamentPlayers TournamentPlayer[]

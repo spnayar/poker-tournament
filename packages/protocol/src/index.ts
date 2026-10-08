@@ -478,4 +478,101 @@ export function computeNightLedger(
     .sort((a, b) => b.netCents - a.netCents);
 }
 
+export interface SettleTransfer {
+  fromUserId: string;
+  fromDisplayName: string;
+  toUserId: string;
+  toDisplayName: string;
+  amountCents: number;
+}
+
+/**
+ * Minimal pairwise settle plan from night ledger nets (ledger cents only).
+ * Debtors pay creditors until nets clear. Does not move real money.
+ */
+export function computeSettleTransfers(
+  ledger: NightLedgerEntry[]
+): SettleTransfer[] {
+  const debtors = ledger
+    .filter((r) => r.netCents < 0)
+    .map((r) => ({
+      userId: r.userId,
+      displayName: r.displayName,
+      remaining: -r.netCents,
+    }))
+    .sort((a, b) => b.remaining - a.remaining);
+  const creditors = ledger
+    .filter((r) => r.netCents > 0)
+    .map((r) => ({
+      userId: r.userId,
+      displayName: r.displayName,
+      remaining: r.netCents,
+    }))
+    .sort((a, b) => b.remaining - a.remaining);
+
+  const transfers: SettleTransfer[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < debtors.length && j < creditors.length) {
+    const debtor = debtors[i]!;
+    const creditor = creditors[j]!;
+    const amount = Math.min(debtor.remaining, creditor.remaining);
+    if (amount > 0) {
+      transfers.push({
+        fromUserId: debtor.userId,
+        fromDisplayName: debtor.displayName,
+        toUserId: creditor.userId,
+        toDisplayName: creditor.displayName,
+        amountCents: amount,
+      });
+      debtor.remaining -= amount;
+      creditor.remaining -= amount;
+    }
+    if (debtor.remaining <= 0) i += 1;
+    if (creditor.remaining <= 0) j += 1;
+  }
+  return transfers;
+}
+
+export const SETTLE_UP_PROVIDERS = [
+  "PAYPAL",
+  "VENMO",
+  "CASH_APP",
+  "APPLE_PAY",
+  "ZELLE",
+] as const;
+
+export type SettleUpProvider = (typeof SETTLE_UP_PROVIDERS)[number];
+
+export const SettleUpMethodSchema = z.object({
+  provider: z.enum(SETTLE_UP_PROVIDERS),
+  contact: z.string().trim().min(1).max(128),
+});
+
+export type SettleUpMethod = z.infer<typeof SettleUpMethodSchema>;
+
+export const SettleUpMethodsSchema = z
+  .array(SettleUpMethodSchema)
+  .max(SETTLE_UP_PROVIDERS.length)
+  .superRefine((methods, ctx) => {
+    const seen = new Set<string>();
+    for (let i = 0; i < methods.length; i += 1) {
+      const provider = methods[i]!.provider;
+      if (seen.has(provider)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate provider: ${provider}`,
+          path: [i, "provider"],
+        });
+      }
+      seen.add(provider);
+    }
+  });
+
+/** Parse stored JSON; invalid / empty → []. */
+export function parseSettleUpMethods(raw: unknown): SettleUpMethod[] {
+  const parsed = SettleUpMethodsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : [];
+}
+
 export * from "./blinds";

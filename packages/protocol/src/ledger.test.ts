@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { computeNightLedger, normalizeGamePayouts } from "./index";
+import {
+  computeNightLedger,
+  computeSettleTransfers,
+  normalizeGamePayouts,
+  parseSettleUpMethods,
+} from "./index";
 
 describe("computeNightLedger", () => {
   it("includes all roster players even with zero payout", () => {
@@ -48,5 +53,64 @@ describe("normalizeGamePayouts", () => {
 
     expect(ledger.find((r) => r.userId === "alice")?.netCents).toBe(1800);
     expect(ledger.find((r) => r.userId === "bob")?.netCents).toBe(-1800);
+  });
+});
+
+describe("computeSettleTransfers", () => {
+  it("pairs debtors to creditors from net ledger", () => {
+    const ledger = computeNightLedger(
+      1000,
+      [
+        { userId: "alice", displayName: "Alice" },
+        { userId: "bob", displayName: "Bob" },
+        { userId: "carol", displayName: "Carol" },
+      ],
+      [[{ userId: "alice", payoutCents: 3000 }]]
+    );
+    const transfers = computeSettleTransfers(ledger);
+    expect(transfers).toEqual([
+      {
+        fromUserId: "bob",
+        fromDisplayName: "Bob",
+        toUserId: "alice",
+        toDisplayName: "Alice",
+        amountCents: 1000,
+      },
+      {
+        fromUserId: "carol",
+        fromDisplayName: "Carol",
+        toUserId: "alice",
+        toDisplayName: "Alice",
+        amountCents: 1000,
+      },
+    ]);
+  });
+
+  it("returns empty when nets are flat", () => {
+    expect(
+      computeSettleTransfers([
+        {
+          userId: "a",
+          displayName: "A",
+          gamesPlayed: 1,
+          totalBuyInCents: 1000,
+          totalPayoutCents: 1000,
+          netCents: 0,
+        },
+      ])
+    ).toEqual([]);
+  });
+});
+
+describe("parseSettleUpMethods", () => {
+  it("accepts valid methods and rejects junk", () => {
+    expect(
+      parseSettleUpMethods([
+        { provider: "VENMO", contact: "@alice" },
+        { provider: "ZELLE", contact: "555-0100" },
+      ])
+    ).toHaveLength(2);
+    expect(parseSettleUpMethods([{ provider: "VENMO" }])).toEqual([]);
+    expect(parseSettleUpMethods(null)).toEqual([]);
   });
 });

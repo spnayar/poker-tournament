@@ -2,8 +2,14 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma, recomputeUserStats } from "@poker/db";
-import { computePayoutsFromPercents, computeNightLedger, normalizeGamePayouts } from "@poker/protocol";
-import { defaultTournamentName } from "@/lib/tournament";
+import {
+  computePayoutsFromPercents,
+  computeNightLedger,
+  computeSettleTransfers,
+  normalizeGamePayouts,
+  parseSettleUpMethods,
+} from "@poker/protocol";
+import { sendNightRecapEmail } from "@/lib/nightRecap";
 
 export async function GET(
   _req: Request,
@@ -21,7 +27,14 @@ export async function GET(
       host: { select: { id: true, displayName: true, avatarUrl: true } },
       players: {
         include: {
-          user: { select: { id: true, displayName: true, avatarUrl: true } },
+          user: {
+            select: {
+              id: true,
+              displayName: true,
+              avatarUrl: true,
+              settleUpMethods: true,
+            },
+          },
         },
       },
       games: {
@@ -88,11 +101,35 @@ export async function GET(
       )
   );
 
+  const settleTransfers = computeSettleTransfers(ledger);
+  const settleUpByUserId: Record<
+    string,
+    ReturnType<typeof parseSettleUpMethods>
+  > = {};
+  for (const p of tournament.players) {
+    settleUpByUserId[p.userId] = parseSettleUpMethods(p.user.settleUpMethods);
+  }
+
+  const tournamentJson = {
+    ...tournament,
+    players: tournament.players.map((p) => ({
+      ...p,
+      user: {
+        id: p.user.id,
+        displayName: p.user.displayName,
+        avatarUrl: p.user.avatarUrl,
+        settleUpMethods: settleUpByUserId[p.userId] ?? [],
+      },
+    })),
+  };
+
   return NextResponse.json({
-    tournament,
+    tournament: tournamentJson,
     runningGame,
     payouts,
     ledger,
+    settleTransfers,
+    settleUpByUserId,
     payoutPercents,
   });
 }
@@ -216,7 +253,24 @@ export async function POST(
       data: { status: "FINISHED", closedAt: new Date() },
     });
 
-    return NextResponse.json({ ok: true, status: "FINISHED" });
+    // End-of-night recap: settlement-first email to participants + host.
+    let recap: Awaited<ReturnType<typeof sendNightRecapEmail>> = null;
+    try {
+      recap = await sendNightRecapEmail(id);
+    } catch (err) {
+      console.error("[night-recap] Failed to send after close", err);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      status: "FINISHED",
+      recap: recap
+        ? {
+            recipients: recap.recipients,
+            results: recap.results,
+          }
+        : null,
+    });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

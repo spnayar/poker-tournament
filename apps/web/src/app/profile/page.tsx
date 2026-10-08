@@ -9,6 +9,14 @@ import { BrandLockup } from "@/components/BrandMark";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import type { AvatarOption } from "@/lib/avatars";
 import { needsProfileSetup } from "@/lib/profileSetup";
+import {
+  SETTLE_UP_DISCLAIMER,
+  SETTLE_UP_HINTS,
+  SETTLE_UP_LABELS,
+  SETTLE_UP_PROVIDERS,
+  type SettleUpMethod,
+  type SettleUpProvider,
+} from "@/lib/settleUp";
 
 interface Stats {
   tournamentsPlayed: number;
@@ -29,6 +37,7 @@ interface ProfileUser {
   displayNameSet: boolean;
   email: string;
   avatarUrl: string | null;
+  settleUpMethods: SettleUpMethod[];
 }
 
 export default function ProfilePage() {
@@ -41,6 +50,12 @@ export default function ProfilePage() {
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState("");
   const [nameSaved, setNameSaved] = useState(false);
+  const [settleDraft, setSettleDraft] = useState<
+    Partial<Record<SettleUpProvider, string>>
+  >({});
+  const [settleSaving, setSettleSaving] = useState(false);
+  const [settleError, setSettleError] = useState("");
+  const [settleSaved, setSettleSaved] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -55,6 +70,10 @@ export default function ProfilePage() {
           setHistory(data.history ?? []);
           setUser(data.user ?? null);
           setNameDraft(data.user?.displayName ?? "");
+          const methods = (data.user?.settleUpMethods ?? []) as SettleUpMethod[];
+          const draft: Partial<Record<SettleUpProvider, string>> = {};
+          for (const m of methods) draft[m.provider] = m.contact;
+          setSettleDraft(draft);
         });
     }
   }, [status]);
@@ -100,6 +119,40 @@ export default function ProfilePage() {
     await updateSession({ name: data.user.displayName });
     setNameSaved(true);
     setTimeout(() => setNameSaved(false), 2000);
+  }
+
+  async function saveSettleUp() {
+    const methods: SettleUpMethod[] = [];
+    for (const provider of SETTLE_UP_PROVIDERS) {
+      const contact = settleDraft[provider]?.trim() ?? "";
+      if (contact) methods.push({ provider, contact });
+    }
+
+    setSettleSaving(true);
+    setSettleError("");
+    setSettleSaved(false);
+
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settleUpMethods: methods }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSettleSaving(false);
+
+    if (!res.ok) {
+      setSettleError(data.error || "Could not save settle-up methods");
+      return;
+    }
+
+    setUser(data.user);
+    const draft: Partial<Record<SettleUpProvider, string>> = {};
+    for (const m of (data.user.settleUpMethods ?? []) as SettleUpMethod[]) {
+      draft[m.provider] = m.contact;
+    }
+    setSettleDraft(draft);
+    setSettleSaved(true);
+    setTimeout(() => setSettleSaved(false), 2000);
   }
 
   if (!stats || !user) {
@@ -227,6 +280,74 @@ export default function ProfilePage() {
         onSelect={handleAvatarSelect}
         prompt={avatarUnpicked}
       />
+
+      <section className="mb-8 rounded-xl p-4 border bg-slate-900 border-slate-800">
+        <h2 className="text-sm font-semibold text-slate-400 mb-1">
+          Preferred settle-up
+        </h2>
+        <p className="text-xs text-slate-500 mb-4">{SETTLE_UP_DISCLAIMER}</p>
+        <div className="space-y-3">
+          {SETTLE_UP_PROVIDERS.map((provider) => {
+            const enabled = settleDraft[provider] !== undefined;
+            return (
+              <div
+                key={provider}
+                className="rounded-lg border border-slate-800 bg-slate-950/50 p-3"
+              >
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={(e) => {
+                      setSettleSaved(false);
+                      setSettleError("");
+                      setSettleDraft((prev) => {
+                        const next = { ...prev };
+                        if (e.target.checked) next[provider] = prev[provider] ?? "";
+                        else delete next[provider];
+                        return next;
+                      });
+                    }}
+                    className="rounded border-slate-600 text-emerald-500 focus:ring-emerald-500"
+                  />
+                  {SETTLE_UP_LABELS[provider]}
+                </label>
+                {enabled && (
+                  <input
+                    type="text"
+                    value={settleDraft[provider] ?? ""}
+                    onChange={(e) => {
+                      setSettleSaved(false);
+                      setSettleError("");
+                      setSettleDraft((prev) => ({
+                        ...prev,
+                        [provider]: e.target.value,
+                      }));
+                    }}
+                    maxLength={128}
+                    placeholder={SETTLE_UP_HINTS[provider]}
+                    className="mt-2 w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none text-sm"
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={saveSettleUp}
+          disabled={settleSaving}
+          className="mt-4 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium text-sm disabled:opacity-50"
+        >
+          {settleSaving ? "Saving…" : "Save settle-up"}
+        </button>
+        {settleError && (
+          <p className="text-red-400 text-sm mt-2">{settleError}</p>
+        )}
+        {settleSaved && (
+          <p className="text-emerald-400 text-sm mt-2">Settle-up updated.</p>
+        )}
+      </section>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         {[

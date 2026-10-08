@@ -4,6 +4,19 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@poker/db";
 import { isAllowedAvatarUrl } from "@/lib/avatars";
+import {
+  parseSettleUpMethods,
+  parseSettleUpMethodsInput,
+} from "@/lib/settleUp";
+
+const profileUserSelect = {
+  displayName: true,
+  displayNameSet: true,
+  email: true,
+  avatarUrl: true,
+  createdAt: true,
+  settleUpMethods: true,
+} as const;
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -15,16 +28,21 @@ export async function GET() {
     where: { userId: session.user.id },
   });
 
-  const user = await prisma.user.findUnique({
+  const row = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: {
-      displayName: true,
-      displayNameSet: true,
-      email: true,
-      avatarUrl: true,
-      createdAt: true,
-    },
+    select: profileUserSelect,
   });
+
+  const user = row
+    ? {
+        displayName: row.displayName,
+        displayNameSet: row.displayNameSet,
+        email: row.email,
+        avatarUrl: row.avatarUrl,
+        createdAt: row.createdAt,
+        settleUpMethods: parseSettleUpMethods(row.settleUpMethods),
+      }
+    : null;
 
   const gameResults = await prisma.gameResult.findMany({
     where: { userId: session.user.id },
@@ -62,12 +80,13 @@ export async function PATCH(req: Request) {
   }
 
   const body = await req.json();
-  const { avatarUrl, displayName } = body;
+  const { avatarUrl, displayName, settleUpMethods } = body;
 
   const data: {
     avatarUrl?: string;
     displayName?: string;
     displayNameSet?: boolean;
+    settleUpMethods?: ReturnType<typeof parseSettleUpMethods>;
   } = {};
 
   if (displayName !== undefined) {
@@ -95,6 +114,14 @@ export async function PATCH(req: Request) {
     data.avatarUrl = avatarUrl;
   }
 
+  if (settleUpMethods !== undefined) {
+    const parsed = parseSettleUpMethodsInput(settleUpMethods);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    data.settleUpMethods = parsed.methods;
+  }
+
   if (Object.keys(data).length === 0) {
     return NextResponse.json(
       { error: "No valid fields to update" },
@@ -102,16 +129,20 @@ export async function PATCH(req: Request) {
     );
   }
 
-  const user = await prisma.user.update({
+  const row = await prisma.user.update({
     where: { id: session.user.id },
     data,
-    select: {
-      displayName: true,
-      displayNameSet: true,
-      email: true,
-      avatarUrl: true,
-    },
+    select: profileUserSelect,
   });
+
+  const user = {
+    displayName: row.displayName,
+    displayNameSet: row.displayNameSet,
+    email: row.email,
+    avatarUrl: row.avatarUrl,
+    createdAt: row.createdAt,
+    settleUpMethods: parseSettleUpMethods(row.settleUpMethods),
+  };
 
   return NextResponse.json({ user });
 }
