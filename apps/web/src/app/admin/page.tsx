@@ -5,19 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { BrandLockup } from "@/components/BrandMark";
 import { formatCents } from "@/lib/utils";
-import type {
-  AdminAccountRow,
-  LegacyPurgePreview,
-} from "@/lib/adminAccounts";
+import type { AdminAccountRow } from "@/lib/adminAccounts";
 import {
   USAGE_RANGE_OPTIONS,
   type SiteUsage,
   type UsagePoint,
   type UsageRangeId,
 } from "@/lib/adminUsage";
-
-/** Must match `LEGACY_PURGE_CONFIRM_PHRASE` in adminAccess (API is source of truth). */
-const PURGE_CONFIRM_FALLBACK = "PURGE LEGACY ACCOUNTS";
 
 type AdminTab = "users" | "usage";
 
@@ -208,13 +202,6 @@ export default function AdminPage() {
   );
   const [deleteTyped, setDeleteTyped] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [legacyPurge, setLegacyPurge] = useState<LegacyPurgePreview | null>(
-    null
-  );
-  const [purgeOpen, setPurgeOpen] = useState(false);
-  const [purgeTyped, setPurgeTyped] = useState("");
-  const [purgeBusy, setPurgeBusy] = useState(false);
-  const [purgeMessage, setPurgeMessage] = useState("");
 
   const load = useCallback(async (nextRange: UsageRangeId) => {
     setError("");
@@ -230,7 +217,6 @@ export default function AdminPage() {
     }
     setUsers(data.users ?? []);
     setUsage(data.usage ?? null);
-    setLegacyPurge(data.legacyPurge ?? null);
     setLoading(false);
   }, []);
 
@@ -297,34 +283,6 @@ export default function AdminPage() {
     setUsers((prev) => prev.filter((u) => u.id !== pendingDelete.id));
     setPendingDelete(null);
     setDeleteTyped("");
-    await load(range);
-  }
-
-  async function confirmLegacyPurge() {
-    const phrase = legacyPurge?.confirmPhrase ?? PURGE_CONFIRM_FALLBACK;
-    if (purgeTyped.trim() !== phrase) return;
-    setPurgeBusy(true);
-    setPurgeMessage("");
-    const res = await fetch("/api/admin/users/purge-legacy", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirm: purgeTyped.trim() }),
-    });
-    const data = await res.json().catch(() => ({}));
-    setPurgeBusy(false);
-    if (!res.ok) {
-      setPurgeMessage(data.error || "Could not purge legacy accounts");
-      return;
-    }
-    setPurgeOpen(false);
-    setPurgeTyped("");
-    setPurgeMessage(
-      data.deleted === 0
-        ? "No legacy password accounts to remove."
-        : `Removed ${data.deleted} legacy password account${
-            data.deleted === 1 ? "" : "s"
-          }.`
-    );
     await load(range);
   }
 
@@ -622,60 +580,6 @@ export default function AdminPage() {
               </table>
             </div>
           </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4">
-              Purge legacy password accounts
-            </h2>
-            <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-              <p className="text-slate-400 text-sm mb-3">
-                Removes pre-magic-link leftovers that still have a{" "}
-                <span className="text-slate-300">passwordHash</span> and have
-                never completed a magic-link sign-in. Keeps admins (
-                <span className="text-slate-300">spnayar@gmail.com</span>,{" "}
-                <span className="text-slate-300">info@pokertableclub.com</span>,{" "}
-                <span className="text-slate-300">ADMIN_EMAILS</span>,{" "}
-                <span className="text-slate-300">role=ADMIN</span>) and anyone
-                who already uses magic-link.
-              </p>
-              <p className="text-sm text-slate-200 mb-4 tabular-nums">
-                Dry-run:{" "}
-                <span className="font-semibold text-amber-300">
-                  {legacyPurge?.count ?? "—"}
-                </span>{" "}
-                candidate
-                {(legacyPurge?.count ?? 0) === 1 ? "" : "s"}
-              </p>
-              {legacyPurge && legacyPurge.candidates.length > 0 && (
-                <ul className="mb-4 max-h-40 overflow-y-auto text-xs text-slate-400 space-y-1 border border-slate-800 rounded-lg p-3">
-                  {legacyPurge.candidates.map((c) => (
-                    <li key={c.id}>
-                      <span className="text-slate-300">{c.email}</span>
-                      <span className="text-slate-600">
-                        {" "}
-                        · created {formatWhen(c.createdAt)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <button
-                type="button"
-                disabled={!legacyPurge || legacyPurge.count === 0}
-                onClick={() => {
-                  setPurgeOpen(true);
-                  setPurgeTyped("");
-                  setPurgeMessage("");
-                }}
-                className="px-4 py-2 rounded-lg bg-red-800 hover:bg-red-700 text-sm font-medium disabled:opacity-40"
-              >
-                Purge legacy accounts…
-              </button>
-              {purgeMessage && (
-                <p className="text-sm text-amber-300 mt-3">{purgeMessage}</p>
-              )}
-            </div>
-          </section>
         </>
       )}
 
@@ -717,64 +621,6 @@ export default function AdminPage() {
                 className="px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-sm font-medium disabled:opacity-40"
               >
                 {deleteBusy ? "Removing…" : "Remove account"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {purgeOpen && legacyPurge && (
-        <div className="fixed inset-0 z-20 bg-slate-950/80 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 rounded-2xl border border-slate-800 p-6">
-            <h3 className="text-lg font-semibold mb-2">
-              Purge legacy password accounts
-            </h3>
-            <p className="text-slate-400 text-sm mb-3">
-              Permanently delete{" "}
-              <span className="text-amber-300 font-medium tabular-nums">
-                {legacyPurge.count}
-              </span>{" "}
-              account
-              {legacyPurge.count === 1 ? "" : "s"} with leftover password
-              hashes and no magic-link login. Same cascade as Remove (hosted
-              nights torn down). This cannot be undone.
-            </p>
-            <p className="text-slate-400 text-sm mb-4">
-              Type{" "}
-              <span className="text-slate-200 font-medium">
-                {legacyPurge.confirmPhrase}
-              </span>{" "}
-              to confirm.
-            </p>
-            <input
-              type="text"
-              value={purgeTyped}
-              onChange={(e) => setPurgeTyped(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-red-500 focus:outline-none mb-4 font-mono text-sm"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPurgeOpen(false);
-                  setPurgeTyped("");
-                }}
-                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={
-                  purgeBusy ||
-                  purgeTyped.trim() !== legacyPurge.confirmPhrase
-                }
-                onClick={() => void confirmLegacyPurge()}
-                className="px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-sm font-medium disabled:opacity-40"
-              >
-                {purgeBusy ? "Purging…" : "Purge accounts"}
               </button>
             </div>
           </div>

@@ -19,12 +19,7 @@ vi.mock("@poker/db", () => ({
   recomputeUserStats: vi.fn(),
 }));
 
-import {
-  listAdminAccounts,
-  listLegacyPasswordEraCandidates,
-  purgeLegacyPasswordEraAccounts,
-} from "./adminAccounts";
-import { LEGACY_PURGE_CONFIRM_PHRASE } from "./adminAccess";
+import { listAdminAccounts } from "./adminAccounts";
 
 describe("listAdminAccounts", () => {
   beforeEach(() => {
@@ -106,112 +101,5 @@ describe("listAdminAccounts", () => {
     ]);
     const rows = await listAdminAccounts("admin-1");
     expect(rows[0]?.lastLoginAt).toBeNull();
-  });
-});
-
-describe("listLegacyPasswordEraCandidates", () => {
-  beforeEach(() => {
-    findMany.mockReset();
-  });
-
-  it("returns only password-era leftovers and the confirm phrase", async () => {
-    findMany.mockResolvedValue([
-      {
-        id: "legacy-1",
-        email: "dust@example.com",
-        displayName: "Dust",
-        createdAt: new Date("2025-01-01T00:00:00.000Z"),
-        role: "PLAYER",
-        passwordHash: "hash",
-        lastLoginAt: null,
-        loginCount: 0,
-      },
-      {
-        id: "allowlisted",
-        email: "spnayar@gmail.com",
-        displayName: "Sanjay",
-        createdAt: new Date("2025-01-01T00:00:00.000Z"),
-        role: "PLAYER",
-        passwordHash: "hash",
-        lastLoginAt: null,
-        loginCount: 0,
-      },
-    ]);
-
-    const preview = await listLegacyPasswordEraCandidates();
-    expect(preview.confirmPhrase).toBe(LEGACY_PURGE_CONFIRM_PHRASE);
-    expect(preview.count).toBe(1);
-    expect(preview.candidates).toEqual([
-      {
-        id: "legacy-1",
-        email: "dust@example.com",
-        displayName: "Dust",
-        createdAt: "2025-01-01T00:00:00.000Z",
-      },
-    ]);
-    expect(JSON.stringify(preview)).not.toContain("passwordHash");
-    expect(JSON.stringify(preview)).not.toContain("hash");
-  });
-});
-
-describe("purgeLegacyPasswordEraAccounts", () => {
-  beforeEach(() => {
-    findMany.mockReset();
-    findUnique.mockReset();
-    tournamentFindMany.mockReset();
-    gameResultFindMany.mockReset();
-    transaction.mockReset();
-  });
-
-  it("rejects the wrong confirm phrase", async () => {
-    const result = await purgeLegacyPasswordEraAccounts({
-      actorId: "admin-1",
-      confirm: "delete please",
-    });
-    expect(result).toEqual({
-      ok: false,
-      reason: `Type ${LEGACY_PURGE_CONFIRM_PHRASE} to confirm`,
-      status: 400,
-    });
-    expect(findMany).not.toHaveBeenCalled();
-  });
-
-  it("deletes candidates with the same cascade path as Remove", async () => {
-    findMany.mockResolvedValue([
-      {
-        id: "legacy-1",
-        email: "dust@example.com",
-        displayName: "Dust",
-        createdAt: new Date("2025-01-01T00:00:00.000Z"),
-        role: "PLAYER",
-        passwordHash: "hash",
-        lastLoginAt: null,
-        loginCount: 0,
-      },
-    ]);
-    findUnique.mockResolvedValue({
-      id: "legacy-1",
-      email: "dust@example.com",
-      role: "PLAYER",
-    });
-    tournamentFindMany.mockResolvedValue([]);
-    transaction.mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
-      await fn({
-        tournament: { deleteMany: vi.fn() },
-        gameResult: { deleteMany: vi.fn() },
-        tournamentPlayer: { deleteMany: vi.fn() },
-        user: { delete: vi.fn() },
-      });
-    });
-
-    const result = await purgeLegacyPasswordEraAccounts({
-      actorId: "admin-1",
-      confirm: LEGACY_PURGE_CONFIRM_PHRASE,
-    });
-    expect(result).toEqual({
-      ok: true,
-      deleted: 1,
-      emails: ["dust@example.com"],
-    });
   });
 });
