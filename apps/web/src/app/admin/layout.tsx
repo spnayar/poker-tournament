@@ -10,7 +10,7 @@ export default async function AdminLayout({
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
-    redirect("/login");
+    redirect(`/login?callbackUrl=${encodeURIComponent("/admin")}`);
   }
 
   const admin = await loadAdminActor();

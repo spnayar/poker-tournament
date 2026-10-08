@@ -15,6 +15,12 @@ import {
   SETTLE_UP_DISCLAIMER,
   type SettleUpMethod,
 } from "@/lib/settleUp";
+import { RecapEmailPreview } from "@/components/RecapEmailPreview";
+import {
+  clearRecapPreviewHtml,
+  readRecapPreviewHtml,
+  storeRecapPreviewHtml,
+} from "@/lib/recapPreview";
 
 interface GameResult {
   userId: string;
@@ -111,6 +117,7 @@ function ResultsContent() {
     Record<string, SettleUpMethod[]>
   >({});
   const [actionLoading, setActionLoading] = useState(false);
+  const [recapPreviewHtml, setRecapPreviewHtml] = useState<string | null>(null);
 
   const waitingForNextGame =
     status === "authenticated" &&
@@ -146,6 +153,10 @@ function ResultsContent() {
     if (status === "authenticated") load();
   }, [status, load]);
 
+  useEffect(() => {
+    setRecapPreviewHtml(readRecapPreviewHtml(id));
+  }, [id]);
+
   async function startAnother() {
     setActionLoading(true);
     const res = await fetch(`/api/tournaments/${id}`, {
@@ -164,7 +175,16 @@ function ResultsContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "close" }),
     });
+    const data = await res.json().catch(() => ({}));
     if (res.ok) {
+      const preview =
+        typeof data?.recap?.previewHtml === "string"
+          ? data.recap.previewHtml
+          : null;
+      if (preview) {
+        storeRecapPreviewHtml(id, preview);
+        setRecapPreviewHtml(preview);
+      }
       await load();
       router.replace(`/tournament/${id}/results`);
     }
@@ -379,6 +399,16 @@ function ResultsContent() {
           Waiting for the host to start another tournament or end the game night… you&apos;ll
           join the table automatically.
         </p>
+      )}
+
+      {isClosed && recapPreviewHtml && (
+        <RecapEmailPreview
+          html={recapPreviewHtml}
+          onDismiss={() => {
+            clearRecapPreviewHtml(id);
+            setRecapPreviewHtml(null);
+          }}
+        />
       )}
 
       <Link

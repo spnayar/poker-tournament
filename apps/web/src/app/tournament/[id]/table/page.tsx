@@ -487,6 +487,15 @@ export default function TablePage() {
       body: JSON.stringify({ action: "close" }),
     });
     if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const preview =
+        typeof data?.recap?.previewHtml === "string"
+          ? data.recap.previewHtml
+          : null;
+      if (preview) {
+        const { storeRecapPreviewHtml } = await import("@/lib/recapPreview");
+        storeRecapPreviewHtml(tournamentId, preview);
+      }
       router.push(`/tournament/${tournamentId}/results`);
     }
     setHostActionLoading(false);
@@ -595,7 +604,7 @@ export default function TablePage() {
             />
           )}
           <div className="flex-1 flex flex-col lg:flex-row gap-4 items-stretch min-h-0">
-            <div className="flex-1 flex items-center justify-center min-w-0 min-h-0 lg:min-h-0 max-sm:flex-none max-sm:h-[min(26dvh,170px)] max-sm:max-h-[min(26dvh,170px)] max-sm:overflow-hidden">
+            <div className="flex-1 flex items-center justify-center min-w-0 min-h-0 lg:min-h-0 max-sm:flex-none max-sm:h-[min(22dvh,140px)] max-sm:max-h-[min(22dvh,140px)] max-sm:overflow-hidden">
               <div
                 className={`relative w-full max-w-3xl${
                   shownCards.length > 0 ? " mb-4" : ""
@@ -687,6 +696,11 @@ export default function TablePage() {
                 disabled={actionPending}
                 waitingLabel={waitingLabel}
                 awayBanner={awayBanner}
+                actionDeadlineAt={
+                  mySeat && mySeat.seatId === tableState.currentActorSeat
+                    ? (tableState.actionDeadlineAt ?? null)
+                    : null
+                }
               />
             )}
           </div>

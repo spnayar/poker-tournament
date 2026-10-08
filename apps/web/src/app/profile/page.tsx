@@ -56,26 +56,44 @@ export default function ProfilePage() {
   const [settleSaving, setSettleSaving] = useState(false);
   const [settleError, setSettleError] = useState("");
   const [settleSaved, setSettleSaved] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
   useEffect(() => {
-    if (status === "authenticated") {
-      fetch("/api/profile")
-        .then((r) => r.json())
-        .then((data) => {
-          setStats(data.stats);
-          setHistory(data.history ?? []);
-          setUser(data.user ?? null);
-          setNameDraft(data.user?.displayName ?? "");
-          const methods = (data.user?.settleUpMethods ?? []) as SettleUpMethod[];
-          const draft: Partial<Record<SettleUpProvider, string>> = {};
-          for (const m of methods) draft[m.provider] = m.contact;
-          setSettleDraft(draft);
-        });
-    }
+    if (status !== "authenticated") return;
+    let cancelled = false;
+    setLoadError("");
+    fetch("/api/profile")
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw new Error(data.error || "Could not load profile");
+        }
+        return data;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setStats(data.stats);
+        setHistory(data.history ?? []);
+        setUser(data.user ?? null);
+        setNameDraft(data.user?.displayName ?? "");
+        const methods = (data.user?.settleUpMethods ?? []) as SettleUpMethod[];
+        const draft: Partial<Record<SettleUpProvider, string>> = {};
+        for (const m of methods) draft[m.provider] = m.contact;
+        setSettleDraft(draft);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadError(
+          err instanceof Error ? err.message : "Could not load profile"
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [status]);
 
   const handleAvatarSelect = useCallback(
@@ -153,6 +171,24 @@ export default function ProfilePage() {
     setSettleDraft(draft);
     setSettleSaved(true);
     setTimeout(() => setSettleSaved(false), 2000);
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-6">
+        <p className="text-red-400 text-center">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
+        >
+          Retry
+        </button>
+        <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline">
+          ← Back to dashboard
+        </Link>
+      </div>
+    );
   }
 
   if (!stats || !user) {
@@ -345,7 +381,7 @@ export default function ProfilePage() {
           <p className="text-red-400 text-sm mt-2">{settleError}</p>
         )}
         {settleSaved && (
-          <p className="text-emerald-400 text-sm mt-2">Settle-up updated.</p>
+          <p className="text-emerald-400 text-sm mt-2">Saved.</p>
         )}
       </section>
 

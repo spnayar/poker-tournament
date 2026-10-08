@@ -6,8 +6,10 @@ export function getAvatarUrl(seed: string, avatarUrl?: string | null): string {
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}`;
 }
 
+/** Format ledger cents as currency. Negatives render as `-$8.00`, not `$-8.00`. */
 export function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  const abs = (Math.abs(cents) / 100).toFixed(2);
+  return cents < 0 ? `-$${abs}` : `$${abs}`;
 }
 
 export const LEDGER_DISCLAIMER =

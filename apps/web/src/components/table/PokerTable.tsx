@@ -147,17 +147,16 @@ export function PlayerSeat({
         )}
       </div>
 
-      <p className="text-xs font-medium mt-1 max-w-[80px] truncate">
+      <p className="text-[10px] sm:text-xs font-medium mt-0.5 sm:mt-1 max-w-[64px] sm:max-w-[80px] truncate">
         {seat.displayName}
       </p>
       {seat.lastAction ? (
-        <p className="text-[10px] text-slate-400 max-w-[88px] truncate">
+        <p className="text-[9px] sm:text-[10px] text-slate-400 max-w-[64px] sm:max-w-[88px] truncate max-sm:hidden">
           {seat.lastAction}
         </p>
       ) : null}
       <p className="text-xs text-amber-400 font-mono">
         {seat.chipCount.toLocaleString()}
-        {seat.allIn && " (AI)"}
       </p>
 
       {seat.betThisRound > 0 && (

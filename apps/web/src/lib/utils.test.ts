@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { getAvatarUrl } from "./utils";
+import { formatCents, getAvatarUrl } from "./utils";
+
+describe("formatCents", () => {
+  it("formats positives with a leading dollar sign", () => {
+    expect(formatCents(800)).toBe("$8.00");
+    expect(formatCents(0)).toBe("$0.00");
+  });
+
+  it("formats negatives as -$X.XX not $-X.XX", () => {
+    expect(formatCents(-800)).toBe("-$8.00");
+    expect(formatCents(-28_00)).toBe("-$28.00");
+  });
+});
 
 describe("getAvatarUrl", () => {
   it("rewrites a saved DiceBear picker URL to the local asset", () => {

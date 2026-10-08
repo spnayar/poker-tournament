@@ -49,8 +49,20 @@ describe("night recap preview writer", () => {
         tournamentCount: 2,
         totalHands: 47,
         winners: [
-          { displayName: "Alice", gameNumber: 1, payoutCents: 4000 },
-          { displayName: "Alice", gameNumber: 2, payoutCents: 3000 },
+          {
+            displayName: "Alice",
+            gameNumber: 1,
+            payoutCents: 4000,
+            buyInCents: 2000,
+            netCents: 2000,
+          },
+          {
+            displayName: "Alice",
+            gameNumber: 2,
+            payoutCents: 3000,
+            buyInCents: 2000,
+            netCents: 1000,
+          },
         ],
         itm: [{ displayName: "Alice", count: 2 }],
         handsWon: [
