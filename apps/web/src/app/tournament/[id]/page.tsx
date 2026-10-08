@@ -164,9 +164,18 @@ export default function TournamentLobbyPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "close" }),
     });
-    if (res.ok) router.push(`/tournament/${id}/results`);
-    else {
-      const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const preview =
+        typeof data?.recap?.previewHtml === "string"
+          ? data.recap.previewHtml
+          : null;
+      if (preview) {
+        const { storeRecapPreviewHtml } = await import("@/lib/recapPreview");
+        storeRecapPreviewHtml(id, preview);
+      }
+      router.push(`/tournament/${id}/results`);
+    } else {
       alert(data.error || "Could not close");
     }
     setActionLoading(false);

@@ -268,6 +268,7 @@ export async function POST(
         ? {
             recipients: recap.recipients,
             results: recap.results,
+            previewHtml: recap.previewHtml,
           }
         : null,
     });

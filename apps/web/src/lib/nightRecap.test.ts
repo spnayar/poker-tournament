@@ -49,8 +49,20 @@ function samplePayload(): NightRecapPayload {
       tournamentCount: 2,
       totalHands: 47,
       winners: [
-        { displayName: "Alice", gameNumber: 1, payoutCents: 4000 },
-        { displayName: "Alice", gameNumber: 2, payoutCents: 3000 },
+        {
+          displayName: "Alice",
+          gameNumber: 1,
+          payoutCents: 4000,
+          buyInCents: 2000,
+          netCents: 2000,
+        },
+        {
+          displayName: "Alice",
+          gameNumber: 2,
+          payoutCents: 3000,
+          buyInCents: 2000,
+          netCents: 1000,
+        },
       ],
       itm: [{ displayName: "Alice", count: 2 }],
       handsWon: [
@@ -111,6 +123,26 @@ describe("night recap email", () => {
     expect(html.indexOf("Night settlement")).toBeLessThan(
       html.indexOf("Fun facts")
     );
+  });
+
+  it("highlights winner net with payout and buy-in, not stacked gross", () => {
+    const html = buildNightRecapHtml(samplePayload());
+    expect(html).toContain("Alice");
+    expect(html).toContain("won");
+    expect(html).toContain("Tournament #1");
+    expect(html).toContain("+$20.00");
+    expect(html).toContain("$40.00 payout on a $20.00 buy-in");
+    expect(html).not.toContain("stacked for");
+    const text = buildNightRecapText(samplePayload());
+    expect(text).toContain(
+      "Alice won Tournament #1, +$20.00 ($40.00 payout on a $20.00 buy-in)"
+    );
+  });
+
+  it("formats negative ledger nets as -$X.XX", () => {
+    const html = buildNightRecapHtml(samplePayload());
+    expect(html).toContain("-$30.00");
+    expect(html).not.toContain("$-30.00");
   });
 
   it("builds plain text with pay-outs, fun facts, and CTA", () => {

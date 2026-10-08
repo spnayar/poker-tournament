@@ -9,6 +9,8 @@ interface ActionPanelProps {
   disabled?: boolean;
   waitingLabel?: string;
   awayBanner?: string | null;
+  /** Action timer deadline (ms); warned while confirming all-in. */
+  actionDeadlineAt?: number | null;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -56,7 +58,25 @@ export function ActionPanel({
   disabled,
   waitingLabel = "Waiting for other players...",
   awayBanner = null,
+  actionDeadlineAt = null,
 }: ActionPanelProps) {
+  const [amountInput, setAmountInput] = useState("");
+  const [showAllIn, setShowAllIn] = useState(false);
+  const [showCustomBet, setShowCustomBet] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!actionDeadlineAt || !showAllIn) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [actionDeadlineAt, showAllIn]);
+
+  const actionSecondsLeft =
+    actionDeadlineAt && showAllIn
+      ? Math.max(0, Math.ceil((actionDeadlineAt - nowMs) / 1000))
+      : null;
+
   const canWager = legal?.canBet || legal?.canRaise;
   const wagerMin = legal?.canBet ? legal.minBet : (legal?.minRaiseTo ?? 0);
   const wagerMax = legal?.canBet
@@ -68,10 +88,6 @@ export function ActionPanel({
   const raise3x = legal ? wagerTargetForMultiplier(legal, 3) : null;
   const showQuickRaises =
     legal && (legal.canRaise || legal.canBet) && (raise2x !== null || raise3x !== null);
-
-  const [amountInput, setAmountInput] = useState("");
-  const [showAllIn, setShowAllIn] = useState(false);
-  const [showCustomBet, setShowCustomBet] = useState(false);
 
   useEffect(() => {
     if (canWager) {
@@ -243,7 +259,7 @@ export function ActionPanel({
       )}
 
       {legal.canAllIn && (
-        <div className="text-center">
+        <div className="text-center space-y-1">
           {!showAllIn ? (
             <button
               type="button"
@@ -254,14 +270,28 @@ export function ActionPanel({
               All-in ({legal.allInAmount.toLocaleString()})
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={() => onAction({ type: "all-in" })}
-              disabled={disabled}
-              className="text-sm px-4 py-1.5 text-amber-400/90 border border-amber-600/40 rounded-lg hover:bg-amber-950/40 disabled:opacity-50"
-            >
-              Confirm all-in ({legal.allInAmount.toLocaleString()})
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => onAction({ type: "all-in" })}
+                disabled={disabled}
+                className="text-sm px-4 py-1.5 text-amber-400/90 border border-amber-600/40 rounded-lg hover:bg-amber-950/40 disabled:opacity-50"
+              >
+                Confirm all-in ({legal.allInAmount.toLocaleString()})
+              </button>
+              {actionSecondsLeft !== null && (
+                <p
+                  className={`text-[11px] ${
+                    actionSecondsLeft <= 10
+                      ? "text-red-400 font-medium"
+                      : "text-amber-300/90"
+                  }`}
+                >
+                  Timer still running — {actionSecondsLeft}s left. If it hits
+                  zero you fold and sit out.
+                </p>
+              )}
+            </>
           )}
         </div>
       )}

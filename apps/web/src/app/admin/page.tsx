@@ -374,7 +374,8 @@ export default function AdminPage() {
             {usage.range.granularity === "month"
               ? " by month"
               : " by day"}
-            . Lifetime totals stay on the left cards.
+            . Lifetime totals stay on the left cards. “Active logins” counts
+            distinct users who signed in that {unit} (UTC), not new signups.
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             {[
@@ -427,7 +428,7 @@ export default function AdminPage() {
           </div>
           <div className="grid md:grid-cols-2 gap-4 mb-4">
             <UsageSeriesCard
-              title={`Users / ${unit}`}
+              title={`Active logins / ${unit}`}
               points={usage.series.users}
             />
             <UsageSeriesCard
@@ -485,7 +486,7 @@ export default function AdminPage() {
           <section className="mb-10">
             <h2 className="text-xl font-semibold mb-4">Accounts</h2>
             <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full text-sm min-w-[64rem]">
+              <table className="w-full text-sm min-w-[56rem]">
                 <thead className="bg-slate-900 text-slate-400 text-left">
                   <tr>
                     <th className="px-3 py-2 font-medium">Player</th>
@@ -496,7 +497,7 @@ export default function AdminPage() {
                     <th className="px-3 py-2 font-medium">Tournaments</th>
                     <th className="px-3 py-2 font-medium">Ledger</th>
                     <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium" />
+                    <th className="px-3 py-2 font-medium text-right">Remove</th>
                   </tr>
                 </thead>
                 <tbody>

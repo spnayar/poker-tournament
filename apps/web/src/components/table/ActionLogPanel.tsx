@@ -100,7 +100,7 @@ export function ActionLogPanel({
   }, [actionLog]);
 
   return (
-    <aside className="w-full lg:w-72 shrink-0 bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col max-h-[min(70vh,520px)] min-h-[240px] max-sm:min-h-[180px] max-sm:flex-1 max-sm:max-h-none overflow-hidden">
+    <aside className="w-full lg:w-72 shrink-0 bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col max-h-[min(70vh,520px)] min-h-[240px] max-sm:min-h-[120px] max-sm:flex-1 max-sm:max-h-none overflow-hidden relative z-0">
       <div className="mb-3 max-sm:mb-1.5 shrink-0">
         <h2 className="text-sm font-semibold text-slate-200">Action Log</h2>
         <p className="text-xs text-slate-500 mt-0.5 max-sm:hidden">

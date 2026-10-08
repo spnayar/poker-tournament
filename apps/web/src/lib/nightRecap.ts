@@ -36,7 +36,13 @@ export type NightRecapNamedCount = {
 export type NightRecapStats = {
   tournamentCount: number;
   totalHands: number;
-  winners: { displayName: string; gameNumber: number; payoutCents: number }[];
+  winners: {
+    displayName: string;
+    gameNumber: number;
+    payoutCents: number;
+    buyInCents: number;
+    netCents: number;
+  }[];
   itm: NightRecapNamedCount[];
   /** Hands won across the night (any pot share counts as a hand won). */
   handsWon: NightRecapNamedCount[];
@@ -137,8 +143,9 @@ export function buildNightRecapText(payload: NightRecapPayload): string {
     `Hands dealt: ${payload.stats.totalHands}`
   );
   for (const w of payload.stats.winners) {
+    const netSign = w.netCents >= 0 ? "+" : "";
     lines.push(
-      `${formatSessionLabelShort(w.gameNumber)} winner: ${w.displayName} (${formatCents(w.payoutCents)})`
+      `${w.displayName} won ${formatSessionLabelShort(w.gameNumber)}, ${netSign}${formatCents(w.netCents)} (${formatCents(w.payoutCents)} payout on a ${formatCents(w.buyInCents)} buy-in)`
     );
   }
   if (payload.stats.itm.length > 0) {
@@ -277,10 +284,11 @@ function renderStatsBlock(stats: NightRecapStats): string {
     stats.winners.length === 0
       ? `<li>No finished tournaments — just good company.</li>`
       : stats.winners
-          .map(
-            (w) =>
-              `<li><strong style="color:#fbbf24;">${escapeHtml(formatSessionLabelShort(w.gameNumber))}</strong> — ${escapeHtml(w.displayName)} stacked for ${escapeHtml(formatCents(w.payoutCents))}</li>`
-          )
+          .map((w) => {
+            const netSign = w.netCents >= 0 ? "+" : "";
+            const netColor = w.netCents >= 0 ? "#34d399" : "#f87171";
+            return `<li><strong style="color:#e2e8f0;">${escapeHtml(w.displayName)}</strong> won <strong style="color:#fbbf24;">${escapeHtml(formatSessionLabelShort(w.gameNumber))}</strong>, <span style="color:${netColor};font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;">${netSign}${escapeHtml(formatCents(w.netCents))}</span> <span style="color:#94a3b8;">(${escapeHtml(formatCents(w.payoutCents))} payout on a ${escapeHtml(formatCents(w.buyInCents))} buy-in)</span></li>`;
+          })
           .join("");
 
   const funFacts: string[] = [];
@@ -505,10 +513,14 @@ export async function buildNightRecapPayload(
 
   const winners = tournament.games.map((g) => {
     const winner = g.results.find((r) => r.finishPosition === 1);
+    const payoutCents = winner?.payoutCents ?? 0;
+    const buyInCents = tournament.buyInCents;
     return {
       displayName: winner?.user.displayName ?? "Unknown",
       gameNumber: g.gameNumber,
-      payoutCents: winner?.payoutCents ?? 0,
+      payoutCents,
+      buyInCents,
+      netCents: payoutCents - buyInCents,
     };
   });
 
