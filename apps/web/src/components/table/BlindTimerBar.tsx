@@ -55,40 +55,40 @@ export function BlindTimerBar({
       : "Next";
 
   return (
-    <div className="relative z-50 bg-slate-900/95 border border-slate-800/90 rounded-lg px-2.5 py-1 mb-1.5 shrink-0">
+    <div className="table-chrome relative z-50 rounded-md px-2 py-1 mb-1.5 shrink-0">
       <div className="flex flex-nowrap items-center gap-2 sm:gap-3 min-w-0">
-        <div className="min-w-0 shrink">
-          <p className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider leading-none">
+        <div className="min-w-0 shrink flex items-baseline gap-1.5">
+          <span className="text-[10px] text-slate-500 tracking-wide">
             L{timer.levelNumber}
-          </p>
-          <p className="text-sm sm:text-base font-semibold text-emerald-400 font-mono tabular-nums leading-tight">
+          </span>
+          <span className="text-sm font-semibold text-emerald-400 font-mono tabular-nums leading-none">
             {timer.currentSb}/{timer.currentBb}
-          </p>
+          </span>
         </div>
 
-        <div className="text-center min-w-0 shrink">
-          <p className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider leading-none">
+        <div className="min-w-0 shrink flex items-baseline gap-1.5">
+          <span className="text-[10px] text-slate-500 tracking-wide">
             {timerLabel}
-          </p>
-          <p
-            className={`text-sm sm:text-base font-mono font-bold tabular-nums leading-tight ${
+          </span>
+          <span
+            className={`text-sm font-mono font-semibold tabular-nums leading-none ${
               timer.increasePending ? "text-amber-400" : "text-slate-100"
             }`}
           >
             {timer.increasePending ? "Ready" : formatCountdown(displayRemaining)}
-          </p>
+          </span>
         </div>
 
-        <div className="hidden sm:block text-right text-[11px] min-w-0 shrink text-slate-400">
+        <div className="hidden sm:flex items-baseline gap-1 text-[11px] min-w-0 shrink text-slate-400">
           {timer.nextBb !== null ? (
-            <p>
-              <span className="text-slate-500">Next </span>
-              <span className="font-mono text-slate-300">
+            <>
+              <span className="text-slate-500">Next</span>
+              <span className="font-mono text-slate-300 tabular-nums">
                 {timer.nextSb}/{timer.nextBb}
               </span>
-            </p>
+            </>
           ) : (
-            <p className="text-slate-500">Final</p>
+            <span className="text-slate-500">Final</span>
           )}
         </div>
 
@@ -100,7 +100,7 @@ export function BlindTimerBar({
                   type="button"
                   onClick={onResume}
                   disabled={actionLoading}
-                  className="px-2 py-0.5 text-[11px] sm:text-xs bg-emerald-600 hover:bg-emerald-500 rounded-md font-medium disabled:opacity-50"
+                  className="h-6 px-2 text-[11px] bg-emerald-600 hover:bg-emerald-500 rounded-md font-medium disabled:opacity-50"
                 >
                   Resume
                 </button>
@@ -109,7 +109,7 @@ export function BlindTimerBar({
                   type="button"
                   onClick={onPause}
                   disabled={actionLoading || timer.levelEndsAt === null}
-                  className="px-2 py-0.5 text-[11px] sm:text-xs bg-slate-700 hover:bg-slate-600 rounded-md font-medium disabled:opacity-50"
+                  className="h-6 px-2 text-[11px] bg-slate-700 hover:bg-slate-600 rounded-md font-medium disabled:opacity-50"
                 >
                   Pause
                 </button>
@@ -125,7 +125,7 @@ export function BlindTimerBar({
                     ? "Already at the final level"
                     : `Move to ${timer.nextSb} / ${timer.nextBb} on the next hand`
               }
-              className="px-2 py-0.5 text-[11px] sm:text-xs bg-amber-600 hover:bg-amber-500 rounded-md font-medium disabled:opacity-50"
+              className="h-6 px-2 text-[11px] bg-amber-600 hover:bg-amber-500 rounded-md font-medium disabled:opacity-50"
             >
               {timer.increasePending ? "Set" : "Advance"}
             </button>

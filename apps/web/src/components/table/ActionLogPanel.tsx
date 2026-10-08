@@ -100,14 +100,13 @@ export function ActionLogPanel({
   }, [actionLog]);
 
   return (
-    <aside className="w-full lg:w-64 xl:w-72 shrink-0 bg-slate-900/90 border border-slate-800 rounded-lg p-2 sm:p-3 flex flex-col min-h-0 max-h-full max-sm:flex-1 overflow-hidden relative z-0">
-      <div className="mb-1.5 sm:mb-2 shrink-0">
-        <h2 className="text-xs sm:text-sm font-semibold text-slate-200 tracking-tight">
+    <aside className="table-chrome w-full lg:w-64 xl:w-72 shrink-0 rounded-md p-2 sm:p-2.5 flex flex-col min-h-0 max-h-full max-sm:flex-1 overflow-hidden relative z-0">
+      <div className="mb-1.5 shrink-0 flex items-baseline justify-between gap-2">
+        <h2 className="text-xs font-semibold text-slate-200 tracking-tight">
           Action Log
         </h2>
-        <p className="text-[10px] text-slate-500 mt-0.5">
-          Hand #{handNumber}
-          <span className="max-sm:hidden"> · scroll for earlier</span>
+        <p className="text-[10px] text-slate-500 font-mono tabular-nums">
+          #{handNumber}
         </p>
       </div>
 
@@ -117,7 +116,7 @@ export function ActionLogPanel({
         <ul
           ref={scrollRef}
           onScroll={handleScroll}
-          className="space-y-1 overflow-y-auto flex-1 min-h-0 overscroll-contain"
+          className="table-scroll space-y-0.5 overflow-y-auto flex-1 min-h-0 overscroll-contain"
         >
           {actionLog.map((entry, index) => {
             if (hideAwards && entry.action.startsWith("Wins")) {

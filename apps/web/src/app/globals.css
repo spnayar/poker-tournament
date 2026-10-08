@@ -2,15 +2,35 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
+/*
+  Poker Table Club tokens — slate / emerald / amber.
+  Spacing + type roles follow an Impeccable-style operate density:
+  tight groups, generous separation, restraint in chrome.
+*/
 :root {
   --felt: #1a5c38;
   --felt-dark: #0f3d25;
   --felt-light: #2d7a4f;
-  --rail: rgba(120, 53, 15, 0.55);
-  --chip-amber: #fbbf24;
-  --action-emerald: #34d399;
+  --surface-0: #020617; /* slate-950 */
+  --surface-1: #0f172a; /* slate-900 */
+  --surface-2: #1e293b; /* slate-800 */
+  --hairline: rgba(148, 163, 184, 0.22);
+  --hairline-amber: rgba(251, 191, 36, 0.28);
+  --accent-amber: #fbbf24;
+  --accent-emerald: #34d399;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
   --card-w: 2.75rem;
   --card-h: 3.85rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --type-micro: 0.625rem; /* 10px */
+  --type-caption: 0.75rem; /* 12px */
+  --type-label: 0.8125rem; /* 13px */
+  --type-body: 0.875rem; /* 14px */
 }
 
 @media (min-width: 640px) {
@@ -21,16 +41,31 @@
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 min-h-screen antialiased;
+  @apply min-h-screen antialiased;
+  color: var(--text-primary);
+  background-color: var(--surface-0);
   background-image:
-    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(16, 185, 129, 0.08), transparent 50%),
-    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(245, 158, 11, 0.05), transparent 45%);
+    radial-gradient(ellipse 110% 70% at 50% -18%, rgba(16, 185, 129, 0.09), transparent 52%),
+    radial-gradient(ellipse 70% 45% at 100% 100%, rgba(245, 158, 11, 0.045), transparent 48%);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.005em;
+  line-height: 1.45;
+}
+
+::selection {
+  background: rgba(16, 185, 129, 0.35);
+  color: #f8fafc;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(52, 211, 153, 0.75);
+  outline-offset: 2px;
 }
 
 .font-mono,
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .safe-area-pb {
@@ -49,4 +84,26 @@ body {
   height: 100dvh;
   max-height: 100dvh;
   overflow: hidden;
+}
+
+.table-chrome {
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+}
+
+.table-chrome-amber {
+  border-color: var(--hairline-amber);
+}
+
+/* Subtle internal scrollbars that belong to the dark club palette */
+.table-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.55);
+  border-radius: 999px;
+}
+.table-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }

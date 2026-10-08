@@ -174,9 +174,9 @@ export function HandResultOverlay({
           exit={{ opacity: 0 }}
           transition={{ duration: WINNER_FADE_MS / 1000, ease: "easeOut" }}
         >
-          <div className="w-full max-w-sm bg-slate-950/92 border border-amber-500/45 rounded-xl px-4 py-3 shadow-2xl backdrop-blur-sm">
-            <p className="text-amber-400 text-[10px] font-semibold uppercase tracking-[0.14em] mb-2 text-center">
-              {winners.length > 1 ? "Pot Winners" : "Hand Winner"}
+          <div className="table-chrome table-chrome-amber w-full max-w-sm rounded-lg px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.55)]">
+            <p className="text-amber-400 text-[11px] font-semibold tracking-wide mb-2 text-center">
+              {winners.length > 1 ? "Pot winners" : "Hand winner"}
             </p>
 
             <div className="flex items-center gap-3">

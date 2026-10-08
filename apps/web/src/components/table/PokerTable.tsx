@@ -412,7 +412,7 @@ export function PokerTable({
           key={totalPot}
           initial={{ scale: 1.12 }}
           animate={{ scale: 1 }}
-          className="bg-slate-950/55 border border-amber-500/25 rounded-full px-3 py-0.5 text-amber-300 font-mono text-xs sm:text-sm tabular-nums font-semibold tracking-tight"
+          className="table-chrome table-chrome-amber rounded-full px-3 py-0.5 text-amber-300 font-mono text-xs sm:text-sm tabular-nums font-semibold tracking-tight"
         >
           Pot {totalPot.toLocaleString()}
         </motion.div>
