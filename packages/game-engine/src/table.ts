@@ -23,6 +23,12 @@ import {
   totalPotAmount,
   type PlayerContribution,
 } from "./sidePots";
+import {
+  cloneTableFunStats,
+  compareFiveCardHands,
+  emptyTableFunStats,
+  type TableFunStats,
+} from "./funStats";
 
 export interface TablePlayer {
   seatId: number;
@@ -81,6 +87,8 @@ export class TableEngine {
   private resolvingSkipped = false;
   /** Pot layers from the last showdown / fold-win, kept after bets reset. */
   private lastAwardedPots: PotLayer[] = [];
+  /** Fun-fact counters for night recap (seat-keyed). */
+  private funStats: TableFunStats = emptyTableFunStats();
 
   constructor(config: TableConfig) {
     this.config = config;
@@ -233,6 +241,7 @@ export class TableEngine {
         eligibleSeatIds: [...p.eligibleSeatIds],
         contributorCount: p.contributorCount,
       })),
+      funStats: cloneTableFunStats(this.funStats),
     };
   }
 
@@ -276,7 +285,15 @@ export class TableEngine {
       eligibleSeatIds: [...p.eligibleSeatIds],
       contributorCount: p.contributorCount,
     }));
+    this.funStats = snapshot.funStats
+      ? cloneTableFunStats(snapshot.funStats)
+      : emptyTableFunStats();
     this.pendingEvents = [];
+  }
+
+  /** Aggregated fun-fact stats for this table (seat-keyed). */
+  getFunStats(): TableFunStats {
+    return cloneTableFunStats(this.funStats);
   }
 
   drainEvents(): TableEvent[] {
@@ -924,8 +941,9 @@ export class TableEngine {
     }));
     const result = this.resolvePots(pots);
     this.phase = "hand-complete";
+    const eliminated = this.checkEliminations();
+    this.recordHandStats(result, eliminated);
     this.pendingEvents.push({ type: "handResult", payload: result });
-    this.checkEliminations();
     this.emitState();
   }
 
@@ -992,9 +1010,10 @@ export class TableEngine {
       totalAwarded: total,
     };
     this.phase = "hand-complete";
-    this.pendingEvents.push({ type: "handResult", payload: result });
     this.resetHandBets();
-    this.checkEliminations();
+    const eliminated = this.checkEliminations();
+    this.recordHandStats(result, eliminated);
+    this.pendingEvents.push({ type: "handResult", payload: result });
     this.emitState();
   }
 
@@ -1089,19 +1108,98 @@ export class TableEngine {
     }
   }
 
-  private checkEliminations(): void {
+  /** Mark busted players eliminated; returns newly eliminated seat ids. */
+  private checkEliminations(): number[] {
+    const newlyEliminated: number[] = [];
     for (const p of this.players.values()) {
       if (!p.eliminated && p.chips === 0) {
         p.eliminated = true;
         p.skipped = false;
         p.skipReason = null;
         this.eliminationOrder.push(p.seatId);
+        newlyEliminated.push(p.seatId);
         this.pendingEvents.push({
           type: "elimination",
           payload: { seatId: p.seatId, userId: p.userId },
         });
       }
     }
+    return newlyEliminated;
+  }
+
+  /**
+   * Update fun-fact counters after a hand resolves.
+   * Best-hand uses showdown five-card hands only (public at showdown).
+   */
+  private recordHandStats(
+    result: HandResult,
+    newlyEliminated: number[]
+  ): void {
+    const winnerSeats = [...new Set(result.winners.map((w) => w.seatId))];
+    for (const seatId of winnerSeats) {
+      this.funStats.handsWonBySeat[seatId] =
+        (this.funStats.handsWonBySeat[seatId] ?? 0) + 1;
+    }
+
+    const handNumber = result.handNumber ?? this.handNumber;
+    if (
+      result.totalAwarded > 0 &&
+      result.totalAwarded > (this.funStats.largestPot?.amountChips ?? 0)
+    ) {
+      this.funStats.largestPot = {
+        amountChips: result.totalAwarded,
+        winnerSeatIds: winnerSeats,
+        handNumber,
+      };
+    }
+
+    for (const w of result.winners) {
+      if (w.wonByFold) continue;
+      if (!w.handName) continue;
+      const shown = result.shownCards.find((s) => s.seatId === w.seatId);
+      if (!shown || shown.bestHand.length !== 5) continue;
+      const candidate = shown.bestHand;
+      if (
+        !this.funStats.bestHand ||
+        compareFiveCardHands(candidate, this.funStats.bestHand.cards) > 0
+      ) {
+        this.funStats.bestHand = {
+          seatId: w.seatId,
+          handName: w.handName,
+          cards: [...candidate],
+          handNumber,
+        };
+      }
+    }
+
+    for (const elimSeat of newlyEliminated) {
+      const knocker = this.attributeKnockout(elimSeat, result);
+      if (knocker === null) continue;
+      this.funStats.knockoutsBySeat[knocker] =
+        (this.funStats.knockoutsBySeat[knocker] ?? 0) + 1;
+    }
+  }
+
+  /** Credit knockout to the winner who took the most chips that hand. */
+  private attributeKnockout(
+    elimSeat: number,
+    result: HandResult
+  ): number | null {
+    const amounts = new Map<number, number>();
+    for (const w of result.winners) {
+      if (w.seatId === elimSeat) continue;
+      amounts.set(w.seatId, (amounts.get(w.seatId) ?? 0) + w.amount);
+    }
+    if (amounts.size === 0) return null;
+    let bestSeat = -1;
+    let bestAmt = -1;
+    for (const [seatId, amount] of amounts) {
+      if (amount > bestAmt || (amount === bestAmt && seatId < bestSeat)) {
+        bestAmt = amount;
+        bestSeat = seatId;
+      }
+    }
+    return bestSeat >= 0 ? bestSeat : null;
   }
 
   isTournamentComplete(): boolean {

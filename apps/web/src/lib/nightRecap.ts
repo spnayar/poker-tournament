@@ -1,9 +1,13 @@
 import { prisma } from "@poker/db";
+import { compareFiveCardHands } from "@poker/game-engine";
 import {
   computeNightLedger,
   computeSettleTransfers,
   normalizeGamePayouts,
+  parseGameFunStats,
   parseSettleUpMethods,
+  type Card,
+  type GameFunStats,
   type NightLedgerEntry,
   type SettleTransfer,
   type SettleUpMethod,
@@ -24,11 +28,33 @@ import {
 } from "./settleUp";
 import { formatSessionLabelShort } from "./labels";
 
+export type NightRecapNamedCount = {
+  displayName: string;
+  count: number;
+};
+
 export type NightRecapStats = {
   tournamentCount: number;
   totalHands: number;
   winners: { displayName: string; gameNumber: number; payoutCents: number }[];
-  itm: { displayName: string; count: number }[];
+  itm: NightRecapNamedCount[];
+  /** Hands won across the night (any pot share counts as a hand won). */
+  handsWon: NightRecapNamedCount[];
+  /** Players eliminated by each person. */
+  knockouts: NightRecapNamedCount[];
+  largestPot: {
+    amountChips: number;
+    winnerNames: string[];
+    gameNumber: number;
+    handNumber: number;
+  } | null;
+  bestHand: {
+    displayName: string;
+    handName: string;
+    cards: Card[];
+    gameNumber: number;
+    handNumber: number;
+  } | null;
 };
 
 export type NightRecapPayload = {
@@ -120,6 +146,32 @@ export function buildNightRecapText(payload: NightRecapPayload): string {
       `ITM: ${payload.stats.itm.map((r) => `${r.displayName}×${r.count}`).join(", ")}`
     );
   }
+  if (payload.stats.bestHand) {
+    const bh = payload.stats.bestHand;
+    lines.push(
+      `Best hand of the night: ${bh.displayName} — ${bh.handName} (${formatCardsPlain(bh.cards)})`
+    );
+  }
+  if (payload.stats.largestPot) {
+    const lp = payload.stats.largestPot;
+    lines.push(
+      `Largest pot: ${formatChipCount(lp.amountChips)} chips (${lp.winnerNames.join(" & ")})`
+    );
+  }
+  if (payload.stats.handsWon.length > 0) {
+    lines.push(
+      `Hands won: ${payload.stats.handsWon
+        .map((r) => `${r.displayName} ${r.count}`)
+        .join(", ")}`
+    );
+  }
+  if (payload.stats.knockouts.length > 0) {
+    lines.push(
+      `Most knockouts: ${payload.stats.knockouts
+        .map((r) => `${r.displayName} ${r.count}`)
+        .join(", ")}`
+    );
+  }
 
   lines.push(
     "",
@@ -189,6 +241,37 @@ function renderOwedMethods(payload: NightRecapPayload): string {
     <ul style="margin:0;padding-left:18px;color:#cbd5e1;font-size:14px;line-height:1.5;">${items}</ul>`;
 }
 
+function formatChipCount(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
+const SUIT_SYMBOLS: Record<string, string> = {
+  c: "♣",
+  d: "♦",
+  h: "♥",
+  s: "♠",
+};
+
+/** Plain-text card list for email (showdown five-card hands only). */
+export function formatCardsPlain(cards: Card[]): string {
+  return cards
+    .map((card) => {
+      const rank = card.length === 2 ? card[0]! : card.slice(0, -1);
+      const suit = card[card.length - 1]!;
+      return `${rank}${SUIT_SYMBOLS[suit] ?? suit}`;
+    })
+    .join(" ");
+}
+
+function namedCountLine(rows: NightRecapNamedCount[]): string {
+  return rows
+    .map(
+      (r) =>
+        `<strong style="color:#e2e8f0;">${escapeHtml(r.displayName)}</strong> ${r.count}`
+    )
+    .join(" · ");
+}
+
 function renderStatsBlock(stats: NightRecapStats): string {
   const winnerLines =
     stats.winners.length === 0
@@ -200,6 +283,30 @@ function renderStatsBlock(stats: NightRecapStats): string {
           )
           .join("");
 
+  const funFacts: string[] = [];
+  if (stats.bestHand) {
+    const bh = stats.bestHand;
+    funFacts.push(
+      `<li><span style="color:#94a3b8;">Best hand of the night</span><br/><strong style="color:#e2e8f0;">${escapeHtml(bh.displayName)}</strong> — ${escapeHtml(bh.handName)} <span style="color:#fbbf24;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(formatCardsPlain(bh.cards))}</span></li>`
+    );
+  }
+  if (stats.largestPot) {
+    const lp = stats.largestPot;
+    funFacts.push(
+      `<li><span style="color:#94a3b8;">Largest pot</span><br/><strong style="color:#fbbf24;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(formatChipCount(lp.amountChips))}</strong> chips — ${escapeHtml(lp.winnerNames.join(" & "))}</li>`
+    );
+  }
+  if (stats.handsWon.length > 0) {
+    funFacts.push(
+      `<li><span style="color:#94a3b8;">Hands won</span><br/>${namedCountLine(stats.handsWon)}</li>`
+    );
+  }
+  if (stats.knockouts.length > 0) {
+    funFacts.push(
+      `<li><span style="color:#94a3b8;">Knockout kings</span><br/>${namedCountLine(stats.knockouts)}</li>`
+    );
+  }
+
   const itmLine =
     stats.itm.length > 0
       ? `<p style="color:#94a3b8;font-size:13px;margin:12px 0 0;">In the money: ${stats.itm
@@ -208,6 +315,14 @@ function renderStatsBlock(stats: NightRecapStats): string {
               `${escapeHtml(r.displayName)}${r.count > 1 ? ` (×${r.count})` : ""}`
           )
           .join(", ")}</p>`
+      : "";
+
+  const funFactsBlock =
+    funFacts.length > 0
+      ? `<p style="color:#94a3b8;font-size:13px;margin:16px 0 8px;">Fun facts</p>
+      <ul style="margin:0;padding-left:18px;color:#cbd5e1;font-size:14px;line-height:1.7;">
+        ${funFacts.join("")}
+      </ul>`
       : "";
 
   return `<div style="margin:24px 0;">
@@ -220,7 +335,95 @@ function renderStatsBlock(stats: NightRecapStats): string {
         ${winnerLines}
       </ul>
       ${itmLine}
+      ${funFactsBlock}
     </div>`;
+}
+
+function sortNamedCounts(
+  map: Map<string, NightRecapNamedCount>
+): NightRecapNamedCount[] {
+  return [...map.values()].sort(
+    (a, b) => b.count - a.count || a.displayName.localeCompare(b.displayName)
+  );
+}
+
+function addCounts(
+  target: Map<string, NightRecapNamedCount>,
+  byUserId: Record<string, number>,
+  nameByUserId: Map<string, string>
+): void {
+  for (const [userId, count] of Object.entries(byUserId)) {
+    if (count <= 0) continue;
+    const existing = target.get(userId);
+    if (existing) existing.count += count;
+    else {
+      target.set(userId, {
+        displayName: nameByUserId.get(userId) ?? "Player",
+        count,
+      });
+    }
+  }
+}
+
+/** Merge per-game funStats into night-level highlight fields. */
+export function aggregateNightFunFacts(
+  games: { gameNumber: number; funStats: unknown }[],
+  nameByUserId: Map<string, string>
+): Pick<
+  NightRecapStats,
+  "handsWon" | "knockouts" | "largestPot" | "bestHand"
+> {
+  const handsWon = new Map<string, NightRecapNamedCount>();
+  const knockouts = new Map<string, NightRecapNamedCount>();
+  let largestPot: NightRecapStats["largestPot"] = null;
+  let bestHand: NightRecapStats["bestHand"] = null;
+  let bestCards: Card[] | null = null;
+
+  for (const game of games) {
+    const stats: GameFunStats = parseGameFunStats(game.funStats);
+    addCounts(handsWon, stats.handsWonByUserId, nameByUserId);
+    addCounts(knockouts, stats.knockoutsByUserId, nameByUserId);
+
+    if (
+      stats.largestPot &&
+      stats.largestPot.amountChips >
+        (largestPot?.amountChips ?? 0)
+    ) {
+      largestPot = {
+        amountChips: stats.largestPot.amountChips,
+        winnerNames: stats.largestPot.winnerUserIds.map(
+          (id) => nameByUserId.get(id) ?? "Player"
+        ),
+        gameNumber: game.gameNumber,
+        handNumber: stats.largestPot.handNumber,
+      };
+    }
+
+    if (stats.bestHand) {
+      const cards = stats.bestHand.cards;
+      if (
+        !bestCards ||
+        compareFiveCardHands(cards, bestCards) > 0
+      ) {
+        bestCards = cards;
+        bestHand = {
+          displayName:
+            nameByUserId.get(stats.bestHand.userId) ?? "Player",
+          handName: stats.bestHand.handName,
+          cards: [...cards],
+          gameNumber: game.gameNumber,
+          handNumber: stats.bestHand.handNumber,
+        };
+      }
+    }
+  }
+
+  return {
+    handsWon: sortNamedCounts(handsWon),
+    knockouts: sortNamedCounts(knockouts),
+    largestPot,
+    bestHand,
+  };
 }
 
 export async function buildNightRecapPayload(
@@ -309,7 +512,7 @@ export async function buildNightRecapPayload(
     };
   });
 
-  const itmCounts = new Map<string, { displayName: string; count: number }>();
+  const itmCounts = new Map<string, NightRecapNamedCount>();
   for (const g of tournament.games) {
     for (const r of g.results) {
       if (r.payoutCents <= 0) continue;
@@ -324,6 +527,25 @@ export async function buildNightRecapPayload(
     }
   }
 
+  const nameByUserId = new Map<string, string>();
+  for (const p of tournament.players) {
+    nameByUserId.set(p.userId, p.user.displayName);
+  }
+  nameByUserId.set(tournament.host.id, tournament.host.displayName);
+  for (const g of tournament.games) {
+    for (const r of g.results) {
+      nameByUserId.set(r.userId, r.user.displayName);
+    }
+  }
+
+  const funFacts = aggregateNightFunFacts(
+    tournament.games.map((g) => ({
+      gameNumber: g.gameNumber,
+      funStats: g.funStats,
+    })),
+    nameByUserId
+  );
+
   return {
     nightName: tournament.name,
     ledger,
@@ -334,6 +556,7 @@ export async function buildNightRecapPayload(
       totalHands: tournament.games.reduce((sum, g) => sum + g.handsPlayed, 0),
       winners,
       itm: [...itmCounts.values()].sort((a, b) => b.count - a.count),
+      ...funFacts,
     },
     createUrl: absoluteAppUrl("/dashboard"),
   };

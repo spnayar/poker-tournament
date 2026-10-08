@@ -134,6 +134,8 @@ model Game {
   prizePoolCents Int        @default(0)
   /// Hands dealt in this tournament (no cards stored).
   handsPlayed    Int        @default(0)
+  /// Fun-fact aggregates for night recap (hands won, knockouts, largest pot, best showdown hand).
+  funStats       Json       @default("{}")
   startedAt      DateTime   @default(now())
   finishedAt     DateTime?
 

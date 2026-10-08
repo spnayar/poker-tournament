@@ -3,6 +3,7 @@ import {
   computeNightLedger,
   computeSettleTransfers,
   normalizeGamePayouts,
+  parseGameFunStats,
   parseSettleUpMethods,
 } from "./index";
 
@@ -112,5 +113,29 @@ describe("parseSettleUpMethods", () => {
     ).toHaveLength(2);
     expect(parseSettleUpMethods([{ provider: "VENMO" }])).toEqual([]);
     expect(parseSettleUpMethods(null)).toEqual([]);
+  });
+});
+
+describe("parseGameFunStats", () => {
+  it("accepts valid fun stats and rejects junk", () => {
+    expect(
+      parseGameFunStats({
+        handsWonByUserId: { alice: 3 },
+        knockoutsByUserId: { alice: 1 },
+        largestPot: {
+          amountChips: 1000,
+          winnerUserIds: ["alice"],
+          handNumber: 2,
+        },
+        bestHand: {
+          userId: "alice",
+          handName: "Pair, Aces",
+          cards: ["As", "Ah", "9d", "5c", "2h"],
+          handNumber: 2,
+        },
+      }).handsWonByUserId.alice
+    ).toBe(3);
+    expect(parseGameFunStats(null).largestPot).toBeNull();
+    expect(parseGameFunStats({}).bestHand).toBeNull();
   });
 });

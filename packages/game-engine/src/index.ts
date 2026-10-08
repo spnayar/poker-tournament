@@ -15,3 +15,10 @@ export {
 } from "./handEval";
 export { TableEngine, type TablePlayer, type TableConfig, type TableEvent } from "./table";
 export { tableToSnapshot, tableFromSnapshot, type TableSnapshot } from "./snapshot";
+export {
+  compareFiveCardHands,
+  emptyTableFunStats,
+  cloneTableFunStats,
+  type TableFunStats,
+} from "./funStats";
+export { mapTableFunStatsToGame } from "./mapFunStats";

@@ -1,4 +1,5 @@
 import type { ActionLogEntry, Card, PotLayer, TablePhase } from "@poker/protocol";
+import type { TableFunStats } from "./funStats";
 import { TableEngine, type TableConfig, type TablePlayer } from "./table";
 
 export interface TableSnapshot {
@@ -22,6 +23,7 @@ export interface TableSnapshot {
   postedSbSeat: number | null;
   postedBbSeat: number | null;
   lastAwardedPots?: PotLayer[];
+  funStats?: TableFunStats;
 }
 
 export function tableToSnapshot(table: TableEngine): TableSnapshot {
