@@ -1,0 +1,11 @@
+{
+  "files": ["apps/web/src/app/layout.tsx"],
+  "exclude": [
+    "apps/web/src/lib/emailLayout.ts",
+    "apps/web/src/lib/nightRecap.ts",
+    "apps/web/src/lib/gameNightInvite.ts"
+  ],
+  "insertBefore": "</body>",
+  "commentSyntax": "jsx",
+  "cspChecked": true
+}

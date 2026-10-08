@@ -28,3 +28,16 @@ pnpm db:push      # sync Prisma schema
 
 - `packages/game-engine/src/sidePots.test.ts` — side pot math
 - Verify WS payloads exclude other players' cards before showdown
+
+## Impeccable (design skill)
+
+Cursor skill installed under `.cursor/skills/impeccable`. Durable context: root `PRODUCT.md` + `DESIGN.md`.
+
+```text
+/impeccable polish [surface]   # final design pass
+/impeccable critique [surface] # UX review
+/impeccable audit [surface]    # a11y / quality
+/impeccable document           # refresh DESIGN.md from code
+```
+
+Refresh skills: `npx impeccable update` (Node ≥ 22.18). Hook: `.cursor/hooks.json` runs the design detector before UI edits.
