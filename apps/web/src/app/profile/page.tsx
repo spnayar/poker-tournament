@@ -32,7 +32,7 @@ interface ProfileUser {
 }
 
 export default function ProfilePage() {
-  const { status, update: updateSession } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -133,9 +133,16 @@ export default function ProfilePage() {
     <div className="min-h-screen p-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between gap-3 mb-4">
         <BrandLockup />
-        <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline shrink-0">
-          ← Back
-        </Link>
+        <div className="flex items-center gap-3 shrink-0">
+          {session?.user?.isAdmin && (
+            <Link href="/admin" className="text-slate-400 text-sm hover:text-slate-200">
+              Admin
+            </Link>
+          )}
+          <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline">
+            ← Back
+          </Link>
+        </div>
       </div>
 
       {setupNeeded && (

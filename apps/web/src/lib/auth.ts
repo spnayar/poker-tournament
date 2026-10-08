@@ -2,9 +2,10 @@ import { NextAuthOptions } from "next-auth";
 import EmailProvider from "next-auth/providers/email";
 import jwt from "jsonwebtoken";
 import { headers } from "next/headers";
-import { prisma } from "@poker/db";
+import { prisma, recordUserLogin } from "@poker/db";
 import { createAuthAdapter } from "./auth-adapter";
 import { deliverMagicLink, emailMaxAgeSec } from "./sendMagicLink";
+import { isAdminUser, isAllowlistedAdminEmail } from "./adminAccess";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 /** Match NextAuth session length; refresh near expiry so sockets stay valid. */
@@ -89,6 +90,31 @@ export const authOptions: NextAuthOptions = {
           user.email ?? "",
           user.name ?? ""
         );
+        if (user.id) {
+          try {
+            await recordUserLogin(user.id);
+          } catch (err) {
+            console.error("[auth] recordUserLogin failed", err);
+          }
+        }
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { role: true, email: true },
+          });
+          if (dbUser && isAllowlistedAdminEmail(dbUser.email) && dbUser.role !== "ADMIN") {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { role: "ADMIN" },
+            });
+            token.isAdmin = true;
+          } else {
+            token.isAdmin = dbUser ? isAdminUser(dbUser) : isAllowlistedAdminEmail(user.email);
+          }
+        } catch (err) {
+          console.error("[auth] admin role lookup failed", err);
+          token.isAdmin = isAllowlistedAdminEmail(user.email);
+        }
       }
       if (trigger === "update" && session) {
         if (session.image !== undefined) {
@@ -123,6 +149,7 @@ export const authOptions: NextAuthOptions = {
         session.user.name = (token.name as string | undefined) ?? session.user.name;
         session.user.gameToken = token.gameToken as string;
         session.user.image = (token.picture as string | null) ?? null;
+        session.user.isAdmin = Boolean(token.isAdmin);
       }
       return session;
     },
