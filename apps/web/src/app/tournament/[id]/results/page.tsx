@@ -6,10 +6,15 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
 import { BrandLockup } from "@/components/BrandMark";
-import type { NightLedgerEntry } from "@poker/protocol";
+import type { NightLedgerEntry, SettleTransfer } from "@poker/protocol";
 import { normalizeGamePayouts } from "@poker/protocol";
 import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
 import { formatSessionLabel, formatSessionLabelShort } from "@/lib/labels";
+import {
+  formatSettleUpMethod,
+  SETTLE_UP_DISCLAIMER,
+  type SettleUpMethod,
+} from "@/lib/settleUp";
 
 interface GameResult {
   userId: string;
@@ -20,7 +25,11 @@ interface GameResult {
 
 interface TournamentPlayer {
   userId: string;
-  user: { displayName: string; avatarUrl: string | null };
+  user: {
+    displayName: string;
+    avatarUrl: string | null;
+    settleUpMethods?: SettleUpMethod[];
+  };
 }
 
 interface Game {
@@ -97,6 +106,10 @@ function ResultsContent() {
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [ledger, setLedger] = useState<NightLedgerEntry[]>([]);
+  const [settleTransfers, setSettleTransfers] = useState<SettleTransfer[]>([]);
+  const [settleUpByUserId, setSettleUpByUserId] = useState<
+    Record<string, SettleUpMethod[]>
+  >({});
   const [actionLoading, setActionLoading] = useState(false);
 
   const waitingForNextGame =
@@ -113,6 +126,8 @@ function ResultsContent() {
     if (res.ok) {
       setTournament(data.tournament);
       setLedger(data.ledger ?? []);
+      setSettleTransfers(data.settleTransfers ?? []);
+      setSettleUpByUserId(data.settleUpByUserId ?? {});
       if (
         data.tournament.status !== "FINISHED" &&
         !justFinishedGame &&
@@ -250,32 +265,68 @@ function ResultsContent() {
           <p className="text-xs text-slate-500 mb-3">
             Net ledger across all {finishedGames.length} game
             {finishedGames.length === 1 ? "" : "s"} (
-            {formatCents(tournament.buyInCents)} buy-in each)
+            {formatCents(tournament.buyInCents)} buy-in each).{" "}
+            {SETTLE_UP_DISCLAIMER}
           </p>
           <div className="space-y-2">
-            {ledger.map((row) => (
-              <div
-                key={row.userId}
-                className="flex justify-between items-center py-2 border-b border-slate-800 last:border-0"
-              >
-                <div>
-                  <p className="font-medium">{row.displayName}</p>
-                  <p className="text-xs text-slate-500">
-                    Paid {formatCents(row.totalBuyInCents)} · Won{" "}
-                    {formatCents(row.totalPayoutCents)}
-                  </p>
-                </div>
-                <p
-                  className={`font-mono font-semibold ${
-                    row.netCents >= 0 ? "text-emerald-400" : "text-red-400"
-                  }`}
+            {ledger.map((row) => {
+              const methods = settleUpByUserId[row.userId] ?? [];
+              return (
+                <div
+                  key={row.userId}
+                  className="py-2 border-b border-slate-800 last:border-0"
                 >
-                  {row.netCents >= 0 ? "+" : ""}
-                  {formatCents(row.netCents)}
-                </p>
-              </div>
-            ))}
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">{row.displayName}</p>
+                      <p className="text-xs text-slate-500">
+                        Paid {formatCents(row.totalBuyInCents)} · Won{" "}
+                        {formatCents(row.totalPayoutCents)}
+                      </p>
+                    </div>
+                    <p
+                      className={`font-mono font-semibold ${
+                        row.netCents >= 0 ? "text-emerald-400" : "text-red-400"
+                      }`}
+                    >
+                      {row.netCents >= 0 ? "+" : ""}
+                      {formatCents(row.netCents)}
+                    </p>
+                  </div>
+                  {row.netCents > 0 && (
+                    <p className="text-xs text-amber-400/90 mt-1">
+                      {methods.length > 0
+                        ? `How to pay ${row.displayName}: ${methods.map(formatSettleUpMethod).join(" · ")}`
+                        : `${row.displayName} hasn't set a settle-up method yet`}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
+          {settleTransfers.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-800">
+              <h3 className="text-xs font-semibold text-slate-500 mb-2">
+                Suggested pay-outs
+              </h3>
+              <ul className="space-y-1 text-sm text-slate-300">
+                {settleTransfers.map((t) => (
+                  <li key={`${t.fromUserId}-${t.toUserId}-${t.amountCents}`}>
+                    <span className="font-medium text-slate-100">
+                      {t.fromDisplayName}
+                    </span>{" "}
+                    →{" "}
+                    <span className="font-medium text-slate-100">
+                      {t.toDisplayName}
+                    </span>{" "}
+                    <span className="font-mono text-amber-400">
+                      {formatCents(t.amountCents)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
