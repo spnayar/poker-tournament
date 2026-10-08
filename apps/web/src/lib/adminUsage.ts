@@ -2,8 +2,50 @@ import { prisma, utcDay, utcDayKey, utcMonth, utcMonthKey } from "@poker/db";
 
 export type UsagePoint = { key: string; label: string; count: number };
 
+export type UsageRangeId = "7d" | "14d" | "30d" | "this_month" | "12m";
+
+export type UsageGranularity = "day" | "month";
+
+export type UsageRangeMeta = {
+  id: UsageRangeId;
+  label: string;
+  granularity: UsageGranularity;
+};
+
+export const USAGE_RANGE_OPTIONS: UsageRangeMeta[] = [
+  { id: "7d", label: "Last 7 days", granularity: "day" },
+  { id: "14d", label: "Last 14 days", granularity: "day" },
+  { id: "30d", label: "Last 30 days", granularity: "day" },
+  { id: "this_month", label: "This month", granularity: "day" },
+  { id: "12m", label: "Last 12 months", granularity: "month" },
+];
+
+export function parseUsageRangeId(value: unknown): UsageRangeId {
+  if (
+    value === "7d" ||
+    value === "14d" ||
+    value === "30d" ||
+    value === "this_month" ||
+    value === "12m"
+  ) {
+    return value;
+  }
+  return "14d";
+}
+
+export function usageRangeMeta(id: UsageRangeId): UsageRangeMeta {
+  return USAGE_RANGE_OPTIONS.find((r) => r.id === id) ?? USAGE_RANGE_OPTIONS[1]!;
+}
+
 export type SiteUsage = {
+  range: UsageRangeMeta;
   totals: {
+    users: number;
+    gameNights: number;
+    tournaments: number;
+    hands: number;
+  };
+  period: {
     users: number;
     gameNights: number;
     tournaments: number;
@@ -16,13 +58,7 @@ export type SiteUsage = {
   gameNightsThisMonth: number;
   tournamentsThisMonth: number;
   handsThisMonth: number;
-  daily: {
-    users: UsagePoint[];
-    gameNights: UsagePoint[];
-    tournaments: UsagePoint[];
-    hands: UsagePoint[];
-  };
-  monthly: {
+  series: {
     users: UsagePoint[];
     gameNights: UsagePoint[];
     tournaments: UsagePoint[];
@@ -61,6 +97,45 @@ export function lastUtcMonths(n: number, end: Date = new Date()): Date[] {
       )
     );
   });
+}
+
+/** UTC days from the 1st of the month through today (inclusive). */
+export function daysThisUtcMonth(end: Date = new Date()): Date[] {
+  const endDay = utcDay(end);
+  const start = utcMonth(end);
+  const days: Date[] = [];
+  for (let d = new Date(start); d <= endDay; d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push(new Date(d));
+  }
+  return days;
+}
+
+export function bucketsForRange(
+  rangeId: UsageRangeId,
+  now: Date = new Date()
+): { buckets: Date[]; granularity: UsageGranularity; rangeStart: Date } {
+  switch (rangeId) {
+    case "7d": {
+      const buckets = lastUtcDays(7, now);
+      return { buckets, granularity: "day", rangeStart: buckets[0]! };
+    }
+    case "14d": {
+      const buckets = lastUtcDays(14, now);
+      return { buckets, granularity: "day", rangeStart: buckets[0]! };
+    }
+    case "30d": {
+      const buckets = lastUtcDays(30, now);
+      return { buckets, granularity: "day", rangeStart: buckets[0]! };
+    }
+    case "this_month": {
+      const buckets = daysThisUtcMonth(now);
+      return { buckets, granularity: "day", rangeStart: buckets[0]! };
+    }
+    case "12m": {
+      const buckets = lastUtcMonths(12, now);
+      return { buckets, granularity: "month", rangeStart: buckets[0]! };
+    }
+  }
 }
 
 export function formatDayLabel(d: Date): string {
@@ -187,11 +262,23 @@ function pointCount(points: UsagePoint[], key: string): number {
   return points.find((p) => p.key === key)?.count ?? 0;
 }
 
-export async function loadSiteUsage(now: Date = new Date()): Promise<SiteUsage> {
-  const days = lastUtcDays(14, now);
-  const months = lastUtcMonths(12, now);
-  const dayStart = days[0]!;
-  const monthStart = months[0]!;
+function uniqueUsersInPeriod(rows: { userId: string }[]): number {
+  return new Set(rows.map((r) => r.userId)).size;
+}
+
+export async function loadSiteUsage(
+  now: Date = new Date(),
+  rangeId: UsageRangeId = "14d"
+): Promise<SiteUsage> {
+  const range = usageRangeMeta(rangeId);
+  const { buckets, granularity, rangeStart } = bucketsForRange(rangeId, now);
+
+  // Also load enough history for "this month / last month" snapshot cards.
+  const monthsForSnapshots = lastUtcMonths(2, now);
+  const snapshotStart = monthsForSnapshots[0]!;
+  const queryStart =
+    rangeStart < snapshotStart ? rangeStart : snapshotStart;
+
   const today = utcDay(now);
   const yesterday = new Date(today);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
@@ -215,19 +302,19 @@ export async function loadSiteUsage(now: Date = new Date()): Promise<SiteUsage> 
     prisma.game.count(),
     prisma.game.aggregate({ _sum: { handsPlayed: true } }),
     prisma.userLoginDay.findMany({
-      where: { day: { gte: monthStart } },
+      where: { day: { gte: queryStart } },
       select: { userId: true, day: true },
     }),
     prisma.tournament.findMany({
-      where: { createdAt: { gte: monthStart } },
+      where: { createdAt: { gte: queryStart } },
       select: { createdAt: true },
     }),
     prisma.game.findMany({
-      where: { startedAt: { gte: monthStart } },
+      where: { startedAt: { gte: queryStart } },
       select: { startedAt: true },
     }),
     prisma.siteDayStat.findMany({
-      where: { day: { gte: monthStart } },
+      where: { day: { gte: queryStart } },
       select: { day: true, hands: true },
     }),
   ]);
@@ -236,33 +323,54 @@ export async function loadSiteUsage(now: Date = new Date()): Promise<SiteUsage> 
   const gameDates = games.map((g) => g.startedAt);
   const handAmounts = handDays.map((h) => ({ day: h.day, amount: h.hands }));
 
-  const dailyUsers = uniqueUsersByDay(loginRows, days);
-  const monthlyUsers = uniqueUsersByMonth(loginRows, months);
-  const dailyNights = countByDayKey(
-    nightDates.filter((d) => d >= dayStart),
-    days
+  const periodLogins = loginRows.filter((r) => r.day >= rangeStart);
+  const periodNights = nightDates.filter((d) => d >= rangeStart);
+  const periodGames = gameDates.filter((d) => d >= rangeStart);
+  const periodHands = handAmounts.filter((h) => h.day >= rangeStart);
+
+  const seriesUsers =
+    granularity === "day"
+      ? uniqueUsersByDay(periodLogins, buckets)
+      : uniqueUsersByMonth(periodLogins, buckets);
+  const seriesNights =
+    granularity === "day"
+      ? countByDayKey(periodNights, buckets)
+      : countByMonthKey(periodNights, buckets);
+  const seriesTournaments =
+    granularity === "day"
+      ? countByDayKey(periodGames, buckets)
+      : countByMonthKey(periodGames, buckets);
+  const seriesHands =
+    granularity === "day"
+      ? sumByDayKey(periodHands, buckets)
+      : sumByMonthKey(periodHands, buckets);
+
+  const monthlyUsers = uniqueUsersByMonth(loginRows, monthsForSnapshots);
+  const monthlyNights = countByMonthKey(nightDates, monthsForSnapshots);
+  const monthlyTournaments = countByMonthKey(gameDates, monthsForSnapshots);
+  const monthlyHands = sumByMonthKey(handAmounts, monthsForSnapshots);
+
+  const dailyUsersForSnapshots = uniqueUsersByDay(
+    loginRows,
+    lastUtcDays(2, now)
   );
-  const monthlyNights = countByMonthKey(nightDates, months);
-  const dailyTournaments = countByDayKey(
-    gameDates.filter((d) => d >= dayStart),
-    days
-  );
-  const monthlyTournaments = countByMonthKey(gameDates, months);
-  const dailyHands = sumByDayKey(
-    handAmounts.filter((h) => h.day >= dayStart),
-    days
-  );
-  const monthlyHands = sumByMonthKey(handAmounts, months);
 
   return {
+    range,
     totals: {
       users: userCount,
       gameNights: nightCount,
       tournaments: tournamentCount,
       hands: handAgg._sum.handsPlayed ?? 0,
     },
-    usersToday: pointCount(dailyUsers, utcDayKey(today)),
-    usersYesterday: pointCount(dailyUsers, utcDayKey(yesterday)),
+    period: {
+      users: uniqueUsersInPeriod(periodLogins),
+      gameNights: periodNights.length,
+      tournaments: periodGames.length,
+      hands: periodHands.reduce((sum, h) => sum + h.amount, 0),
+    },
+    usersToday: pointCount(dailyUsersForSnapshots, utcDayKey(today)),
+    usersYesterday: pointCount(dailyUsersForSnapshots, utcDayKey(yesterday)),
     usersThisMonth: pointCount(monthlyUsers, utcMonthKey(thisMonth)),
     usersLastMonth: pointCount(monthlyUsers, utcMonthKey(lastMonth)),
     gameNightsThisMonth: pointCount(monthlyNights, utcMonthKey(thisMonth)),
@@ -271,17 +379,11 @@ export async function loadSiteUsage(now: Date = new Date()): Promise<SiteUsage> 
       utcMonthKey(thisMonth)
     ),
     handsThisMonth: pointCount(monthlyHands, utcMonthKey(thisMonth)),
-    daily: {
-      users: dailyUsers,
-      gameNights: dailyNights,
-      tournaments: dailyTournaments,
-      hands: dailyHands,
-    },
-    monthly: {
-      users: monthlyUsers,
-      gameNights: monthlyNights,
-      tournaments: monthlyTournaments,
-      hands: monthlyHands,
+    series: {
+      users: seriesUsers,
+      gameNights: seriesNights,
+      tournaments: seriesTournaments,
+      hands: seriesHands,
     },
   };
 }

@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  bucketsForRange,
   countByDayKey,
   countByMonthKey,
+  daysThisUtcMonth,
   lastUtcDays,
   lastUtcMonths,
+  parseUsageRangeId,
   uniqueUsersByDay,
   uniqueUsersByMonth,
 } from "./adminUsage";
@@ -22,6 +25,32 @@ describe("usage buckets", () => {
     const months = lastUtcMonths(12, end);
     expect(months[0]!.toISOString().slice(0, 7)).toBe("2025-11");
     expect(months[11]!.toISOString().slice(0, 7)).toBe("2026-10");
+  });
+
+  it("fills this UTC month through today", () => {
+    const end = new Date("2026-10-08T15:00:00.000Z");
+    const days = daysThisUtcMonth(end);
+    expect(days[0]!.toISOString().slice(0, 10)).toBe("2026-10-01");
+    expect(days[days.length - 1]!.toISOString().slice(0, 10)).toBe(
+      "2026-10-08"
+    );
+    expect(days).toHaveLength(8);
+  });
+
+  it("resolves range presets to day or month buckets", () => {
+    const end = new Date("2026-10-08T15:00:00.000Z");
+    expect(bucketsForRange("7d", end).buckets).toHaveLength(7);
+    expect(bucketsForRange("30d", end).buckets).toHaveLength(30);
+    expect(bucketsForRange("this_month", end).granularity).toBe("day");
+    expect(bucketsForRange("12m", end).granularity).toBe("month");
+    expect(bucketsForRange("12m", end).buckets).toHaveLength(12);
+  });
+
+  it("parses range ids with a 14d default", () => {
+    expect(parseUsageRangeId("7d")).toBe("7d");
+    expect(parseUsageRangeId("this_month")).toBe("this_month");
+    expect(parseUsageRangeId("nope")).toBe("14d");
+    expect(parseUsageRangeId(null)).toBe("14d");
   });
 
   it("counts events by day and month", () => {
