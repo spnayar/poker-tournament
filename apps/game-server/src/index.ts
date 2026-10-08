@@ -9,7 +9,7 @@ import express from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
 import Redis from "ioredis";
-import { prisma } from "@poker/db";
+import { prisma, incrementHandsPlayed } from "@poker/db";
 import { TableEngine, type TableSnapshot } from "@poker/game-engine";
 import {
   ClientEvents,
@@ -554,6 +554,11 @@ async function startNextHand(
   await applyPendingBlindIncrease(room);
   const started = room.table.startHand();
   if (!started) return false;
+  try {
+    await incrementHandsPlayed(room.gameId);
+  } catch (err) {
+    console.error("Could not record hand count:", err);
+  }
 
   await afterAction(tournamentId, room);
   broadcastBlindTimer(tournamentId, room);
@@ -743,6 +748,11 @@ async function beginGame(tournamentId: string): Promise<boolean> {
     await applyPendingBlindIncrease(room);
     const started = room.table.startHand();
     if (!started) return false;
+    try {
+      await incrementHandsPlayed(room.gameId);
+    } catch (err) {
+      console.error("Could not record hand count:", err);
+    }
 
     if (room.table.getPublicState().handNumber === 1) {
       room.blindTimer.startLevelTimer();

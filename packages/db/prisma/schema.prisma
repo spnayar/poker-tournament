@@ -7,6 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  PLAYER
+  ADMIN
+}
+
+enum AccountStatus {
+  FREE
+  PAID
+}
+
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
@@ -18,11 +28,34 @@ model User {
   avatarUrl     String?
   emailVerified DateTime?
   createdAt     DateTime  @default(now())
+  role          UserRole       @default(PLAYER)
+  /// Label only until billing exists. Not a payment record.
+  accountStatus AccountStatus  @default(FREE)
+  lastLoginAt   DateTime?
+  loginCount    Int            @default(0)
 
   hostedTournaments Tournament[]       @relation("Host")
   tournamentPlayers TournamentPlayer[]
   gameResults       GameResult[]
   stats             UserStats?
+  loginDays         UserLoginDay[]
+}
+
+/// One row per user per UTC day they successfully signed in (magic-link).
+model UserLoginDay {
+  userId String
+  day    DateTime @db.Date
+  count  Int      @default(1)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
+}
+
+/// Site-wide counters keyed by UTC date. Hands only — nights/tournaments use existing tables.
+model SiteDayStat {
+  day   DateTime @id @db.Date
+  hands Int      @default(0)
 }
 
 /// NextAuth Email provider one-time tokens (hashed). JWT sessions stay in cookies.
@@ -97,6 +130,8 @@ model Game {
   gameNumber     Int
   status         GameStatus @default(RUNNING)
   prizePoolCents Int        @default(0)
+  /// Hands dealt in this tournament (no cards stored).
+  handsPlayed    Int        @default(0)
   startedAt      DateTime   @default(now())
   finishedAt     DateTime?
 

@@ -44,6 +44,10 @@ Confirm the web process loaded the key: open http://localhost:3000/api/health â€
 
 Leave Microsoft 365 on the apex domain; app mail uses the `mail.` subdomain.
 
+## Admin
+
+Site owner tools live at `/admin` on Sanjayâ€™s existing magic-link user (`User.role` plus `ADMIN_EMAILS`). There is no second password. `spnayar@gmail.com` and `info@pokertableclub.com` are always treated as admins (env allowlist can add more). Non-admins get a normal 404. From admin you can list accounts, set free/paid (label only), invite a player by email, and see site-wide usage. Do not advertise the URL.
+
 ## Development
 
 ```bash

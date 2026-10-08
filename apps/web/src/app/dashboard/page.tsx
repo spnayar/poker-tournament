@@ -228,6 +228,14 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between gap-3 mb-6">
           <BrandLockup />
           <div className="flex gap-3 shrink-0">
+            {session?.user?.isAdmin && (
+              <Link
+                href="/admin"
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
+              >
+                Admin
+              </Link>
+            )}
             <Link
               href="/profile"
               className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm"
