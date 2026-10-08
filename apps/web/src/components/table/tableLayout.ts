@@ -22,19 +22,19 @@ export function getVisualSeatIndex(
 function ellipseRadii(total: number, compact: boolean): { rx: number; ry: number } {
   const crowded = total >= 6;
   if (compact) {
-    // Keep radius generous enough that 6–7 seats don't collapse inward.
-    return { rx: crowded ? 36 : 34, ry: crowded ? 30 : 28 };
+    return { rx: crowded ? 38 : 34, ry: crowded ? 32 : 28 };
   }
-  return { rx: crowded ? 41 : 42, ry: crowded ? 34 : 35 };
+  return { rx: crowded ? 43 : 42, ry: crowded ? 36 : 35 };
 }
 
 export function heroBottomY(compact = false): number {
-  return compact ? 70 : 74;
+  // Keep hero high enough that full hole cards clear the felt edge.
+  return compact ? 66 : 68;
 }
 
 /**
- * Ellipse seat positions. The viewer is pinned to true 6 o'clock separately
- * so hole cards stay clear of the container clip edge.
+ * Ellipse seat positions for non-hero seats. Angles skip the reserved
+ * bottom arc so neighbors don't sit on top of the pinned viewer.
  */
 export function getSeatPosition(
   visualIndex: number,
@@ -46,8 +46,8 @@ export function getSeatPosition(
   let y = 50 + ry * Math.sin(angle);
   const x = 50 + rx * Math.cos(angle);
 
-  const maxBottomY = compact ? 78 : 82;
-  const minTopY = compact ? 18 : 14;
+  const maxBottomY = heroBottomY(compact) - 6;
+  const minTopY = compact ? 16 : 12;
   y = Math.min(maxBottomY, Math.max(minTopY, y));
 
   return { x, y };
@@ -75,7 +75,7 @@ export function seatAnchorTransformForViewer(
   total: number,
   isViewer: boolean
 ): string {
-  if (isViewer) return "translate(-50%, -92%)";
+  if (isViewer) return "translate(-50%, -100%)";
   return seatAnchorTransform(visualIndex, total);
 }
 
@@ -92,6 +92,10 @@ export function getViewerSortedSeatIndex(
   return -1;
 }
 
+/**
+ * Place opponents on an open arc that leaves the bottom for the hero.
+ * visualIndex 0 is top; hero is excluded and pinned to 6 o'clock.
+ */
 export function getSeatPositionForViewer(
   sortedSeatIndex: number,
   total: number,
@@ -106,20 +110,33 @@ export function getSeatPositionForViewer(
   const isViewer =
     viewerSortedSeatIndex >= 0 && sortedSeatIndex === viewerSortedSeatIndex;
 
-  if (isViewer) {
-    return {
-      x: 50,
-      y: heroBottomY(compact),
-      visualIndex,
-      isViewer: true,
-    };
+  if (isViewer || viewerSortedSeatIndex < 0) {
+    if (isViewer) {
+      return {
+        x: 50,
+        y: heroBottomY(compact),
+        visualIndex,
+        isViewer: true,
+      };
+    }
+    const pos = getSeatPosition(visualIndex, total, compact);
+    return { ...pos, visualIndex, isViewer: false };
   }
 
-  const pos = getSeatPosition(visualIndex, total, compact);
-  // Nudge seats that land near 6 o'clock away from the pinned hero.
-  if (Math.abs(pos.x - 50) < 8 && pos.y > heroBottomY(compact) - 10) {
-    pos.x = pos.x < 50 ? 38 : 62;
-    pos.y = Math.min(pos.y, heroBottomY(compact) - 8);
-  }
-  return { ...pos, visualIndex, isViewer: false };
+  // Re-index the other seats across the top arc (exclude bottom).
+  const others = total - 1;
+  const orderAmongOthers =
+    (sortedSeatIndex - viewerSortedSeatIndex - 1 + total) % total;
+  // Sweep from ~200° to ~-20° (left-bottomish through top to right-bottomish),
+  // never occupying exact 6 o'clock.
+  const start = (-Math.PI / 2) + (Math.PI * 0.28);
+  const end = (-Math.PI / 2) + (Math.PI * 1.72);
+  const t = others <= 1 ? 0.5 : orderAmongOthers / (others - 1);
+  const angle = start + (end - start) * t;
+  const { rx, ry } = ellipseRadii(total, compact);
+  let x = 50 + rx * Math.cos(angle);
+  let y = 50 + ry * Math.sin(angle);
+  y = Math.min(heroBottomY(compact) - 8, Math.max(compact ? 16 : 12, y));
+
+  return { x, y, visualIndex, isViewer: false };
 }
