@@ -28,8 +28,9 @@ function ellipseRadii(total: number, compact: boolean): { rx: number; ry: number
 }
 
 export function heroBottomY(compact = false): number {
-  // Keep hero high enough that full hole cards clear the felt edge.
-  return compact ? 66 : 68;
+  // Anchor at the bottom of the felt; seat uses translateY(-100%) so the
+  // hole-card row sits on this line and the avatar stacks upward.
+  return compact ? 92 : 94;
 }
 
 /**

@@ -20,6 +20,7 @@ describe("tableLayout", () => {
     expect(hero.isViewer).toBe(true);
     expect(hero.x).toBe(50);
     expect(hero.y).toBe(heroBottomY(false));
+    expect(hero.y).toBeGreaterThanOrEqual(90);
     expect(seatAnchorTransformForViewer(hero.visualIndex, 7, true)).toBe(
       "translate(-50%, -100%)"
     );
