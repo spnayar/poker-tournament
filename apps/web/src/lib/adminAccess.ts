@@ -42,6 +42,32 @@ export function canDeleteAccount(opts: {
   return { ok: true };
 }
 
+/**
+ * Phrase admins must type to run the legacy password-era purge.
+ * Kept in one place so the UI and API stay in lockstep.
+ */
+export const LEGACY_PURGE_CONFIRM_PHRASE = "PURGE LEGACY ACCOUNTS";
+
+/**
+ * Pre-magic-link leftover accounts: still have a password hash from the old
+ * credentials era, and have never completed a magic-link sign-in
+ * (`lastLoginAt` / `loginCount` are only written on magic-link success).
+ * Admins and allowlisted emails are never candidates.
+ */
+export function isLegacyPasswordEraCandidate(user: {
+  email: string;
+  role: UserRole;
+  passwordHash: string | null | undefined;
+  lastLoginAt: Date | string | null | undefined;
+  loginCount: number;
+}): boolean {
+  if (!user.passwordHash) return false;
+  if (user.lastLoginAt != null) return false;
+  if (user.loginCount > 0) return false;
+  if (isAdminUser(user)) return false;
+  return true;
+}
+
 export function parseAccountStatus(
   value: unknown
 ): AccountStatus | null {
