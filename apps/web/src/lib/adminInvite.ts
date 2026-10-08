@@ -28,14 +28,17 @@ export function parseAdminInviteEmail(body: unknown): AdminInviteParseResult {
   return { ok: true, email };
 }
 
+export const ADMIN_INVITE_SUBJECT = "Welcome to the Poker Table Club";
+export const ADMIN_INVITE_CTA = "Go to the Poker Table Club";
+
 export function adminInviteHtml(url: string, minutes: number): string {
   return clubEmailHtml({
-    heading: "Poker Night",
+    heading: null,
     innerHtml: [
       emailBody(
         "You are invited to Poker Table Club. Use this one-time link to create your account and sign in. No invite code needed."
       ),
-      emailCta(url, "Join Poker Night"),
+      emailCta(url, ADMIN_INVITE_CTA),
       emailFinePrint(
         `This link expires in ${minutes} minutes. If you were not expecting this, you can ignore the email.`
       ),
@@ -45,9 +48,8 @@ export function adminInviteHtml(url: string, minutes: number): string {
 
 export function adminInviteText(url: string, minutes: number): string {
   return [
-    "Poker Night",
     "You are invited to Poker Table Club. This link creates your account and signs you in — no invite code needed.",
-    `Join (expires in ${minutes} minutes):`,
+    `${ADMIN_INVITE_CTA} (expires in ${minutes} minutes):`,
     url,
   ].join("\n");
 }
@@ -97,7 +99,7 @@ export async function inviteUserFromAdmin(opts: {
 
   const sent = await sendAppEmail({
     to: email,
-    subject: "You're invited to Poker Night",
+    subject: ADMIN_INVITE_SUBJECT,
     html: adminInviteHtml(url, minutes),
     text: adminInviteText(url, minutes),
   });

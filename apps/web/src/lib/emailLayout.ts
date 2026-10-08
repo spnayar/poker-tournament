@@ -76,20 +76,24 @@ export function emailFinePrint(text: string): string {
   return `<p style="color:#64748b;font-size:12px;line-height:1.4;">${text}</p>`;
 }
 
-/** Shared Poker Night slate/emerald chrome used by magic-link and invite mail. */
+/** Shared slate/emerald chrome used by magic-link and invite mail. */
 export function clubEmailHtml(opts: {
-  heading?: string;
+  /** Visible title. Pass null to omit it. Defaults to "Poker Night". */
+  heading?: string | null;
   innerHtml: string;
 }): string {
   const logoSrc = clubLogoAbsoluteUrl();
-  const heading = opts.heading ?? "Poker Night";
+  const heading = opts.heading === undefined ? "Poker Night" : opts.heading;
+  const headingHtml =
+    heading == null || heading === ""
+      ? ""
+      : `    <h1 style="color:#f8fafc;font-size:22px;margin:0 0 12px;">${escapeHtml(heading)}</h1>\n`;
   return `<div style="font-family:Helvetica,Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:24px;">
   <div style="max-width:480px;margin:0 auto;background:#1e293b;border-radius:16px;padding:32px;border:1px solid #334155;">
     <p style="margin:0 0 16px;text-align:center;line-height:0;">
       <img src="${logoSrc}" alt="${CLUB_LOGO_ALT}" width="48" height="48" style="width:48px;height:48px;border:0;border-radius:50%;display:inline-block;" />
     </p>
-    <h1 style="color:#f8fafc;font-size:22px;margin:0 0 12px;">${escapeHtml(heading)}</h1>
-    ${opts.innerHtml}
+${headingHtml}    ${opts.innerHtml}
   </div>
 </div>`;
 }
