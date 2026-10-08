@@ -287,7 +287,7 @@ export default function AdminPage() {
       <section>
         <h2 className="text-xl font-semibold mb-4">Accounts</h2>
         <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[64rem]">
             <thead className="bg-slate-900 text-slate-400 text-left">
               <tr>
                 <th className="px-3 py-2 font-medium">Player</th>
@@ -358,7 +358,7 @@ export default function AdminPage() {
                           setPendingDelete(u);
                           setDeleteTyped("");
                         }}
-                        className="text-red-400 hover:text-red-300 text-xs"
+                        className="text-red-400 hover:text-red-300 text-xs whitespace-nowrap"
                       >
                         Remove
                       </button>
