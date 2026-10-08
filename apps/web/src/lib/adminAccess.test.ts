@@ -4,6 +4,8 @@ import {
   canDeleteAccount,
   isAdminUser,
   isAllowlistedAdminEmail,
+  isLegacyPasswordEraCandidate,
+  LEGACY_PURGE_CONFIRM_PHRASE,
   parseAccountStatus,
   parseAdminEmails,
 } from "./adminAccess";
@@ -91,5 +93,64 @@ describe("parseAccountStatus", () => {
     expect(parseAccountStatus("FREE")).toBe("FREE");
     expect(parseAccountStatus("paid")).toBe("PAID");
     expect(parseAccountStatus("nope")).toBeNull();
+  });
+});
+
+describe("isLegacyPasswordEraCandidate", () => {
+  const base = {
+    email: "old@example.com",
+    role: "PLAYER" as const,
+    passwordHash: "bcrypt-leftover",
+    lastLoginAt: null,
+    loginCount: 0,
+  };
+
+  it("matches leftover passwordHash with no magic-link login", () => {
+    expect(isLegacyPasswordEraCandidate(base)).toBe(true);
+  });
+
+  it("skips magic-link users even if a hash remains", () => {
+    expect(
+      isLegacyPasswordEraCandidate({
+        ...base,
+        lastLoginAt: new Date("2026-10-01"),
+        loginCount: 1,
+      })
+    ).toBe(false);
+    expect(
+      isLegacyPasswordEraCandidate({
+        ...base,
+        lastLoginAt: null,
+        loginCount: 2,
+      })
+    ).toBe(false);
+  });
+
+  it("skips accounts without a password hash", () => {
+    expect(
+      isLegacyPasswordEraCandidate({ ...base, passwordHash: null })
+    ).toBe(false);
+  });
+
+  it("never matches admins or allowlisted emails", () => {
+    expect(
+      isLegacyPasswordEraCandidate({ ...base, role: "ADMIN" })
+    ).toBe(false);
+    expect(
+      isLegacyPasswordEraCandidate({
+        ...base,
+        email: "spnayar@gmail.com",
+      })
+    ).toBe(false);
+    expect(
+      isLegacyPasswordEraCandidate({
+        ...base,
+        email: "info@pokertableclub.com",
+      })
+    ).toBe(false);
+  });
+
+  it("exports a stable confirm phrase", () => {
+    expect(LEGACY_PURGE_CONFIRM_PHRASE).toBe("PURGE LEGACY ACCOUNTS");
   });
 });
