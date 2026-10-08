@@ -2,10 +2,51 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
+:root {
+  --felt: #1a5c38;
+  --felt-dark: #0f3d25;
+  --felt-light: #2d7a4f;
+  --rail: rgba(120, 53, 15, 0.55);
+  --chip-amber: #fbbf24;
+  --action-emerald: #34d399;
+  --card-w: 2.75rem;
+  --card-h: 3.85rem;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --card-w: 3.5rem;
+    --card-h: 5rem;
+  }
+}
+
 body {
-  @apply bg-slate-950 text-slate-100 min-h-screen;
+  @apply bg-slate-950 text-slate-100 min-h-screen antialiased;
+  background-image:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(16, 185, 129, 0.08), transparent 50%),
+    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(245, 158, 11, 0.05), transparent 45%);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-mono,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Table play surface: lock to viewport; Action Log scrolls internally. */
+.table-play-shell {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
 }

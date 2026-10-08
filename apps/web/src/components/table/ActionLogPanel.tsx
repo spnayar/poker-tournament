@@ -100,14 +100,14 @@ export function ActionLogPanel({
   }, [actionLog]);
 
   return (
-    <aside className="w-full lg:w-72 shrink-0 bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col max-h-[min(70vh,520px)] min-h-[240px] max-sm:min-h-[120px] max-sm:flex-1 max-sm:max-h-none overflow-hidden relative z-0">
-      <div className="mb-3 max-sm:mb-1.5 shrink-0">
-        <h2 className="text-sm font-semibold text-slate-200">Action Log</h2>
-        <p className="text-xs text-slate-500 mt-0.5 max-sm:hidden">
-          Scroll up for earlier hands · Hand #{handNumber}
-        </p>
-        <p className="text-[10px] text-slate-500 mt-0.5 sm:hidden">
-          Hand #{handNumber} · scroll for earlier
+    <aside className="w-full lg:w-64 xl:w-72 shrink-0 bg-slate-900/90 border border-slate-800 rounded-lg p-2 sm:p-3 flex flex-col min-h-0 max-h-full max-sm:flex-1 overflow-hidden relative z-0">
+      <div className="mb-1.5 sm:mb-2 shrink-0">
+        <h2 className="text-xs sm:text-sm font-semibold text-slate-200 tracking-tight">
+          Action Log
+        </h2>
+        <p className="text-[10px] text-slate-500 mt-0.5">
+          Hand #{handNumber}
+          <span className="max-sm:hidden"> · scroll for earlier</span>
         </p>
       </div>
 

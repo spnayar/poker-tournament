@@ -16,28 +16,28 @@ export function DealNextHandBar({
   dealerAway = false,
 }: DealNextHandBarProps) {
   return (
-    <div className="w-full max-w-2xl mx-auto px-1">
-      <div className="bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-3 flex flex-col sm:flex-row items-center justify-center gap-3">
+    <div className="w-full max-w-2xl mx-auto">
+      <div className="flex flex-nowrap items-center justify-center gap-2 px-1 py-0.5">
         {canDeal ? (
           <>
-            <p className="text-sm text-slate-300 text-center">
+            <p className="text-xs text-slate-300 text-center min-w-0 truncate">
               {dealerAway
-                ? `${dealerName} is away or sitting out — you can deal the next hand.`
-                : "You have the button — deal when everyone is ready."}
+                ? `${dealerName} away — you can deal.`
+                : "Your button — deal when ready."}
             </p>
             <button
               type="button"
               onClick={onDeal}
               disabled={pending}
-              className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-semibold text-sm whitespace-nowrap disabled:opacity-50"
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded-md font-semibold text-xs whitespace-nowrap disabled:opacity-50 shrink-0"
             >
               {pending ? "Dealing…" : "Deal next hand"}
             </button>
           </>
         ) : (
-          <p className="text-sm text-slate-400 text-center">
+          <p className="text-xs text-slate-400 text-center truncate">
             Waiting for <span className="text-amber-400">{dealerName}</span> to
-            deal the next hand…
+            deal…
           </p>
         )}
       </div>

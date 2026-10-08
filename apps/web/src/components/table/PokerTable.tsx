@@ -11,12 +11,13 @@ import {
   HOLE_CARD_DELAY_SEC,
 } from "./tableAnimation";
 import { getAvatarUrl } from "@/lib/utils";
+import { lastActionTone } from "@/lib/lastActionStyle";
 import {
   getSeatPositionForViewer,
   getViewerSortedSeatIndex,
   seatAnchorTransform,
 } from "./tableLayout";
-import type { HandResult, SeatPublic, ShownHand } from "@poker/protocol";
+import type { SeatPublic, ShownHand } from "@poker/protocol";
 import { hostSeatControl } from "@poker/protocol";
 
 function emptyBoard(): (string | undefined)[] {
@@ -64,6 +65,27 @@ export function PlayerSeat({
   onSkip,
   onUnskip,
 }: PlayerSeatProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!menuRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
   const holeCards = myCards ?? [];
   const cardsToShow =
     isMe && holeCards.length > 0
@@ -81,6 +103,9 @@ export function PlayerSeat({
           ? "sit-out"
           : null;
 
+  const actionTone = seat.lastAction ? lastActionTone(seat.lastAction) : null;
+  const hostControl = isHost && !isMe ? hostSeatControl(seat) : null;
+
   return (
     <motion.div
       className={`absolute flex flex-col items-center${revealHoleCards ? " z-20" : ""}`}
@@ -96,13 +121,13 @@ export function PlayerSeat({
           <motion.div
             className="absolute -inset-1 rounded-full border-2 border-amber-400"
             animate={{ opacity: [1, 0.5, 1] }}
-            transition={{ repeat: Infinity, duration: 1.5 }}
+            transition={{ repeat: Infinity, duration: 1.2 }}
           />
         )}
         <img
           src={getAvatarUrl(seat.displayName, seat.avatarUrl)}
           alt={seat.displayName}
-          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 bg-slate-800 relative z-10 ${
+          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 bg-slate-800 relative z-10 ${
             statusBadge === "away"
               ? "border-slate-400 grayscale"
               : statusBadge === "sit-out"
@@ -131,53 +156,83 @@ export function PlayerSeat({
           </span>
         )}
         {seat.isDealer && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-white text-slate-900 text-xs font-bold rounded-full flex items-center justify-center z-20">
+          <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-white text-slate-900 text-[10px] sm:text-xs font-bold rounded-full flex items-center justify-center z-20">
             D
           </span>
         )}
         {seat.isSmallBlind && !seat.isDealer && (
-          <span className="absolute -top-1 -left-1 w-5 h-5 bg-sky-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-20">
+          <span className="absolute -top-1 -left-1 w-4 h-4 sm:w-5 sm:h-5 bg-sky-500 text-white text-[9px] sm:text-[10px] font-bold rounded-full flex items-center justify-center z-20">
             SB
           </span>
         )}
         {seat.isBigBlind && (
-          <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-20">
+          <span className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-rose-500 text-white text-[9px] sm:text-[10px] font-bold rounded-full flex items-center justify-center z-20">
             BB
           </span>
         )}
       </div>
 
-      <p className="text-[10px] sm:text-xs font-medium mt-0.5 sm:mt-1 max-w-[64px] sm:max-w-[80px] truncate">
-        {seat.displayName}
-      </p>
-      {seat.lastAction ? (
-        <p className="text-[9px] sm:text-[10px] text-slate-400 max-w-[64px] sm:max-w-[88px] truncate max-sm:hidden">
+      <div className="relative mt-0.5" ref={menuRef}>
+        {hostControl ? (
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            className="text-[11px] sm:text-xs font-semibold max-w-[88px] truncate text-slate-100 hover:text-amber-200 underline-offset-2 hover:underline"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            title="Seat options"
+          >
+            {seat.displayName}
+          </button>
+        ) : (
+          <p className="text-[11px] sm:text-xs font-semibold max-w-[88px] truncate text-slate-100">
+            {seat.displayName}
+          </p>
+        )}
+        {menuOpen && hostControl ? (
+          <div
+            role="menu"
+            className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-40 min-w-[7.5rem] rounded-md border border-slate-600 bg-slate-950/95 shadow-xl py-1"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+              onClick={() => {
+                if (hostControl === "unskip") onUnskip?.(seat.seatId);
+                else onSkip?.(seat.seatId);
+                setMenuOpen(false);
+              }}
+            >
+              {hostControl === "unskip" ? "Unskip player" : "Skip player"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {seat.lastAction && actionTone ? (
+        <motion.p
+          key={seat.lastAction}
+          initial={{ opacity: 0.4, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`mt-0.5 px-1.5 py-0.5 rounded border text-[10px] sm:text-[11px] font-semibold max-w-[96px] truncate ${actionTone.text} ${actionTone.ring}`}
+        >
           {seat.lastAction}
-        </p>
+        </motion.p>
       ) : null}
-      <p className="text-xs text-amber-400 font-mono">
+
+      <p className="text-[11px] sm:text-xs text-amber-400 font-mono tabular-nums font-semibold leading-tight">
         {seat.chipCount.toLocaleString()}
+        {seat.allIn && " (AI)"}
       </p>
 
       {seat.betThisRound > 0 && (
-        <p className="text-xs text-emerald-400">Bet: {seat.betThisRound}</p>
+        <p className="text-[10px] sm:text-[11px] text-emerald-400 font-mono tabular-nums">
+          Bet {seat.betThisRound.toLocaleString()}
+        </p>
       )}
 
-      {isHost && !isMe && (
-        <button
-          type="button"
-          onClick={() =>
-            hostSeatControl(seat) === "unskip"
-              ? onUnskip?.(seat.seatId)
-              : onSkip?.(seat.seatId)
-          }
-          className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-600 bg-slate-900/80 hover:bg-slate-800 text-slate-300"
-        >
-          {hostSeatControl(seat) === "unskip" ? "Unskip" : "Skip"}
-        </button>
-      )}
-
-      <div className="flex gap-1 mt-2">
+      <div className="flex gap-0.5 sm:gap-1 mt-1">
         {cardsToShow.map((card, i) => (
           <PlayingCard
             key={i}
@@ -224,7 +279,7 @@ export function PokerTable({
   myCards,
   shownCards,
   viewerSeatId = null,
-  dealerSeat,
+  dealerSeat: _dealerSeat,
   currentActorSeat,
   phase,
   animateDeal = true,
@@ -329,13 +384,20 @@ export function PokerTable({
       : null;
 
   return (
-    <div className="relative w-full max-w-3xl mx-auto aspect-[4/3] max-sm:h-full max-sm:w-auto max-sm:max-w-full">
-      <div className="absolute inset-0 rounded-[50%] bg-gradient-to-b from-felt-light to-felt-dark border-8 border-amber-900/60 shadow-2xl shadow-black/50" />
+    <div className="relative w-full h-full max-h-full mx-auto aspect-[4/3] max-sm:aspect-auto">
+      <div className="absolute inset-0 rounded-[50%] bg-gradient-to-b from-felt-light via-felt to-felt-dark border-[6px] sm:border-8 border-amber-900/55 shadow-[0_12px_40px_rgba(0,0,0,0.55)]" />
+      <div
+        className="absolute inset-0 rounded-[50%] opacity-30 pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(ellipse at 50% 35%, rgba(255,255,255,0.08), transparent 55%)",
+        }}
+      />
 
-      <div className="absolute inset-[8%] rounded-[50%] border-2 border-felt/50" />
+      <div className="absolute inset-[7%] rounded-[50%] border border-emerald-900/40" />
 
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10">
-        <div className="flex gap-2 mb-3 min-h-[5rem]">
+        <div className="flex gap-1 sm:gap-1.5 mb-2 min-h-[3.5rem] sm:min-h-[4.5rem]">
           {[0, 1, 2, 3, 4].map((slot) => (
             <PlayingCard
               key={slot}
@@ -348,32 +410,34 @@ export function PokerTable({
 
         <motion.div
           key={totalPot}
-          initial={{ scale: 1.2 }}
+          initial={{ scale: 1.12 }}
           animate={{ scale: 1 }}
-          className="bg-black/40 rounded-full px-4 py-1 text-amber-400 font-mono text-sm"
+          className="bg-slate-950/55 border border-amber-500/25 rounded-full px-3 py-0.5 text-amber-300 font-mono text-xs sm:text-sm tabular-nums font-semibold tracking-tight"
         >
-          Pot: {totalPot.toLocaleString()}
+          Pot {totalPot.toLocaleString()}
         </motion.div>
 
         {pots.length > 1 || uncalledAmount > 0 ? (
-          <div className="flex gap-2 mt-2 flex-wrap justify-center max-w-[16rem]">
+          <div className="flex gap-1.5 mt-1 flex-wrap justify-center max-w-[15rem]">
             {pots.map((pot, i) => (
               <span
                 key={i}
-                className="text-xs bg-black/30 px-2 py-0.5 rounded text-slate-300"
+                className="text-[10px] bg-slate-950/45 px-1.5 py-0.5 rounded text-slate-300 font-mono"
               >
                 {i === 0 ? "Main" : `Side ${i}`}: {pot.amount.toLocaleString()}
               </span>
             ))}
             {uncalledAmount > 0 ? (
-              <span className="text-xs bg-black/30 px-2 py-0.5 rounded text-amber-300/90">
+              <span className="text-[10px] bg-slate-950/45 px-1.5 py-0.5 rounded text-amber-300/90 font-mono">
                 Uncalled: {uncalledAmount.toLocaleString()}
               </span>
             ) : null}
           </div>
         ) : null}
 
-        <p className="text-xs text-slate-400 mt-2 capitalize">{phase}</p>
+        <p className="text-[10px] text-slate-400/90 mt-1 capitalize tracking-wide">
+          {phase.replace(/-/g, " ")}
+        </p>
       </div>
 
       {sortedSeats.map((seat, i) => {

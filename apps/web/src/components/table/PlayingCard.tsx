@@ -21,7 +21,7 @@ const SUIT_COLORS: Record<string, string> = {
 };
 
 const CARD_CLASS =
-  "w-14 h-20 rounded-lg shadow-lg flex flex-col items-center justify-center select-none";
+  "w-11 h-[3.85rem] sm:w-14 sm:h-20 rounded-md sm:rounded-lg shadow-md sm:shadow-lg flex flex-col items-center justify-center select-none";
 
 interface PlayingCardProps {
   card?: string;
@@ -35,9 +35,9 @@ interface PlayingCardProps {
 function CardBack({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`${CARD_CLASS} bg-gradient-to-br from-blue-800 to-blue-950 border-2 border-blue-600 ${className}`}
+      className={`${CARD_CLASS} bg-gradient-to-br from-emerald-800 via-slate-800 to-slate-950 border-2 border-emerald-600/70 ${className}`}
     >
-      <div className="w-8 h-12 rounded border border-blue-400/30" />
+      <div className="w-6 h-9 sm:w-8 sm:h-12 rounded border border-amber-400/25" />
     </div>
   );
 }
@@ -56,12 +56,14 @@ function CardFace({
 
   return (
     <div
-      className={`${CARD_CLASS} bg-white border border-slate-300 ${className}`}
+      className={`${CARD_CLASS} bg-slate-50 border border-slate-300/90 ${className}`}
     >
-      <span className={`text-lg font-bold leading-none ${colorClass}`}>
+      <span className={`text-base sm:text-lg font-bold leading-none ${colorClass}`}>
         {rank}
       </span>
-      <span className={`text-xl leading-none ${colorClass}`}>{suitSymbol}</span>
+      <span className={`text-lg sm:text-xl leading-none ${colorClass}`}>
+        {suitSymbol}
+      </span>
     </div>
   );
 }
@@ -90,7 +92,11 @@ export function PlayingCard({
     return (
       <div
         className={`relative ${className}`}
-        style={{ width: "3.5rem", height: "5rem", perspective: "900px" }}
+        style={{
+          width: "var(--card-w, 2.75rem)",
+          height: "var(--card-h, 3.85rem)",
+          perspective: "900px",
+        }}
       >
         <motion.div
           key={card}
@@ -123,7 +129,12 @@ export function PlayingCard({
 
   if (faceDown || !card) {
     if (variant === "community" && !card) {
-      return <div className={`w-14 h-20 ${className}`} aria-hidden />;
+      return (
+        <div
+          className={`w-11 h-[3.85rem] sm:w-14 sm:h-20 ${className}`}
+          aria-hidden
+        />
+      );
     }
 
     return (
