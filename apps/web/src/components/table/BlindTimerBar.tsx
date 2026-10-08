@@ -48,90 +48,90 @@ export function BlindTimerBar({
         ? Math.max(0, timer.levelEndsAt - now)
         : null;
 
+  const timerLabel = timer.increasePending
+    ? "Next hand"
+    : timer.paused
+      ? "Paused"
+      : "Next";
+
   return (
-    <div className="relative z-50 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 mb-3 max-sm:px-3 max-sm:py-2 max-sm:mb-2">
-      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:gap-2">
-        <div>
-          <p className="text-xs text-slate-500 uppercase tracking-wide">
-            Blinds · Level {timer.levelNumber}
-          </p>
-          <p className="text-lg font-semibold text-emerald-400 max-sm:text-base">
-            {timer.currentSb} / {timer.currentBb}
-          </p>
+    <div className="table-chrome relative z-50 rounded-md px-2 py-1 mb-1.5 shrink-0">
+      <div className="flex flex-nowrap items-center gap-2 sm:gap-3 min-w-0">
+        <div className="min-w-0 shrink flex items-baseline gap-1.5">
+          <span className="text-[10px] text-slate-500 tracking-wide">
+            L{timer.levelNumber}
+          </span>
+          <span className="text-sm font-semibold text-emerald-400 font-mono tabular-nums leading-none">
+            {timer.currentSb}/{timer.currentBb}
+          </span>
         </div>
 
-        <div className="text-center">
-          <p className="text-xs text-slate-500 uppercase tracking-wide max-sm:text-[10px]">
-            {timer.increasePending
-              ? "Next level on next hand"
-              : timer.paused
-                ? "Timer paused"
-                : "Next level in"}
-          </p>
-          <p
-            className={`text-2xl font-mono font-bold max-sm:text-xl ${
-              timer.increasePending ? "text-amber-400" : "text-white"
+        <div className="min-w-0 shrink flex items-baseline gap-1.5">
+          <span className="text-[10px] text-slate-500 tracking-wide">
+            {timerLabel}
+          </span>
+          <span
+            className={`text-sm font-mono font-semibold tabular-nums leading-none ${
+              timer.increasePending ? "text-amber-400" : "text-slate-100"
             }`}
           >
             {timer.increasePending ? "Ready" : formatCountdown(displayRemaining)}
-          </p>
+          </span>
         </div>
 
-        <div className="text-right text-sm max-sm:hidden">
+        <div className="hidden sm:flex items-baseline gap-1 text-[11px] min-w-0 shrink text-slate-400">
           {timer.nextBb !== null ? (
             <>
-              <p className="text-slate-500">Up next</p>
-              <p className="font-medium">
-                {timer.nextSb} / {timer.nextBb}
-              </p>
+              <span className="text-slate-500">Next</span>
+              <span className="font-mono text-slate-300 tabular-nums">
+                {timer.nextSb}/{timer.nextBb}
+              </span>
             </>
           ) : (
-            <p className="text-slate-500">Final level</p>
+            <span className="text-slate-500">Final</span>
           )}
         </div>
-      </div>
 
-      {isHost && (
-        <div className="flex flex-wrap justify-center gap-2 mt-3 pt-3 border-t border-slate-800">
-          {!timer.increasePending &&
-            (timer.paused ? (
-              <button
-                type="button"
-                onClick={onResume}
-                disabled={actionLoading}
-                className="px-4 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium disabled:opacity-50"
-              >
-                Resume timer
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={onPause}
-                disabled={actionLoading || timer.levelEndsAt === null}
-                className="px-4 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg font-medium disabled:opacity-50"
-              >
-                Pause timer
-              </button>
-            ))}
-          <button
-            type="button"
-            onClick={onAdvance}
-            disabled={actionLoading || !canAdvance}
-            title={
-              timer.increasePending
-                ? "Next blinds already scheduled"
-                : timer.nextBb === null
-                  ? "Already at the final level"
-                  : `Move to ${timer.nextSb} / ${timer.nextBb} on the next hand`
-            }
-            className="px-4 py-1.5 text-sm bg-amber-600 hover:bg-amber-500 rounded-lg font-medium disabled:opacity-50"
-          >
-            {timer.increasePending
-              ? "Blinds set for next hand"
-              : "Advance blinds now"}
-          </button>
-        </div>
-      )}
+        {isHost && (
+          <div className="flex flex-nowrap items-center gap-1 ml-auto shrink-0">
+            {!timer.increasePending &&
+              (timer.paused ? (
+                <button
+                  type="button"
+                  onClick={onResume}
+                  disabled={actionLoading}
+                  className="h-6 px-2 text-[11px] bg-emerald-600 hover:bg-emerald-500 rounded-md font-medium disabled:opacity-50"
+                >
+                  Resume
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onPause}
+                  disabled={actionLoading || timer.levelEndsAt === null}
+                  className="h-6 px-2 text-[11px] bg-slate-700 hover:bg-slate-600 rounded-md font-medium disabled:opacity-50"
+                >
+                  Pause
+                </button>
+              ))}
+            <button
+              type="button"
+              onClick={onAdvance}
+              disabled={actionLoading || !canAdvance}
+              title={
+                timer.increasePending
+                  ? "Next blinds already scheduled"
+                  : timer.nextBb === null
+                    ? "Already at the final level"
+                    : `Move to ${timer.nextSb} / ${timer.nextBb} on the next hand`
+              }
+              className="h-6 px-2 text-[11px] bg-amber-600 hover:bg-amber-500 rounded-md font-medium disabled:opacity-50"
+            >
+              {timer.increasePending ? "Set" : "Advance"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

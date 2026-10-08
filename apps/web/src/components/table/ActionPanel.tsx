@@ -52,6 +52,9 @@ function wagerTargetForMultiplier(
   return raiseTo >= legal.minRaiseTo ? raiseTo : null;
 }
 
+const btnBase =
+  "px-2 py-1 sm:px-2.5 text-xs rounded-md font-medium disabled:opacity-50 whitespace-nowrap shrink-0 h-7";
+
 export function ActionPanel({
   legal,
   onAction,
@@ -60,9 +63,20 @@ export function ActionPanel({
   awayBanner = null,
   actionDeadlineAt = null,
 }: ActionPanelProps) {
+  const canWager = legal?.canBet || legal?.canRaise;
+  const wagerMin = legal?.canBet ? legal.minBet : (legal?.minRaiseTo ?? 0);
+  const wagerMax = legal?.canBet
+    ? legal.allInAmount
+    : (legal?.maxRaise ?? 0);
+  const wagerLabel = legal?.canBet ? "Bet" : "Raise";
+
+  const raise2x = legal ? wagerTargetForMultiplier(legal, 2) : null;
+  const raise3x = legal ? wagerTargetForMultiplier(legal, 3) : null;
+  const showQuickRaises =
+    legal && (legal.canRaise || legal.canBet) && (raise2x !== null || raise3x !== null);
+
   const [amountInput, setAmountInput] = useState("");
   const [showAllIn, setShowAllIn] = useState(false);
-  const [showCustomBet, setShowCustomBet] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -77,24 +91,11 @@ export function ActionPanel({
       ? Math.max(0, Math.ceil((actionDeadlineAt - nowMs) / 1000))
       : null;
 
-  const canWager = legal?.canBet || legal?.canRaise;
-  const wagerMin = legal?.canBet ? legal.minBet : (legal?.minRaiseTo ?? 0);
-  const wagerMax = legal?.canBet
-    ? legal.allInAmount
-    : (legal?.maxRaise ?? 0);
-  const wagerLabel = legal?.canBet ? "Bet amount" : "Raise to";
-
-  const raise2x = legal ? wagerTargetForMultiplier(legal, 2) : null;
-  const raise3x = legal ? wagerTargetForMultiplier(legal, 3) : null;
-  const showQuickRaises =
-    legal && (legal.canRaise || legal.canBet) && (raise2x !== null || raise3x !== null);
-
   useEffect(() => {
     if (canWager) {
       setAmountInput(String(wagerMin));
     }
     setShowAllIn(false);
-    setShowCustomBet(false);
   }, [canWager, wagerMin, wagerMax, legal?.canBet, legal?.canRaise]);
 
   const parsedAmount = useMemo(() => {
@@ -136,165 +137,140 @@ export function ActionPanel({
   if (!legal) {
     const showWaiting = waitingLabel && waitingLabel !== awayBanner;
     return (
-      <div className="text-center py-2 text-sm space-y-1">
+      <div className="flex flex-nowrap items-center justify-center gap-2 py-0.5 text-xs min-h-7 overflow-x-auto scrollbar-none">
         {awayBanner ? (
-          <p className="text-amber-300 font-medium">{awayBanner}</p>
+          <span className="text-amber-300 font-medium truncate">{awayBanner}</span>
         ) : null}
         {showWaiting ? (
-          <p className="text-slate-400">{waitingLabel}</p>
+          <span className="text-slate-400 truncate">{waitingLabel}</span>
         ) : null}
       </div>
     );
   }
 
-  return (
-    <div className="flex flex-col items-center gap-2 sm:gap-3 p-1.5 sm:p-3">
-      <div className="grid grid-cols-2 gap-1.5 w-full max-w-md sm:flex sm:flex-wrap sm:justify-center sm:gap-2">
-        {legal.canFold && (
-          <button
-            onClick={() => onAction({ type: "fold" })}
-            disabled={disabled}
-            className="px-4 py-2 sm:px-6 max-sm:text-sm bg-red-600/80 hover:bg-red-500 rounded-lg font-medium disabled:opacity-50"
-          >
-            Fold
-          </button>
-        )}
-        {legal.canCheck && (
-          <button
-            onClick={() => onAction({ type: "check" })}
-            disabled={disabled}
-            className="px-4 py-2 sm:px-6 max-sm:text-sm bg-slate-600 hover:bg-slate-500 rounded-lg font-medium disabled:opacity-50"
-          >
-            Check
-          </button>
-        )}
-        {legal.canCall && (
-          <button
-            onClick={() => onAction({ type: "call" })}
-            disabled={disabled}
-            className="px-4 py-2 sm:px-6 max-sm:text-sm bg-blue-600 hover:bg-blue-500 rounded-lg font-medium disabled:opacity-50"
-          >
-            Call {legal.callAmount.toLocaleString()}
-          </button>
-        )}
-        {showQuickRaises && raise2x !== null && (
-          <button
-            onClick={() => submitQuickRaise(raise2x)}
-            disabled={disabled}
-            className="px-3 py-2 sm:px-5 max-sm:text-sm bg-emerald-700 hover:bg-emerald-600 rounded-lg font-medium disabled:opacity-50"
-          >
-            Raise 2×
-            <span className="text-emerald-200/80 text-xs ml-1 hidden sm:inline">
-              ({raise2x.toLocaleString()})
-            </span>
-          </button>
-        )}
-        {showQuickRaises && raise3x !== null && (
-          <button
-            onClick={() => submitQuickRaise(raise3x)}
-            disabled={disabled}
-            className="px-3 py-2 sm:px-5 max-sm:text-sm bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium disabled:opacity-50"
-          >
-            Raise 3×
-            <span className="text-emerald-200/80 text-xs ml-1 hidden sm:inline">
-              ({raise3x.toLocaleString()})
-            </span>
-          </button>
-        )}
-      </div>
+  const allInTitle =
+    actionSecondsLeft !== null
+      ? `Timer still running — ${actionSecondsLeft}s left. If it hits zero you fold and sit out.`
+      : undefined;
 
-      {canWager && !showCustomBet ? (
+  return (
+    <div className="flex flex-nowrap items-center justify-center gap-1 p-0.5 max-w-full overflow-x-auto scrollbar-none">
+      {legal.canFold && (
         <button
-          type="button"
-          onClick={() => setShowCustomBet(true)}
-          className="sm:hidden text-xs text-slate-400 underline-offset-2 hover:underline"
+          onClick={() => onAction({ type: "fold" })}
+          disabled={disabled}
+          className={`${btnBase} bg-red-600/80 hover:bg-red-500`}
         >
-          Custom {legal.canBet ? "bet" : "raise"}
+          Fold
         </button>
-      ) : null}
+      )}
+      {legal.canCheck && (
+        <button
+          onClick={() => onAction({ type: "check" })}
+          disabled={disabled}
+          className={`${btnBase} bg-slate-600 hover:bg-slate-500`}
+        >
+          Check
+        </button>
+      )}
+      {legal.canCall && (
+        <button
+          onClick={() => onAction({ type: "call" })}
+          disabled={disabled}
+          className={`${btnBase} bg-sky-700 hover:bg-sky-600`}
+        >
+          Call {legal.callAmount.toLocaleString()}
+        </button>
+      )}
+      {showQuickRaises && raise2x !== null && (
+        <button
+          onClick={() => submitQuickRaise(raise2x)}
+          disabled={disabled}
+          className={`${btnBase} bg-emerald-700 hover:bg-emerald-600`}
+        >
+          2×
+          <span className="text-emerald-200/80 text-[10px] ml-0.5">
+            {raise2x.toLocaleString()}
+          </span>
+        </button>
+      )}
+      {showQuickRaises && raise3x !== null && (
+        <button
+          onClick={() => submitQuickRaise(raise3x)}
+          disabled={disabled}
+          className={`${btnBase} bg-emerald-600 hover:bg-emerald-500`}
+        >
+          3×
+          <span className="text-emerald-200/80 text-[10px] ml-0.5">
+            {raise3x.toLocaleString()}
+          </span>
+        </button>
+      )}
 
       {canWager && (
-        <div
-          className={`w-full max-w-sm flex-col gap-2 ${
-            showCustomBet ? "flex" : "hidden sm:flex"
-          }`}
-        >
-          <label className="text-sm text-slate-400">{wagerLabel}</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={wagerMin}
-              max={wagerMax}
-              value={amountInput}
-              onChange={(e) => setAmountInput(e.target.value.replace(/[^0-9]/g, ""))}
-              onKeyDown={handleInputKeyDown}
-              disabled={disabled}
-              className="flex-1 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none font-mono text-base sm:text-lg disabled:opacity-50"
-            />
-            <button
-              onClick={submitWager}
-              disabled={disabled || !isValidAmount}
-              className="px-5 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium disabled:opacity-50 whitespace-nowrap"
-            >
-              {legal.canBet ? "Bet" : "Raise"}
-            </button>
-          </div>
-          <p className="text-xs text-slate-500">
-            Min {wagerMin.toLocaleString()} · Max {wagerMax.toLocaleString()}
-            {parsedAmount !== null && !isValidAmount && (
-              <span className="text-amber-400 ml-2">Enter a valid amount</span>
-            )}
-          </p>
+        <>
+          <input
+            type="number"
+            inputMode="numeric"
+            aria-label={`${wagerLabel} amount`}
+            min={wagerMin}
+            max={wagerMax}
+            value={amountInput}
+            onChange={(e) => setAmountInput(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={handleInputKeyDown}
+            disabled={disabled}
+            className="w-16 sm:w-[4.5rem] h-7 px-1.5 rounded-md bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none font-mono text-xs disabled:opacity-50 shrink-0"
+          />
           <input
             type="range"
+            aria-label={`${wagerLabel} slider`}
             min={wagerMin}
             max={wagerMax}
             value={clampedAmount ?? wagerMin}
             onChange={(e) => setAmountInput(e.target.value)}
             disabled={disabled}
-            className="w-full"
+            className="w-16 sm:w-24 h-7 accent-emerald-500 shrink min-w-[3.5rem] max-w-[6rem]"
           />
-        </div>
+          <button
+            onClick={submitWager}
+            disabled={disabled || !isValidAmount}
+            className={`${btnBase} bg-slate-700 hover:bg-slate-600`}
+          >
+            {wagerLabel}
+          </button>
+        </>
       )}
 
-      {legal.canAllIn && (
-        <div className="text-center space-y-1">
-          {!showAllIn ? (
-            <button
-              type="button"
-              onClick={() => setShowAllIn(true)}
-              disabled={disabled}
-              className="text-xs text-slate-500 hover:text-slate-400 underline-offset-2 hover:underline disabled:opacity-50"
+      {legal.canAllIn && !showAllIn ? (
+        <button
+          type="button"
+          onClick={() => setShowAllIn(true)}
+          disabled={disabled}
+          className={`${btnBase} text-amber-400/90 border border-amber-600/40 hover:bg-amber-950/40`}
+        >
+          All-in
+        </button>
+      ) : null}
+      {legal.canAllIn && showAllIn ? (
+        <button
+          type="button"
+          onClick={() => onAction({ type: "all-in" })}
+          disabled={disabled}
+          title={allInTitle}
+          className={`${btnBase} text-amber-300 border border-amber-500/60 bg-amber-950/50 hover:bg-amber-900/50`}
+        >
+          Confirm {legal.allInAmount.toLocaleString()}
+          {actionSecondsLeft !== null ? (
+            <span
+              className={`ml-1 text-[10px] ${
+                actionSecondsLeft <= 10 ? "text-red-300" : "text-amber-200/80"
+              }`}
             >
-              All-in ({legal.allInAmount.toLocaleString()})
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => onAction({ type: "all-in" })}
-                disabled={disabled}
-                className="text-sm px-4 py-1.5 text-amber-400/90 border border-amber-600/40 rounded-lg hover:bg-amber-950/40 disabled:opacity-50"
-              >
-                Confirm all-in ({legal.allInAmount.toLocaleString()})
-              </button>
-              {actionSecondsLeft !== null && (
-                <p
-                  className={`text-[11px] ${
-                    actionSecondsLeft <= 10
-                      ? "text-red-400 font-medium"
-                      : "text-amber-300/90"
-                  }`}
-                >
-                  Timer still running — {actionSecondsLeft}s left. If it hits
-                  zero you fold and sit out.
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      )}
+              {actionSecondsLeft}s
+            </span>
+          ) : null}
+        </button>
+      ) : null}
     </div>
   );
 }

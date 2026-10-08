@@ -1,32 +1,32 @@
 /** Seconds between each hole card dealt to a player. */
-export const HOLE_CARD_DELAY_SEC = 0.45;
+export const HOLE_CARD_DELAY_SEC = 0.22;
 
 /** Seconds between each flop card when the flop is revealed (normal betting). */
-export const FLOP_CARD_STAGGER_SEC = 1.1;
+export const FLOP_CARD_STAGGER_SEC = 0.4;
 
 /** Seconds before a single turn or river card (normal betting). */
-export const STREET_CARD_STAGGER_SEC = 0.9;
+export const STREET_CARD_STAGGER_SEC = 0.35;
 
 /** Seconds between flop cards during an all-in runout (preflop shove). */
-export const RUNOUT_FLOP_CARD_STAGGER_SEC = 2.4;
+export const RUNOUT_FLOP_CARD_STAGGER_SEC = 0.85;
 
 /** Pause after the flop before turn during an all-in runout. */
-export const RUNOUT_FLOP_PAUSE_SEC = 3.0;
+export const RUNOUT_FLOP_PAUSE_SEC = 0.9;
 
 /** Pause before turn/river (or river-only) during an all-in runout. */
-export const RUNOUT_STREET_DELAY_SEC = 3.0;
+export const RUNOUT_STREET_DELAY_SEC = 0.9;
 
 /** Seconds between turn and river during an all-in runout. */
-export const RUNOUT_CARD_STAGGER_SEC = 5.0;
+export const RUNOUT_CARD_STAGGER_SEC = 1.4;
 
 /** Community card flip animation duration (seconds). */
-export const COMMUNITY_FLIP_DURATION_SEC = 1.1;
+export const COMMUNITY_FLIP_DURATION_SEC = 0.4;
 
 /** Hole card deal animation duration (seconds). */
-export const HOLE_CARD_DEAL_DURATION_SEC = 0.5;
+export const HOLE_CARD_DEAL_DURATION_SEC = 0.35;
 
 /** Brief pause after the last community card before showing hand result. */
-export const POST_REVEAL_PAUSE_MS = 800;
+export const POST_REVEAL_PAUSE_MS = 400;
 
 /**
  * Schedule (ms from now) when each new board slot should appear.
@@ -41,7 +41,7 @@ export function getBoardRevealSchedule(
 
   const ms = (sec: number) => Math.round(sec * 1000);
 
-  // Full board runout (e.g. preflop all-in): flop one-by-one, pause, turn, river slowly.
+  // Full board runout (e.g. preflop all-in): flop one-by-one, pause, turn, river.
   if (prevLength === 0 && nextLength === 5) {
     return [
       { slot: 0, delayMs: 0 },

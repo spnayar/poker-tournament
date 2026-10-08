@@ -10,6 +10,11 @@ import {
 import { getAvatarUrl } from "@/lib/utils";
 import type { HandResult, SeatPublic, ShownHand } from "@poker/protocol";
 
+/** How long the winner modal stays fully visible before fading. */
+const WINNER_HOLD_MS = 2800;
+/** Fade-out duration. */
+const WINNER_FADE_MS = 700;
+
 interface HandResultOverlayProps {
   result: HandResult;
   shownCards: ShownHand[];
@@ -64,7 +69,7 @@ function ChipBurst({
 }) {
   return (
     <motion.div
-      className="absolute w-5 h-5 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 border border-amber-200 shadow-lg z-30 pointer-events-none"
+      className="absolute w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 border border-amber-200 shadow-lg z-30 pointer-events-none"
       initial={{ left: "50%", top: "50%", x: "-50%", y: "-50%", scale: 0, opacity: 0 }}
       animate={{
         left: `${targetX}%`,
@@ -74,7 +79,7 @@ function ChipBurst({
         scale: [0, 1.2, 1],
         opacity: [0, 1, 1],
       }}
-      transition={{ delay, duration: 1.2, ease: "easeOut" }}
+      transition={{ delay, duration: 0.9, ease: "easeOut" }}
     />
   );
 }
@@ -114,7 +119,7 @@ export function HandWinnerChipBurst({
       : { x: 50, y: 50 };
 
   useEffect(() => {
-    const t = setTimeout(() => setPhase("done"), 2800);
+    const t = setTimeout(() => setPhase("done"), 2200);
     return () => clearTimeout(t);
   }, [result]);
 
@@ -122,7 +127,7 @@ export function HandWinnerChipBurst({
 
   return (
     <>
-      {[0, 0.15, 0.3, 0.45, 0.6].map((d, i) => (
+      {[0, 0.12, 0.24, 0.36, 0.48].map((d, i) => (
         <ChipBurst
           key={i}
           targetX={targetPos.x}
@@ -134,7 +139,7 @@ export function HandWinnerChipBurst({
   );
 }
 
-/** Hand result banner shown below the table so the board stays visible. */
+/** Centered winner modal over the table; holds briefly then fades away. */
 export function HandResultOverlay({
   result,
   shownCards,
@@ -144,6 +149,13 @@ export function HandResultOverlay({
     [result, shownCards]
   );
   const primary = winners[0];
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    setVisible(true);
+    const t = setTimeout(() => setVisible(false), WINNER_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [result]);
 
   if (!primary) return null;
 
@@ -153,64 +165,71 @@ export function HandResultOverlay({
 
   return (
     <AnimatePresence>
-      <motion.div
-        className="w-full max-w-3xl mx-auto mt-6 bg-slate-900/95 border border-amber-500/40 rounded-2xl px-6 py-5 shadow-2xl"
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 8 }}
-        transition={{ duration: 0.45, type: "spring", stiffness: 260, damping: 24 }}
-      >
-        <p className="text-amber-400 text-xs font-semibold uppercase tracking-wider mb-3 text-center sm:text-left">
-          {winners.length > 1 ? "Pot Winners" : "Hand Winner"}
-        </p>
-
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-          <img
-            src={getAvatarUrl(primary.displayName, primary.avatarUrl)}
-            alt=""
-            className="w-16 h-16 rounded-full border-4 border-amber-400 shadow-lg shrink-0"
-          />
-
-          <div className="flex-1 text-center sm:text-left min-w-0">
-            <h2 className="text-xl font-bold text-white truncate">
-              {primary.displayName}
-            </h2>
-            <p className="text-emerald-400 text-lg font-semibold">
-              +{primary.amount.toLocaleString()} chips
+      {visible ? (
+        <motion.div
+          key={`winner-${result.handNumber ?? primary.seatId}-${primary.amount}`}
+          className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center p-3"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: WINNER_FADE_MS / 1000, ease: "easeOut" }}
+        >
+          <div className="table-chrome table-chrome-amber w-full max-w-sm rounded-lg px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.55)]">
+            <p className="text-amber-400 text-[11px] font-semibold tracking-wide mb-2 text-center">
+              {winners.length > 1 ? "Pot winners" : "Hand winner"}
             </p>
-            <p className="text-slate-300 text-sm">{subtitle}</p>
-          </div>
 
-          {primary.bestHand && primary.bestHand.length > 0 && !primary.wonByFold && (
-            <div className="shrink-0">
-              <p className="text-xs text-slate-500 mb-1.5 text-center">
-                Winning hand
-              </p>
-              <div className="flex justify-center gap-1 flex-wrap">
-                {primary.bestHand.map((card, i) => (
-                  <PlayingCard
-                    key={`${card}-${i}`}
-                    card={card}
-                    delay={i * 0.08}
-                    className="scale-90 origin-center"
-                  />
+            <div className="flex items-center gap-3">
+              <img
+                src={getAvatarUrl(primary.displayName, primary.avatarUrl)}
+                alt=""
+                className="w-12 h-12 rounded-full border-2 border-amber-400 shadow-md shrink-0"
+              />
+
+              <div className="flex-1 min-w-0 text-left">
+                <h2 className="text-base sm:text-lg font-bold text-white truncate">
+                  {primary.displayName}
+                </h2>
+                <p className="text-emerald-400 text-sm sm:text-base font-semibold font-mono tabular-nums">
+                  +{primary.amount.toLocaleString()} chips
+                </p>
+                <p className="text-slate-300 text-xs sm:text-sm truncate">
+                  {subtitle}
+                </p>
+              </div>
+
+              {primary.bestHand &&
+                primary.bestHand.length > 0 &&
+                !primary.wonByFold && (
+                  <div className="shrink-0 flex gap-0.5 scale-75 origin-right">
+                    {primary.bestHand.slice(0, 5).map((card, i) => (
+                      <PlayingCard
+                        key={`${card}-${i}`}
+                        card={card}
+                        delay={0}
+                        animateDeal={false}
+                      />
+                    ))}
+                  </div>
+                )}
+            </div>
+
+            {winners.length > 1 && (
+              <div className="border-t border-slate-700/80 pt-2 mt-2 space-y-0.5">
+                {winners.slice(1).map((w) => (
+                  <p
+                    key={w.seatId}
+                    className="text-xs text-slate-400 text-center"
+                  >
+                    {w.displayName}: +{w.amount.toLocaleString()}
+                    {w.handName ? ` · ${w.handName}` : ""}
+                  </p>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
-
-        {winners.length > 1 && (
-          <div className="border-t border-slate-700 pt-3 mt-4 space-y-1">
-            {winners.slice(1).map((w) => (
-              <p key={w.seatId} className="text-sm text-slate-400 text-center sm:text-left">
-                {w.displayName}: +{w.amount.toLocaleString()}
-                {w.handName ? ` · ${w.handName}` : ""}
-              </p>
-            ))}
+            )}
           </div>
-        )}
-      </motion.div>
+        </motion.div>
+      ) : null}
     </AnimatePresence>
   );
 }
