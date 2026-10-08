@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { prisma, recordUserLogin } from "@poker/db";
 import { createAuthAdapter } from "./auth-adapter";
 import { deliverMagicLink, emailMaxAgeSec } from "./sendMagicLink";
-import { isAdminUser, isAllowlistedAdminEmail } from "./adminAccess";
+import { syncAdminFlagOnToken } from "./syncAdminSession";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 /** Match NextAuth session length; refresh near expiry so sockets stay valid. */
@@ -97,24 +97,6 @@ export const authOptions: NextAuthOptions = {
             console.error("[auth] recordUserLogin failed", err);
           }
         }
-        try {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: { role: true, email: true },
-          });
-          if (dbUser && isAllowlistedAdminEmail(dbUser.email) && dbUser.role !== "ADMIN") {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { role: "ADMIN" },
-            });
-            token.isAdmin = true;
-          } else {
-            token.isAdmin = dbUser ? isAdminUser(dbUser) : isAllowlistedAdminEmail(user.email);
-          }
-        } catch (err) {
-          console.error("[auth] admin role lookup failed", err);
-          token.isAdmin = isAllowlistedAdminEmail(user.email);
-        }
       }
       if (trigger === "update" && session) {
         if (session.image !== undefined) {
@@ -129,6 +111,9 @@ export const authOptions: NextAuthOptions = {
           );
         }
       }
+      // Re-check allowlist + DB role on every JWT refresh so pre-admin sessions
+      // pick up Admin after deploy (no stuck year-long JWT without isAdmin).
+      await syncAdminFlagOnToken(token);
       // NextAuth sessions outlive the old 24h gameToken — refresh while logged in.
       if (
         token.id &&
