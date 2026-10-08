@@ -19,29 +19,43 @@ export function getVisualSeatIndex(
   );
 }
 
+/**
+ * Ellipse seat positions. Bottom (hero) seats sit higher on the felt so
+ * hole cards clear the table container edge under overflow clipping.
+ */
 export function getSeatPosition(
   visualIndex: number,
   total: number,
   compact = false
 ): { x: number; y: number } {
   const angle = (visualIndex / total) * 2 * Math.PI - Math.PI / 2;
-  const rx = compact ? 34 : 42;
-  const ry = compact ? 30 : 38;
+  // Slightly tighter ellipse with 6–7 players to reduce seat overlap.
+  const crowded = total >= 6;
+  const rx = compact ? (crowded ? 32 : 34) : crowded ? 40 : 42;
+  const ry = compact ? (crowded ? 26 : 28) : crowded ? 32 : 35;
   let y = 50 + ry * Math.sin(angle);
-  if (compact) {
-    y = Math.min(86, Math.max(22, y));
-  }
-  return {
-    x: 50 + rx * Math.cos(angle),
-    y,
-  };
+  const x = 50 + rx * Math.cos(angle);
+
+  // Keep bottom seats above the clip line so hero hole cards stay visible.
+  const maxBottomY = compact ? 68 : 72;
+  const minTopY = compact ? 20 : 16;
+  y = Math.min(maxBottomY, Math.max(minTopY, y));
+
+  return { x, y };
 }
 
-/** Shift top seats so chrome hangs down and does not cover host blind controls. */
+/**
+ * Anchor transforms:
+ * - Top seats: hang downward so chrome clears host blind controls
+ * - Bottom seats: hang upward so hole cards stay inside the felt box
+ */
 export function seatAnchorTransform(visualIndex: number, total: number): string {
   const angle = (visualIndex / total) * 2 * Math.PI - Math.PI / 2;
   const y = Math.sin(angle);
-  const ty = y < -0.25 ? "-18%" : "-50%";
+  let ty = "-50%";
+  if (y < -0.25) ty = "-18%";
+  else if (y > 0.25) ty = "-88%";
+  else if (y > 0.05) ty = "-70%";
   return `translate(-50%, ${ty})`;
 }
 
