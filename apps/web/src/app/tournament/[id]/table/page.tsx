@@ -596,7 +596,7 @@ export default function TablePage() {
         </p>
       )}
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch justify-center max-w-7xl mx-auto w-full min-h-0 overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch justify-center max-w-7xl mx-auto w-full min-h-0 overflow-visible">
         {gameFinished && (
           <GameEndSidebar
             tournamentId={tournamentId}
@@ -609,7 +609,7 @@ export default function TablePage() {
           />
         )}
 
-        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-visible">
           {blindTimer && !gameFinished && (
             <BlindTimerBar
               timer={blindTimer}
@@ -620,9 +620,9 @@ export default function TablePage() {
               actionLoading={timerActionLoading}
             />
           )}
-          <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch min-h-0 overflow-hidden">
-            <div className="flex-[1.4] flex items-center justify-center min-w-0 min-h-0 overflow-hidden max-sm:min-h-[42%] max-sm:flex-[1.2]">
-              <div className="relative w-full h-full max-w-3xl max-h-full">
+          <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch min-h-0 overflow-visible">
+            <div className="flex-[1.4] flex items-center justify-center min-w-0 min-h-0 overflow-visible max-sm:min-h-[46%] max-sm:flex-[1.35]">
+              <div className="relative w-full h-full max-w-3xl max-h-full pb-6 sm:pb-8 overflow-visible">
                 <PokerTable
                   seats={tableState.seats}
                   board={tableState.board}

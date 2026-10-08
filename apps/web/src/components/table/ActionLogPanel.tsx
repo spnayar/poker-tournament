@@ -100,7 +100,7 @@ export function ActionLogPanel({
   }, [actionLog]);
 
   return (
-    <aside className="table-chrome w-full lg:w-64 xl:w-72 shrink-0 rounded-md p-2 sm:p-2.5 flex flex-col min-h-0 max-h-full max-sm:flex-1 overflow-hidden relative z-0">
+    <aside className="table-chrome w-full lg:w-64 xl:w-72 shrink-0 rounded-md p-2 sm:p-2.5 flex flex-col min-h-0 max-h-full max-sm:flex-none max-sm:max-h-[34%] overflow-hidden relative z-0">
       <div className="mb-1.5 shrink-0 flex items-baseline justify-between gap-2">
         <h2 className="text-xs font-semibold text-slate-200 tracking-tight">
           Action Log
