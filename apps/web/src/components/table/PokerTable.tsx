@@ -15,7 +15,7 @@ import { lastActionTone } from "@/lib/lastActionStyle";
 import {
   getSeatPositionForViewer,
   getViewerSortedSeatIndex,
-  seatAnchorTransform,
+  seatAnchorTransformForViewer,
 } from "./tableLayout";
 import type { SeatPublic, ShownHand } from "@poker/protocol";
 import { hostSeatControl } from "@poker/protocol";
@@ -112,7 +112,7 @@ export function PlayerSeat({
       style={{
         left: `${position.x}%`,
         top: `${position.y}%`,
-        transform: seatAnchorTransform(visualIndex, seatCount),
+        transform: seatAnchorTransformForViewer(visualIndex, seatCount, isMe),
       }}
       animate={{ opacity: seat.folded ? 0.4 : statusBadge ? 0.55 : 1 }}
     >
@@ -232,7 +232,11 @@ export function PlayerSeat({
         </p>
       )}
 
-      <div className="flex gap-0.5 sm:gap-1 mt-1">
+      <div
+        className={`flex gap-0.5 sm:gap-1 mt-1 ${
+          seatCount >= 6 && !isMe ? "scale-[0.72] origin-top" : ""
+        }`}
+      >
         {cardsToShow.map((card, i) => (
           <PlayingCard
             key={i}
