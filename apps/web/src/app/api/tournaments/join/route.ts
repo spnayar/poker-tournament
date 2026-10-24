@@ -4,9 +4,24 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@poker/db";
 import {
   decideJoinNight,
+  joinCodeFormatError,
   normalizeJoinCode,
   publicJoinPreview,
 } from "@/lib/joinNight";
+import { joinCodeLimiter } from "@/lib/rateLimit";
+import { requestIp } from "@/lib/requestIp";
+
+async function limitJoinAttempt(req: Request): Promise<NextResponse | null> {
+  const limit = await joinCodeLimiter.consume(requestIp(req));
+  if (limit.allowed) return null;
+  return NextResponse.json(
+    { error: "Too many join attempts. Try again later." },
+    {
+      status: 429,
+      headers: { "Retry-After": String(limit.retryAfterSec) },
+    }
+  );
+}
 
 async function loadJoinTournament(joinCode: string) {
   return prisma.tournament.findUnique({
@@ -19,11 +34,14 @@ async function loadJoinTournament(joinCode: string) {
 }
 
 export async function GET(req: Request) {
+  const limited = await limitJoinAttempt(req);
+  if (limited) return limited;
+
   const url = new URL(req.url);
   const joinCode = normalizeJoinCode(url.searchParams.get("code"));
   if (!joinCode) {
     return NextResponse.json(
-      { error: "Join code must be 4 characters" },
+      { error: joinCodeFormatError() },
       { status: 400 }
     );
   }
@@ -47,6 +65,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const limited = await limitJoinAttempt(req);
+  if (limited) return limited;
+
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -57,7 +78,7 @@ export async function POST(req: Request) {
 
   if (!joinCode) {
     return NextResponse.json(
-      { error: "Join code must be 4 characters" },
+      { error: joinCodeFormatError() },
       { status: 400 }
     );
   }

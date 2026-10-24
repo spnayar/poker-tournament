@@ -1,5 +1,6 @@
 import { prisma, recomputeUserStats } from "@poker/db";
 import { canDeleteAccount } from "./adminAccess";
+import { gameServerControlHeaders } from "./gameServerControl";
 
 export type AdminAccountRow = {
   id: string;
@@ -86,11 +87,16 @@ export async function deletePlayerAccount(opts: {
   const hostedIds = hosted.map((t) => t.id);
   const gameServerUrl =
     process.env.GAME_SERVER_URL ?? "http://localhost:3001";
+  const control = hosted.length > 0 ? gameServerControlHeaders() : null;
+  if (control && !control.ok) {
+    return { ok: false, reason: control.error, status: 500 };
+  }
 
   for (const tournament of hosted) {
     try {
       await fetch(`${gameServerUrl}/tournaments/${tournament.id}`, {
         method: "DELETE",
+        headers: control && control.ok ? control.headers : undefined,
       });
     } catch (err) {
       console.error("Could not teardown hosted game night before delete:", err);

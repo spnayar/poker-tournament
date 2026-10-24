@@ -18,6 +18,13 @@ describe("normalizeJoinCode", () => {
     expect(normalizeJoinCode("AB")).toBeNull();
     expect(normalizeJoinCode(null)).toBeNull();
   });
+
+  it("accepts existing 4-character codes and new 8-character codes", () => {
+    expect(normalizeJoinCode("xk7m")).toBe("XK7M");
+    expect(normalizeJoinCode("ab12cd34")).toBe("AB12CD34");
+    expect(normalizeJoinCode("ABC")).toBeNull();
+    expect(normalizeJoinCode("ABCD12345")).toBeNull();
+  });
 });
 
 describe("joinPath", () => {

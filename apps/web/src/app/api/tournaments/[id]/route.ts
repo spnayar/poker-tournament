@@ -10,6 +10,7 @@ import {
   parseSettleUpMethods,
 } from "@poker/protocol";
 import { sendNightRecapEmail } from "@/lib/nightRecap";
+import { gameServerControlHeaders } from "@/lib/gameServerControl";
 
 export async function GET(
   _req: Request,
@@ -180,6 +181,11 @@ export async function POST(
       return NextResponse.json({ error: "A tournament is already running" }, { status: 400 });
     }
 
+    const control = gameServerControlHeaders();
+    if (!control.ok) {
+      return NextResponse.json({ error: control.error }, { status: 500 });
+    }
+
     const lastGame = await prisma.game.findFirst({
       where: { tournamentId: id },
       orderBy: { gameNumber: "desc" },
@@ -204,6 +210,7 @@ export async function POST(
     try {
       const beginRes = await fetch(`${gameServerUrl}/tournaments/${id}/begin`, {
         method: "POST",
+        headers: control.headers,
       });
       if (!beginRes.ok) {
         await prisma.game.delete({ where: { id: game.id } });
@@ -296,9 +303,17 @@ export async function DELETE(
     return NextResponse.json({ error: "Only the host can delete" }, { status: 403 });
   }
 
+  const control = gameServerControlHeaders();
+  if (!control.ok) {
+    return NextResponse.json({ error: control.error }, { status: 500 });
+  }
+
   const gameServerUrl = process.env.GAME_SERVER_URL ?? "http://localhost:3001";
   try {
-    await fetch(`${gameServerUrl}/tournaments/${id}`, { method: "DELETE" });
+    await fetch(`${gameServerUrl}/tournaments/${id}`, {
+      method: "DELETE",
+      headers: control.headers,
+    });
   } catch (err) {
     console.error("Could not reach game server to teardown tournament:", err);
   }
