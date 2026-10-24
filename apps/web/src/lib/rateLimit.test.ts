@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { createSendLinkLimiter, type LimitStore } from "./rateLimit";
+import {
+  createJoinCodeLimiter,
+  createSendLinkLimiter,
+  type LimitStore,
+} from "./rateLimit";
 
 function memoryStore(): LimitStore {
   const counts = new Map<string, { count: number; resetAt: number }>();
@@ -53,5 +57,29 @@ describe("send-link rate limit", () => {
     await limiter.consume("two@example.com", "2.2.2.2");
     const blocked = await limiter.consume("three@example.com", "2.2.2.2");
     expect(blocked.allowed).toBe(false);
+  });
+});
+
+describe("join-code rate limit", () => {
+  it("blocks an IP after the attempt budget is used", async () => {
+    const limiter = createJoinCodeLimiter(memoryStore(), {
+      maxPerIp: 2,
+      windowSec: 60,
+    });
+    expect((await limiter.consume("1.1.1.1")).allowed).toBe(true);
+    expect((await limiter.consume("1.1.1.1")).allowed).toBe(true);
+    const blocked = await limiter.consume(" 1.1.1.1 ");
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.retryAfterSec).toBe(60);
+  });
+
+  it("does not share the budget across IP addresses", async () => {
+    const limiter = createJoinCodeLimiter(memoryStore(), {
+      maxPerIp: 1,
+      windowSec: 60,
+    });
+    expect((await limiter.consume("1.1.1.1")).allowed).toBe(true);
+    expect((await limiter.consume("2.2.2.2")).allowed).toBe(true);
+    expect((await limiter.consume("1.1.1.1")).allowed).toBe(false);
   });
 });

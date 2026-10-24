@@ -26,6 +26,7 @@ import {
   needsProfileSetup,
   PROFILE_PROMPT_DISMISS_KEY,
 } from "@/lib/profileSetup";
+import { JOIN_CODE_MAX_LENGTH, JOIN_CODE_MIN_LENGTH } from "@/lib/joinNight";
 
 interface Tournament {
   id: string;
@@ -365,14 +366,18 @@ export default function DashboardPage() {
                   setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
                 }
                 placeholder="e.g. XK7M"
-                maxLength={4}
+                maxLength={JOIN_CODE_MAX_LENGTH}
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none font-mono tracking-widest uppercase"
               />
             </div>
             <div className="flex items-end">
               <button
                 onClick={joinTournament}
-                disabled={joining || joinCode.length !== 4}
+                disabled={
+                  joining ||
+                  joinCode.length < JOIN_CODE_MIN_LENGTH ||
+                  joinCode.length > JOIN_CODE_MAX_LENGTH
+                }
                 className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium disabled:opacity-50"
               >
                 {joining ? "Joining..." : "Join"}

@@ -98,3 +98,25 @@ export function createSendLinkLimiter(
 }
 
 export const sendLinkLimiter = createSendLinkLimiter(redisLimitStore);
+
+const JOIN_WINDOW_SEC = 15 * 60;
+const JOIN_MAX_PER_IP = 30;
+
+/** Preview and join share one bucket so a scan cannot split its budget. */
+export function createJoinCodeLimiter(
+  store: LimitStore,
+  opts?: { maxPerIp?: number; windowSec?: number }
+) {
+  const maxPerIp = opts?.maxPerIp ?? JOIN_MAX_PER_IP;
+  const windowSec = opts?.windowSec ?? JOIN_WINDOW_SEC;
+
+  return {
+    async consume(ip: string): Promise<{ allowed: boolean; retryAfterSec: number }> {
+      const safeIp = ip.trim() || "unknown";
+      const count = await store.incr(`join:code:ip:${safeIp}`, windowSec);
+      return { allowed: count <= maxPerIp, retryAfterSec: windowSec };
+    },
+  };
+}
+
+export const joinCodeLimiter = createJoinCodeLimiter(redisLimitStore);

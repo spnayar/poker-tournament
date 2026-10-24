@@ -1,7 +1,17 @@
+/** Stored codes are 4–8 characters. New codes are 8; older 4-character codes stay valid. */
+export const JOIN_CODE_MIN_LENGTH = 4;
+export const JOIN_CODE_MAX_LENGTH = 8;
+
 export function normalizeJoinCode(raw: string | null | undefined): string | null {
   const code = (raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (code.length < 4 || code.length > 8) return null;
+  if (code.length < JOIN_CODE_MIN_LENGTH || code.length > JOIN_CODE_MAX_LENGTH) {
+    return null;
+  }
   return code;
+}
+
+export function joinCodeFormatError(): string {
+  return `Join code must be ${JOIN_CODE_MIN_LENGTH}–${JOIN_CODE_MAX_LENGTH} characters`;
 }
 
 export function joinPath(code: string): string {

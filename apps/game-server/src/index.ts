@@ -18,10 +18,15 @@ import {
 import {
   ClientEvents,
   ServerEvents,
+  GAME_SERVER_SECRET_HEADER,
   computePayoutsFromPercents,
   PlayerActionSchema,
   SeatIdPayloadSchema,
+  gameServerBootSecretError,
   resolveBlindLevels,
+  resolveGameServerSecret,
+  resolveJwtSecret,
+  secretsEqual,
   shouldResumeOnReconnect,
   applySocketAwayFlags,
   type BlindLevel,
@@ -29,11 +34,24 @@ import {
 } from "@poker/protocol";
 import { BlindTimer, type BlindTimerSnapshot } from "./blindTimer";
 
+const bootError = gameServerBootSecretError({
+  nodeEnv: process.env.NODE_ENV,
+  jwtSecret: process.env.JWT_SECRET,
+  gameServerSecret: process.env.GAME_SERVER_SECRET,
+});
+if (bootError) {
+  console.error(bootError);
+  process.exit(1);
+}
+
 const PORT = parseInt(
   process.env.PORT ?? process.env.GAME_SERVER_PORT ?? "3001",
   10
 );
-const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
+const JWT_SECRET = resolveJwtSecret({
+  nodeEnv: process.env.NODE_ENV,
+  jwtSecret: process.env.JWT_SECRET,
+});
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const SNAPSHOT_TTL_SEC = 60 * 60 * 24 * 7;
 const ACTION_TIMEOUT_MS = 60_000;
@@ -828,8 +846,29 @@ async function resyncSocket(
   });
 }
 
-app.post("/tournaments/:id/begin", async (req, res) => {
-  const { id } = req.params;
+function requireGameServerSecret(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): void {
+  const expected = resolveGameServerSecret({
+    nodeEnv: process.env.NODE_ENV,
+    configured: process.env.GAME_SERVER_SECRET,
+  });
+  const provided = req.get(GAME_SERVER_SECRET_HEADER);
+  if (!secretsEqual(provided, expected)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
+app.post("/tournaments/:id/begin", requireGameServerSecret, async (req, res) => {
+  const id = req.params.id;
+  if (typeof id !== "string") {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
   const ok = await beginGame(id);
   if (!ok) {
     res.status(400).json({ error: "Could not start game" });
@@ -838,8 +877,12 @@ app.post("/tournaments/:id/begin", async (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete("/tournaments/:id", async (req, res) => {
-  const { id } = req.params;
+app.delete("/tournaments/:id", requireGameServerSecret, async (req, res) => {
+  const id = req.params.id;
+  if (typeof id !== "string") {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
   await teardownTournament(id);
   res.json({ ok: true });
 });

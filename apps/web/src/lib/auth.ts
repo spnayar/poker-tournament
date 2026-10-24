@@ -2,12 +2,19 @@ import { NextAuthOptions } from "next-auth";
 import EmailProvider from "next-auth/providers/email";
 import jwt from "jsonwebtoken";
 import { headers } from "next/headers";
+import { resolveJwtSecret } from "@poker/protocol";
 import { prisma, recordUserLogin } from "@poker/db";
 import { createAuthAdapter } from "./auth-adapter";
 import { deliverMagicLink, emailMaxAgeSec } from "./sendMagicLink";
 import { syncAdminFlagOnToken } from "./syncAdminSession";
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
+/** Bracket access so Next does not inline the secret at build time. */
+function currentJwtSecret(): string {
+  return resolveJwtSecret({
+    nodeEnv: process.env["NODE_ENV"],
+    jwtSecret: process.env["JWT_SECRET"],
+  });
+}
 /** Match NextAuth session length; refresh near expiry so sockets stay valid. */
 const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 365; // 1 year
 const GAME_TOKEN_EXPIRES_IN = "365d";
@@ -25,7 +32,7 @@ function signGameToken(
 ): string {
   return jwt.sign(
     { userId, email, displayName },
-    JWT_SECRET,
+    currentJwtSecret(),
     { expiresIn: GAME_TOKEN_EXPIRES_IN }
   );
 }
