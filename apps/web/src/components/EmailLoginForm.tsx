@@ -19,12 +19,17 @@ export function EmailLoginForm({
   const [needsInvite, setNeedsInvite] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const joiningNight = callbackUrl.startsWith("/join/");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       setError("Enter your email");
+      return;
+    }
+    if (needsInvite && !inviteCode.trim()) {
+      setError("Enter your invite code");
       return;
     }
 
@@ -81,8 +86,11 @@ export function EmailLoginForm({
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div>
-        <label className="block text-sm text-slate-400 mb-1">Email</label>
+        <label htmlFor="login-email" className="block text-sm text-slate-400 mb-1">
+          Email
+        </label>
         <input
+          id="login-email"
           type="email"
           value={email}
           onChange={(e) => {
@@ -96,10 +104,22 @@ export function EmailLoginForm({
       </div>
       {needsInvite && (
         <div>
-          <label className="block text-sm text-slate-400 mb-1">
+          <p
+            id="login-invite-notice"
+            role="status"
+            className="text-sm text-amber-300 mb-3 text-balance"
+          >
+            This email isn&apos;t in the club yet. You need an invite code —
+            without one, you can&apos;t access the site.
+          </p>
+          <label
+            htmlFor="login-invite-code"
+            className="block text-sm text-slate-400 mb-1"
+          >
             Invite Code
           </label>
           <input
+            id="login-invite-code"
             type="text"
             value={inviteCode}
             onChange={(e) => {
@@ -108,17 +128,22 @@ export function EmailLoginForm({
             }}
             className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
             autoComplete="off"
+            aria-describedby="login-invite-notice"
             required
             autoFocus
           />
-          <p className="text-slate-500 text-xs mt-2">
-            New here? Enter the club invite code and we&apos;ll create your
-            account, then email a login link. After you sign in you&apos;ll
-            land in this game night.
+          <p className="text-slate-400 text-sm mt-2">
+            {joiningNight
+              ? "Enter the code and we'll email a login link. After you sign in, you'll join this game night."
+              : "Enter the code and we'll email a login link."}
           </p>
         </div>
       )}
-      {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+      {error && (
+        <p className="text-red-400 text-sm text-center" role="alert">
+          {error}
+        </p>
+      )}
       <button
         type="submit"
         disabled={loading}

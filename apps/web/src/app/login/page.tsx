@@ -61,6 +61,15 @@ function LoginForm() {
             Register with invite code
           </Link>
         </p>
+        <p className="text-center mt-3 text-slate-400 text-sm text-balance">
+          <a
+            href="mailto:info@pokertableclub.com"
+            className="text-emerald-400 hover:underline"
+          >
+            Email info@pokertableclub.com
+          </a>{" "}
+          to find out more.
+        </p>
       </div>
     </div>
   );
