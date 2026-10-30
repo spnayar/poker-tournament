@@ -33,7 +33,7 @@ export function EmailLoginForm({
       return;
     }
     if (needsInvite && !inviteCode.trim()) {
-      setError("Enter your invite code");
+      setError("Enter your club invite code");
       return;
     }
 
@@ -114,8 +114,9 @@ export function EmailLoginForm({
             className="text-sm text-amber-300 mb-3 text-balance"
           >
             This email isn&apos;t signed up, so a login link won&apos;t get you
-            in. You need an invite code — without one, you can&apos;t access
-            the site yet. No code? Email{" "}
+            in. You need a club invite code. A game night code does not create
+            an account. Without a club invite code, you can&apos;t access the
+            site yet. No club invite code? Email{" "}
             <a
               href={`mailto:${CLUB_CONTACT_EMAIL}`}
               className="underline hover:text-amber-200"
@@ -128,7 +129,7 @@ export function EmailLoginForm({
             htmlFor="login-invite-code"
             className="block text-sm text-slate-400 mb-1"
           >
-            Invite Code
+            Club invite code
           </label>
           <input
             id="login-invite-code"
@@ -146,8 +147,8 @@ export function EmailLoginForm({
           />
           <p className="text-slate-400 text-sm mt-2">
             {joiningNight
-              ? "Enter the code and we'll email a login link. After you sign in, you'll join this game night."
-              : "Enter the code and we'll email a login link."}
+              ? "Enter the club invite code, not this night's join code. We'll email a login link, and after you sign in you'll join this game night."
+              : "Enter the club invite code, not a game night code. We'll email a login link."}
           </p>
         </div>
       )}

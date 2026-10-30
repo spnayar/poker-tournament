@@ -134,8 +134,9 @@ function JoinLanding() {
         ) : status === "unauthenticated" && joinCode && !previewError ? (
           <>
             <p className="text-slate-400 text-sm text-center mb-4">
-              Sign in to join. If you&apos;re new, you&apos;ll need the club
-              invite code to create an account.
+              Sign in to join. If you&apos;re new, you need a club invite code
+              to create an account. The code on this page is the game night
+              code, and it does not create an account.
             </p>
             <EmailLoginForm
               callbackUrl={callbackUrl}

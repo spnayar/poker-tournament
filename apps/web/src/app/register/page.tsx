@@ -53,7 +53,7 @@ export default function RegisterPage() {
 
   const fields = [
     { key: "email" as const, label: "Email", type: "email" },
-    { key: "inviteCode" as const, label: "Invite Code", type: "text" },
+    { key: "inviteCode" as const, label: "Club invite code", type: "text" },
   ];
 
   return (
@@ -64,10 +64,11 @@ export default function RegisterPage() {
         </div>
         <h1 className="text-3xl font-bold text-center mb-2">Join Poker Night</h1>
         <p className="text-slate-400 text-center mb-8 text-sm text-balance">
-          Invite-only registration. You need an invite code to create an
-          account — without one, you can&apos;t access the site yet. We&apos;ll
+          Invite-only registration. You need a club invite code to create an
+          account. A game night code does not create an account. Without a
+          club invite code, you can&apos;t access the site yet. We&apos;ll
           email you a login link, and you can set your name and avatar after
-          you sign in. No code? Email{" "}
+          you sign in. No club invite code? Email{" "}
           <a
             href={`mailto:${CLUB_CONTACT_EMAIL}`}
             className="text-emerald-400 hover:underline"

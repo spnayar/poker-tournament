@@ -70,15 +70,16 @@ function LoginForm() {
               2. You were invited
             </h2>
             <p className="text-slate-400 text-sm mt-1 text-balance">
-              Sign up if you have an invite code or an invitation. Without a
-              code, this path won&apos;t let you in.
+              Sign up with a club invite code. That code creates your account.
+              It is separate from a game night code, which only joins you to
+              one night after you already have an account.
             </p>
             <p className="mt-2">
               <Link
                 href="/register"
                 className="text-emerald-400 hover:underline text-sm"
               >
-                Register with invite code
+                Register with a club invite code
               </Link>
             </p>
           </li>

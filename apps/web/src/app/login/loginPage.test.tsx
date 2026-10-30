@@ -40,6 +40,8 @@ describe("login access paths", () => {
     expect(visible).toContain("magic link");
     expect(html).toContain("Email me a login link");
     expect(visible).toContain("2. You were invited");
+    expect(visible).toContain("club invite code");
+    expect(visible).toContain("game night code");
     expect(html).toContain('href="/register"');
     expect(visible).toContain("3. Neither of those");
     expect(visible).toContain("can't access the site yet");
@@ -54,6 +56,8 @@ describe("login access paths", () => {
     const visible = text(html);
 
     expect(visible).toContain("isn't signed up");
+    expect(visible).toContain("club invite code");
+    expect(visible).toContain("game night code does not create an account");
     expect(visible).toContain("login link won't get you in");
     expect(visible).toContain("can't access the site yet");
     expect(html).toContain(`href="mailto:${CLUB_CONTACT_EMAIL}"`);
@@ -65,6 +69,7 @@ describe("login access paths", () => {
     const visible = text(html);
 
     expect(visible).toContain("can't access the site yet");
+    expect(visible).toContain("game night code does not create an account");
     expect(html).toContain(`href="mailto:${CLUB_CONTACT_EMAIL}"`);
     expect(html).toContain('href="/login"');
   });
