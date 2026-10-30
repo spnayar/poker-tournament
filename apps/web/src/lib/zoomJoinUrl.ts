@@ -101,3 +101,107 @@ export function normalizeMeetingNumber(value: string | null | undefined): string
   if (digits.length < 9 || digits.length > 11) return null;
   return digits;
 }
+
+/** DB fields derived from a host-pasted join URL (create form + lobby PATCH). */
+export type ZoomLinkFields = {
+  zoomJoinUrl: string;
+  zoomMeetingNumber: string | null;
+  zoomPwdQuery: string | null;
+};
+
+/**
+ * Resolve a pasted Zoom join URL into tournament columns.
+ * Canonical `/j/{id}` parses fully; other `*.zoom.us` / `*.zoom.com` paths soft-store raw
+ * so Join still opens (same contract as lobby ZoomNightPanel).
+ */
+export function resolveZoomLinkFields(
+  input: string
+): { ok: true; fields: ZoomLinkFields } | { ok: false; error: string } {
+  const parsed = parseZoomJoinUrl(input);
+  if (parsed.ok) {
+    return {
+      ok: true,
+      fields: {
+        zoomJoinUrl: parsed.joinUrl,
+        zoomMeetingNumber: parsed.meetingNumber,
+        zoomPwdQuery: parsed.pwdQuery,
+      },
+    };
+  }
+
+  let host: string | null = null;
+  try {
+    host = new URL(parsed.raw).hostname;
+  } catch {
+    host = null;
+  }
+  if (!host || !isZoomHostname(host)) {
+    return { ok: false, error: parsed.error };
+  }
+
+  return {
+    ok: true,
+    fields: {
+      zoomJoinUrl: parsed.raw,
+      zoomMeetingNumber: null,
+      zoomPwdQuery: null,
+    },
+  };
+}
+
+/** Optional Zoom attach on create Game Night (empty = leave videoMode NONE). */
+export type ZoomCreateAttach = {
+  videoMode: "ZOOM_LINK" | "MEETING_SDK_MIRROR";
+  zoomJoinUrl: string;
+  zoomMeetingNumber: string | null;
+  zoomPwdQuery: string | null;
+  zoomPasscodePlain: string | null;
+  videoEnabledAt: Date;
+};
+
+/**
+ * Build Zoom columns for tournament create. Both fields optional; passcode alone is rejected.
+ */
+export function resolveZoomCreateAttach(opts: {
+  zoomJoinUrl?: string | null;
+  zoomPasscodePlain?: string | null;
+}):
+  | { ok: true; attach: ZoomCreateAttach | null }
+  | { ok: false; error: string } {
+  const url =
+    typeof opts.zoomJoinUrl === "string" ? opts.zoomJoinUrl.trim() : "";
+  const pass =
+    typeof opts.zoomPasscodePlain === "string"
+      ? opts.zoomPasscodePlain.trim()
+      : "";
+
+  if (!url && !pass) {
+    return { ok: true, attach: null };
+  }
+  if (!url) {
+    return {
+      ok: false,
+      error: "Paste a Zoom join URL to attach a passcode",
+    };
+  }
+
+  const resolved = resolveZoomLinkFields(url);
+  if (!resolved.ok) {
+    return { ok: false, error: resolved.error };
+  }
+
+  const passcodePlain = pass.length > 0 ? pass : null;
+  const canMirror = Boolean(resolved.fields.zoomMeetingNumber && passcodePlain);
+
+  return {
+    ok: true,
+    attach: {
+      videoMode: canMirror ? "MEETING_SDK_MIRROR" : "ZOOM_LINK",
+      zoomJoinUrl: resolved.fields.zoomJoinUrl,
+      zoomMeetingNumber: resolved.fields.zoomMeetingNumber,
+      zoomPwdQuery: resolved.fields.zoomPwdQuery,
+      zoomPasscodePlain: passcodePlain,
+      videoEnabledAt: new Date(),
+    },
+  };
+}

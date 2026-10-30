@@ -9,6 +9,7 @@ import {
   parsePayoutPercents,
   validatePayoutPercents,
 } from "@/lib/tournament";
+import { resolveZoomCreateAttach } from "@/lib/zoomJoinUrl";
 import {
   BlindPaceSchema,
   BLIND_LEVEL_MINUTE_OPTIONS,
@@ -59,6 +60,8 @@ export async function GET() {
           blindPreset: true,
           blindLevelMinutes: true,
           payoutPercents: true,
+          zoomJoinUrl: true,
+          zoomPasscodePlain: true,
         },
       }),
     ]);
@@ -95,6 +98,8 @@ export async function POST(req: Request) {
     blindPace = "gradual",
     blindLevelMinutes = 12,
     payoutPercents: rawPayouts,
+    zoomJoinUrl,
+    zoomPasscodePlain,
   } = body;
 
   const paceResult = BlindPaceSchema.safeParse(blindPace);
@@ -114,6 +119,16 @@ export async function POST(req: Request) {
   const payoutPercents = parsePayoutPercents(
     Array.isArray(rawPayouts) ? rawPayouts : defaultPayoutPercents()
   )!;
+
+  const zoomAttach = resolveZoomCreateAttach({
+    zoomJoinUrl:
+      typeof zoomJoinUrl === "string" ? zoomJoinUrl : null,
+    zoomPasscodePlain:
+      typeof zoomPasscodePlain === "string" ? zoomPasscodePlain : null,
+  });
+  if (!zoomAttach.ok) {
+    return NextResponse.json({ error: zoomAttach.error }, { status: 400 });
+  }
 
   try {
     const joinCode = await generateUniqueJoinCode(async (code) => {
@@ -136,6 +151,16 @@ export async function POST(req: Request) {
         blindLevels,
         payoutPercents,
         inviteCode: joinCode,
+        ...(zoomAttach.attach
+          ? {
+              videoMode: zoomAttach.attach.videoMode,
+              zoomJoinUrl: zoomAttach.attach.zoomJoinUrl,
+              zoomMeetingNumber: zoomAttach.attach.zoomMeetingNumber,
+              zoomPwdQuery: zoomAttach.attach.zoomPwdQuery,
+              zoomPasscodePlain: zoomAttach.attach.zoomPasscodePlain,
+              videoEnabledAt: zoomAttach.attach.videoEnabledAt,
+            }
+          : {}),
         players: {
           create: {
             userId: session.user.id,
