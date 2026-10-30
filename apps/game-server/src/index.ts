@@ -18,20 +18,22 @@ import {
 import {
   ClientEvents,
   ServerEvents,
-  GAME_SERVER_SECRET_HEADER,
   computePayoutsFromPercents,
   PlayerActionSchema,
   SeatIdPayloadSchema,
-  gameServerBootSecretError,
   resolveBlindLevels,
-  resolveGameServerSecret,
-  resolveJwtSecret,
-  secretsEqual,
   shouldResumeOnReconnect,
   applySocketAwayFlags,
   type BlindLevel,
   type TableState,
 } from "@poker/protocol";
+import {
+  GAME_SERVER_SECRET_HEADER,
+  gameServerBootSecretError,
+  resolveGameServerSecret,
+  resolveJwtSecret,
+  secretsEqual,
+} from "@poker/protocol/server";
 import { BlindTimer, type BlindTimerSnapshot } from "./blindTimer";
 
 const bootError = gameServerBootSecretError({

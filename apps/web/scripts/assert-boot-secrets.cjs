@@ -4,7 +4,7 @@
  */
 const path = require("path");
 const { loadRootEnv } = require("../load-root-env.cjs");
-const { webBootSecretError } = require("@poker/protocol");
+const { webBootSecretError } = require("@poker/protocol/server");
 
 loadRootEnv(path.join(__dirname, "../../../.env"));
 

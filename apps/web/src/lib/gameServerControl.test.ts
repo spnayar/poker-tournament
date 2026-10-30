@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEV_GAME_SERVER_SECRET } from "@poker/protocol";
+import { DEV_GAME_SERVER_SECRET } from "@poker/protocol/server";
 import { gameServerControlHeaders } from "./gameServerControl";
 
 describe("gameServerControlHeaders", () => {

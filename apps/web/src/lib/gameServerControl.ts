@@ -1,7 +1,7 @@
 import {
   GAME_SERVER_SECRET_HEADER,
   resolveGameServerSecret,
-} from "@poker/protocol";
+} from "@poker/protocol/server";
 
 export type GameServerControlHeaders =
   | { ok: true; headers: Record<string, string> }

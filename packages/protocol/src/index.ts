@@ -614,4 +614,5 @@ export function parseGameFunStats(raw: unknown): GameFunStats {
 }
 
 export * from "./blinds";
-export * from "./serverSecrets";
+// Secrets stay on "@poker/protocol/server". Re-exporting them here puts
+// Node-only code in the Next.js client bundle and fails the production build.

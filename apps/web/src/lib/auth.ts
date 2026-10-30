@@ -2,7 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import EmailProvider from "next-auth/providers/email";
 import jwt from "jsonwebtoken";
 import { headers } from "next/headers";
-import { resolveJwtSecret } from "@poker/protocol";
+import { resolveJwtSecret } from "@poker/protocol/server";
 import { prisma, recordUserLogin } from "@poker/db";
 import { createAuthAdapter } from "./auth-adapter";
 import { deliverMagicLink, emailMaxAgeSec } from "./sendMagicLink";
