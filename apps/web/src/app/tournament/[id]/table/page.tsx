@@ -16,6 +16,7 @@ import { SoundToggle } from "@/components/table/SoundToggle";
 import { DashboardLink } from "@/components/table/DashboardLink";
 import { HostMenu } from "@/components/table/HostMenu";
 import { ChopDialog } from "@/components/table/ChopDialog";
+import { ZoomMirrorStrip } from "@/components/table/ZoomMirrorStrip";
 import { useSoundPreference } from "@/hooks/useSoundPreference";
 import {
   playHandEndCheer,
@@ -106,6 +107,7 @@ export default function TablePage() {
   const [viewerSeatId, setViewerSeatId] = useState<number | null>(null);
   const { enabled: soundEnabled, toggle: toggleSound } = useSoundPreference();
   const cheeredHandRef = useRef<number | null>(null);
+  const [speakingUserIds, setSpeakingUserIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -615,6 +617,11 @@ export default function TablePage() {
         )}
         <SoundToggle enabled={soundEnabled} onToggle={toggleSound} />
       </div>
+      <ZoomMirrorStrip
+        tournamentId={tournamentId}
+        seats={tableState.seats}
+        onSpeakingUserIds={setSpeakingUserIds}
+      />
       {tableState && !connected && (
         <p className="text-center text-amber-300 text-xs mb-1 shrink-0">
           Connection lost — reconnecting…
@@ -666,6 +673,7 @@ export default function TablePage() {
                   onVisibleBoardChange={handleVisibleBoardChange}
                   isHost={Boolean(isHost)}
                   actionDeadlineAt={tableState.actionDeadlineAt ?? null}
+                  speakingUserIds={speakingUserIds}
                   onSkipPlayer={skipPlayer}
                   onUnskipPlayer={unskipPlayer}
                 />

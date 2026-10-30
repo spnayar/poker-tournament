@@ -55,8 +55,20 @@ pnpm test          # Run game engine tests
 pnpm db:studio     # Prisma Studio
 ```
 
+## Zoom table faces (optional)
+
+Host can paste a Zoom join URL on the night lobby. Players open Zoom for the real call (audio). Optional **Meeting SDK** mirror shows a collapse-to-zero face strip plus speaker rings on seats — in-app audio stays off.
+
+On the **web** Railway service set:
+
+- `ZOOM_MEETING_SDK_CLIENT_ID`
+- `ZOOM_MEETING_SDK_CLIENT_SECRET`
+
+(Meeting SDK app from Zoom Marketplace. Without these, Join Zoom still works; “Show table faces” stays off.)
+
 ## Security
 
 - Hole cards are sent only to the owning player via WebSocket
 - All dealing, betting validation, and pot math run server-side
 - JWT auth required for game server connections
+- Zoom Meeting SDK Client Secret stays server-side only

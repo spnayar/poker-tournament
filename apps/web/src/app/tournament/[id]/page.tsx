@@ -17,6 +17,7 @@ import {
 import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
 import { formatSessionLabelShort } from "@/lib/labels";
 import { InvitePlayersPanel } from "@/components/InvitePlayersPanel";
+import { ZoomNightPanel } from "@/components/ZoomNightPanel";
 
 interface Player {
   userId: string;
@@ -253,6 +254,12 @@ export default function TournamentLobbyPage() {
 
       {isHost && tournament.status !== "FINISHED" && (
         <InvitePlayersPanel tournamentId={tournament.id} />
+      )}
+
+      {tournament.status !== "FINISHED" && (
+        <div className="mb-6">
+          <ZoomNightPanel tournamentId={tournament.id} isHost={isHost} />
+        </div>
       )}
 
       <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 mb-6">

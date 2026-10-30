@@ -45,6 +45,8 @@ interface PlayerSeatProps {
   revealHoleCards?: boolean;
   isHost?: boolean;
   actionSecondsLeft?: number | null;
+  /** Zoom active-speaker match (name-based). Emerald ring — amber stays for “to act”. */
+  isSpeaking?: boolean;
   onSkip?: (seatId: number) => void;
   onUnskip?: (seatId: number) => void;
 }
@@ -62,6 +64,7 @@ export function PlayerSeat({
   revealHoleCards = false,
   isHost = false,
   actionSecondsLeft = null,
+  isSpeaking = false,
   onSkip,
   onUnskip,
 }: PlayerSeatProps) {
@@ -117,6 +120,14 @@ export function PlayerSeat({
       animate={{ opacity: seat.folded ? 0.4 : statusBadge ? 0.55 : 1 }}
     >
       <div className="relative">
+        {isSpeaking && (
+          <motion.div
+            className="absolute -inset-1.5 rounded-full border-2 border-emerald-400/90"
+            animate={{ opacity: [0.95, 0.45, 0.95], scale: [1, 1.04, 1] }}
+            transition={{ repeat: Infinity, duration: 1.1 }}
+            aria-hidden
+          />
+        )}
         {isActive && (
           <motion.div
             className="absolute -inset-1 rounded-full border-2 border-amber-400"
@@ -132,7 +143,9 @@ export function PlayerSeat({
               ? "border-slate-400 grayscale"
               : statusBadge === "sit-out"
                 ? "border-orange-500 grayscale"
-                : "border-slate-600"
+                : isSpeaking
+                  ? "border-emerald-500"
+                  : "border-slate-600"
           }`}
         />
         {statusBadge ? (
@@ -269,6 +282,7 @@ interface PokerTableProps {
   onVisibleBoardChange?: (board: (string | undefined)[]) => void;
   isHost?: boolean;
   actionDeadlineAt?: number | null;
+  speakingUserIds?: string[];
   onSkipPlayer?: (seatId: number) => void;
   onUnskipPlayer?: (seatId: number) => void;
 }
@@ -291,6 +305,7 @@ export function PokerTable({
   onVisibleBoardChange,
   isHost = false,
   actionDeadlineAt = null,
+  speakingUserIds = [],
   onSkipPlayer,
   onUnskipPlayer,
 }: PokerTableProps) {
@@ -474,6 +489,7 @@ export function PokerTable({
             isActive={seat.seatId === currentActorSeat}
             animateDeal={animateDeal}
             isHost={isHost}
+            isSpeaking={speakingUserIds.includes(seat.userId)}
             actionSecondsLeft={
               seat.seatId === currentActorSeat ? actionSecondsLeft : null
             }
