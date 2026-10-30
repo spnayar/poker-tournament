@@ -24,6 +24,9 @@ import {
   resolveBlindLevels,
   shouldResumeOnReconnect,
   applySocketAwayFlags,
+  ChopTournamentSchema,
+  rankChopFinish,
+  validateChopShares,
   type BlindLevel,
   type TableState,
 } from "@poker/protocol";
@@ -597,7 +600,11 @@ async function clearGameRedis(tournamentId: string, gameNumber: number): Promise
   await redis.del(blindTimerKey(tournamentId, gameNumber));
 }
 
-async function finishGame(tournamentId: string, room: TournamentRoom): Promise<void> {
+async function finishGame(
+  tournamentId: string,
+  room: TournamentRoom,
+  chopShares?: Map<string, number>
+): Promise<void> {
   clearActionTimer(room);
   clearAllDisconnectTimers(room);
 
@@ -613,11 +620,6 @@ async function finishGame(tournamentId: string, room: TournamentRoom): Promise<v
 
   const playerCount = players.length;
   const prizePool = room.buyInCents * playerCount;
-  const payoutAmounts = computePayoutsFromPercents(
-    prizePool,
-    room.payoutPercents,
-    playerCount
-  );
 
   const userById = new Map(
     players.map((p) => [
@@ -626,29 +628,78 @@ async function finishGame(tournamentId: string, room: TournamentRoom): Promise<v
     ] as const)
   );
 
-  const ranked = players.map((p) => {
-    const seatId = room.seatByUserId.get(p.userId);
-    let position =
-      seatId !== undefined ? room.table.getFinishPosition(seatId) : 0;
-    if (position === 0) position = players.length;
-    const user = userById.get(p.userId);
-    return {
-      userId: p.userId,
-      position,
-      displayName: user?.displayName ?? "Player",
-      avatarUrl: user?.avatarUrl ?? null,
-    };
-  });
+  let finishOrder: {
+    userId: string;
+    position: number;
+    payoutCents: number;
+    displayName: string;
+    avatarUrl: string | null;
+  }[];
 
-  ranked.sort((a, b) => a.position - b.position);
-
-  const finishOrder = ranked.map((row, index) => ({
-    userId: row.userId,
-    position: index + 1,
-    payoutCents: payoutAmounts[index] ?? 0,
-    displayName: row.displayName,
-    avatarUrl: row.avatarUrl,
-  }));
+  if (chopShares) {
+    const chipByUser = new Map(
+      room.table
+        .getPublicState()
+        .seats.map((seat) => [seat.userId, seat.chipCount] as const)
+    );
+    const seatByUser = room.seatByUserId;
+    const bustIndex = new Map<string, number>();
+    room.table.getEliminationOrder().forEach((seatId, index) => {
+      for (const [userId, mappedSeat] of seatByUser) {
+        if (mappedSeat === seatId) bustIndex.set(userId, index);
+      }
+    });
+    const ranked = rankChopFinish({
+      remaining: [...chopShares.entries()].map(([userId, payoutCents]) => ({
+        userId,
+        payoutCents,
+        chipCount: chipByUser.get(userId) ?? 0,
+      })),
+      eliminated: players
+        .filter((player) => !chopShares.has(player.userId))
+        .map((player) => ({
+          userId: player.userId,
+          bustIndex: bustIndex.get(player.userId) ?? -1,
+        })),
+    });
+    finishOrder = ranked.map((row) => {
+      const user = userById.get(row.userId);
+      return {
+        userId: row.userId,
+        position: row.position,
+        payoutCents: row.payoutCents,
+        displayName: user?.displayName ?? "Player",
+        avatarUrl: user?.avatarUrl ?? null,
+      };
+    });
+  } else {
+    const payoutAmounts = computePayoutsFromPercents(
+      prizePool,
+      room.payoutPercents,
+      playerCount
+    );
+    const ranked = players.map((p) => {
+      const seatId = room.seatByUserId.get(p.userId);
+      let position =
+        seatId !== undefined ? room.table.getFinishPosition(seatId) : 0;
+      if (position === 0) position = players.length;
+      const user = userById.get(p.userId);
+      return {
+        userId: p.userId,
+        position,
+        displayName: user?.displayName ?? "Player",
+        avatarUrl: user?.avatarUrl ?? null,
+      };
+    });
+    ranked.sort((a, b) => a.position - b.position);
+    finishOrder = ranked.map((row, index) => ({
+      userId: row.userId,
+      position: index + 1,
+      payoutCents: payoutAmounts[index] ?? 0,
+      displayName: row.displayName,
+      avatarUrl: row.avatarUrl,
+    }));
+  }
 
   for (const { userId, position, payoutCents } of finishOrder) {
     await prisma.gameResult.create({
@@ -706,6 +757,7 @@ async function finishGame(tournamentId: string, room: TournamentRoom): Promise<v
     hostUserId: tournament?.hostUserId ?? "",
     finishOrder,
     prizePoolCents: prizePool,
+    chopped: Boolean(chopShares),
   });
 
   await clearGameRedis(tournamentId, room.gameNumber);
@@ -1090,6 +1142,62 @@ io.on("connection", (socket) => {
     }
 
     await afterAction(tournamentId, room);
+  });
+
+  socket.on(ClientEvents.CHOP_TOURNAMENT, async (data: unknown) => {
+    const parsed = ChopTournamentSchema.safeParse(data);
+    if (!parsed.success) {
+      socket.emit(ServerEvents.ERROR, { message: "Could not read that chop" });
+      return;
+    }
+
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) {
+      socket.emit(ServerEvents.ERROR, { message: "No game in progress" });
+      return;
+    }
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the game night owner can chop",
+      });
+      return;
+    }
+
+    const phase = room.table.getPublicState().phase;
+    if (phase !== "waiting" && phase !== "hand-complete") {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Finish this hand before chopping",
+      });
+      return;
+    }
+
+    const remainingUserIds = room.table
+      .getPublicState()
+      .seats.filter((seat) => seat.chipCount > 0)
+      .map((seat) => seat.userId);
+    const roster = await prisma.tournamentPlayer.findMany({
+      where: { tournamentId },
+      select: { userId: true },
+    });
+    const prizePoolCents = room.buyInCents * roster.length;
+    const check = validateChopShares({
+      prizePoolCents,
+      remainingUserIds,
+      shares: parsed.data.shares,
+    });
+    if (!check.ok) {
+      socket.emit(ServerEvents.ERROR, { message: check.error });
+      return;
+    }
+
+    const shares = new Map(
+      parsed.data.shares.map((share) => [share.userId, share.payoutCents] as const)
+    );
+    await finishGame(tournamentId, room, shares);
   });
 
   socket.on(ClientEvents.PAUSE_BLIND_TIMER, async () => {

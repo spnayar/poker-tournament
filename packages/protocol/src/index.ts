@@ -213,6 +213,7 @@ export const ClientEvents = {
   ADVANCE_BLIND_LEVEL: "blind:advance",
   SKIP_PLAYER: "player:skip",
   UNSKIP_PLAYER: "player:unskip",
+  CHOP_TOURNAMENT: "tournament:chop",
 } as const;
 
 export const SeatIdPayloadSchema = z.object({
@@ -281,6 +282,8 @@ export const GameFinishedSchema = z.object({
     })
   ),
   prizePoolCents: z.number().int().nonnegative(),
+  /** Host ended the tournament with an agreed split instead of playing it out. */
+  chopped: z.boolean().optional(),
 });
 export type GameFinished = z.infer<typeof GameFinishedSchema>;
 
@@ -614,5 +617,6 @@ export function parseGameFunStats(raw: unknown): GameFunStats {
 }
 
 export * from "./blinds";
+export * from "./chop";
 // Secrets stay on "@poker/protocol/server". Re-exporting them here puts
 // Node-only code in the Next.js client bundle and fails the production build.

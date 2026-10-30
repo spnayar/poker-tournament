@@ -41,7 +41,8 @@ export function GameEndSidebar({
     <aside className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
       <div className="bg-slate-900 rounded-xl p-4 border border-amber-500/30">
         <h2 className="text-lg font-bold text-amber-400 mb-1">
-          {formatSessionLabel(result.gameNumber)} over
+          {formatSessionLabel(result.gameNumber)}{" "}
+          {result.chopped ? "chopped" : "over"}
         </h2>
         <p className="text-xs text-slate-500 mb-4">
           Prize pool {formatCents(result.prizePoolCents)} ·{" "}

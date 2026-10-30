@@ -14,6 +14,8 @@ import { BlindTimerBar } from "@/components/table/BlindTimerBar";
 import { DealNextHandBar } from "@/components/table/DealNextHandBar";
 import { SoundToggle } from "@/components/table/SoundToggle";
 import { DashboardLink } from "@/components/table/DashboardLink";
+import { HostMenu } from "@/components/table/HostMenu";
+import { ChopDialog } from "@/components/table/ChopDialog";
 import { useSoundPreference } from "@/hooks/useSoundPreference";
 import {
   playHandEndCheer,
@@ -91,6 +93,11 @@ export default function TablePage() {
   const [actionPending, setActionPending] = useState(false);
   const [dealNextPending, setDealNextPending] = useState(false);
   const [hostActionLoading, setHostActionLoading] = useState(false);
+  const [chopOpen, setChopOpen] = useState(false);
+  const [chopSubmitting, setChopSubmitting] = useState(false);
+  const [chopError, setChopError] = useState("");
+  const chopOpenRef = useRef(false);
+  chopOpenRef.current = chopOpen;
   const [blindTimer, setBlindTimer] = useState<
     (BlindTimerState & { hostUserId?: string }) | null
   >(null);
@@ -367,6 +374,8 @@ export default function TablePage() {
       console.error("Game error:", err.message);
       setActionPending(false);
       setDealNextPending(false);
+      setChopSubmitting(false);
+      if (chopOpenRef.current) setChopError(err.message);
       if (err.message.includes("deleted")) {
         router.push("/dashboard");
       }
@@ -588,6 +597,22 @@ export default function TablePage() {
             <span className="text-amber-400"> · Tournament over</span>
           ) : null}
         </p>
+        {isHost && !gameFinished && (
+          <HostMenu
+            disabledReason={
+              tableState.seats.filter((seat) => seat.chipCount > 0).length < 2
+                ? "At least two players need chips"
+                : tableState.phase !== "waiting" &&
+                    tableState.phase !== "hand-complete"
+                  ? "Finish this hand first"
+                  : null
+            }
+            onChop={() => {
+              setChopError("");
+              setChopOpen(true);
+            }}
+          />
+        )}
         <SoundToggle enabled={soundEnabled} onToggle={toggleSound} />
       </div>
       {tableState && !connected && (
@@ -713,6 +738,27 @@ export default function TablePage() {
           </div>
         </div>
       )}
+      <ChopDialog
+        open={chopOpen && !gameFinished}
+        tournamentId={tournamentId}
+        seats={tableState.seats}
+        submitting={chopSubmitting}
+        serverError={chopError}
+        onClose={() => {
+          if (chopSubmitting) return;
+          setChopOpen(false);
+          setChopError("");
+        }}
+        onConfirm={(shares) => {
+          if (!socketRef.current || chopSubmitting) return;
+          setChopSubmitting(true);
+          setChopError("");
+          socketRef.current.emit(ClientEvents.CHOP_TOURNAMENT, {
+            shares,
+            confirm: true,
+          });
+        }}
+      />
     </div>
   );
 }
