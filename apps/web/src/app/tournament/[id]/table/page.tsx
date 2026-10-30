@@ -108,6 +108,10 @@ export default function TablePage() {
   const { enabled: soundEnabled, toggle: toggleSound } = useSoundPreference();
   const cheeredHandRef = useRef<number | null>(null);
   const [speakingUserIds, setSpeakingUserIds] = useState<string[]>([]);
+  const [zoomJoinUrl, setZoomJoinUrl] = useState<string | null>(null);
+  const [zoomMeetingNumber, setZoomMeetingNumber] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -117,6 +121,34 @@ export default function TablePage() {
     setActionLog([]);
     cheeredHandRef.current = null;
   }, [tournamentId]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/tournaments/${tournamentId}/zoom`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const url =
+          typeof data?.zoom?.zoomJoinUrl === "string"
+            ? data.zoom.zoomJoinUrl
+            : null;
+        setZoomJoinUrl(url);
+        setZoomMeetingNumber(
+          typeof data?.zoom?.zoomMeetingNumber === "string"
+            ? data.zoom.zoomMeetingNumber
+            : null
+        );
+      } catch {
+        // Zoom banner is optional; table still works without it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, tournamentId]);
 
   useEffect(() => {
     if (!handResult) {
@@ -700,6 +732,8 @@ export default function TablePage() {
               handNumber={tableState.handNumber}
               visibleBoard={visibleBoard}
               hideAwards={boardRevealing}
+              zoomJoinUrl={zoomJoinUrl}
+              zoomMeetingNumber={zoomMeetingNumber}
             />
           </div>
         </div>

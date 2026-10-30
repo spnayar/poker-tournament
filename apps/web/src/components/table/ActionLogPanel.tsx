@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { getAvatarUrl } from "@/lib/utils";
 import type { ActionLogEntry } from "@poker/protocol";
+import { ZoomActionLogBanner } from "./ZoomActionLogBanner";
 
 interface ActionLogPanelProps {
   actionLog: ActionLogEntry[];
@@ -10,6 +11,8 @@ interface ActionLogPanelProps {
   handNumber: number;
   visibleBoard?: (string | undefined)[];
   hideAwards?: boolean;
+  zoomJoinUrl?: string | null;
+  zoomMeetingNumber?: string | null;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD_PX = 48;
@@ -79,6 +82,8 @@ export function ActionLogPanel({
   handNumber,
   visibleBoard,
   hideAwards = false,
+  zoomJoinUrl = null,
+  zoomMeetingNumber = null,
 }: ActionLogPanelProps) {
   const scrollRef = useRef<HTMLUListElement>(null);
   const stickToBottomRef = useRef(true);
@@ -109,6 +114,13 @@ export function ActionLogPanel({
           #{handNumber}
         </p>
       </div>
+
+      {zoomJoinUrl ? (
+        <ZoomActionLogBanner
+          zoomJoinUrl={zoomJoinUrl}
+          zoomMeetingNumber={zoomMeetingNumber}
+        />
+      ) : null}
 
       {actionLog.length === 0 ? (
         <p className="text-sm text-slate-500 flex-1">Waiting for action...</p>
