@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { CLUB_CONTACT_EMAIL } from "@/lib/clubContact";
 import {
   MAGIC_LINK_SEND_ERROR,
   magicLinkSendFailed,
@@ -10,13 +11,16 @@ import {
 export function EmailLoginForm({
   callbackUrl,
   initialEmail = "",
+  initialNeedsInvite = false,
 }: {
   callbackUrl: string;
   initialEmail?: string;
+  /** Shows the unknown-email invite step. Used to render that state directly. */
+  initialNeedsInvite?: boolean;
 }) {
   const [email, setEmail] = useState(initialEmail);
   const [inviteCode, setInviteCode] = useState("");
-  const [needsInvite, setNeedsInvite] = useState(false);
+  const [needsInvite, setNeedsInvite] = useState(initialNeedsInvite);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const joiningNight = callbackUrl.startsWith("/join/");
@@ -109,8 +113,16 @@ export function EmailLoginForm({
             role="status"
             className="text-sm text-amber-300 mb-3 text-balance"
           >
-            This email isn&apos;t in the club yet. You need an invite code —
-            without one, you can&apos;t access the site.
+            This email isn&apos;t signed up, so a login link won&apos;t get you
+            in. You need an invite code — without one, you can&apos;t access
+            the site yet. No code? Email{" "}
+            <a
+              href={`mailto:${CLUB_CONTACT_EMAIL}`}
+              className="underline hover:text-amber-200"
+            >
+              {CLUB_CONTACT_EMAIL}
+            </a>
+            .
           </p>
           <label
             htmlFor="login-invite-code"
@@ -153,7 +165,9 @@ export function EmailLoginForm({
           ? needsInvite
             ? "Creating account..."
             : "Sending link..."
-          : "Email me a login link"}
+          : needsInvite
+            ? "Create account and send link"
+            : "Email me a login link"}
       </button>
     </form>
   );

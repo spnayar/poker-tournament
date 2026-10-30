@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
+import { CLUB_CONTACT_EMAIL } from "@/lib/clubContact";
 import { REGISTER_SEND_ERROR, magicLinkSendFailed } from "@/lib/magicLinkUi";
 
 export default function RegisterPage() {
@@ -62,10 +63,18 @@ export default function RegisterPage() {
           <BrandMark size="lg" />
         </div>
         <h1 className="text-3xl font-bold text-center mb-2">Join Poker Night</h1>
-        <p className="text-slate-400 text-center mb-8 text-sm">
-          Invite-only registration for friends. We&apos;ll email you a login
-          link — no password. You can set your name and avatar after you sign
-          in.
+        <p className="text-slate-400 text-center mb-8 text-sm text-balance">
+          Invite-only registration. You need an invite code to create an
+          account — without one, you can&apos;t access the site yet. We&apos;ll
+          email you a login link, and you can set your name and avatar after
+          you sign in. No code? Email{" "}
+          <a
+            href={`mailto:${CLUB_CONTACT_EMAIL}`}
+            className="text-emerald-400 hover:underline"
+          >
+            {CLUB_CONTACT_EMAIL}
+          </a>
+          .
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

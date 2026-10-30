@@ -1,11 +1,12 @@
 import { Resend } from "resend";
+import { CLUB_CONTACT_EMAIL } from "./clubContact";
 
 /** Production from-address for the verified mail.pokertableclub.com Resend domain. Overridable via EMAIL_FROM. */
 export const DEFAULT_EMAIL_FROM =
   "Poker Night <noreply@mail.pokertableclub.com>";
 
 /** Human inbox (M365). Replies to app mail land here, not on the noreply sender. */
-export const EMAIL_REPLY_TO = "info@pokertableclub.com";
+export const EMAIL_REPLY_TO = CLUB_CONTACT_EMAIL;
 
 export type SendAppEmailInput = {
   to: string;
