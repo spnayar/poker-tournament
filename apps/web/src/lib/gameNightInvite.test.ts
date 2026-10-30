@@ -83,8 +83,33 @@ describe("gameNightInviteHtml", () => {
     expect(html).toContain("Join this game night");
     expect(html).toContain("http://localhost:3000/join/XK7M");
     expect(html).toContain("No real money");
+    expect(html).not.toContain("Join Zoom");
     expect(html).not.toMatch(/hole|cards/i);
     expect(html).not.toMatch(/src="\//);
+  });
+
+  it("includes Join Zoom CTA when a Zoom link is set", () => {
+    const zoom =
+      "https://us04web.zoom.us/j/12345678901?pwd=AbCdEfGhIjKlMnOp";
+    const html = gameNightInviteHtml({
+      hostDisplayName: "Sanjay",
+      nightName: "Friday Game Night",
+      joinCode: "XK7M",
+      buyInCents: 2000,
+      joinUrl: "http://localhost:3000/join/XK7M",
+      zoomJoinUrl: zoom,
+    });
+    expect(html).toContain("Join Zoom");
+    expect(html).toContain(zoom);
+    const text = gameNightInviteText({
+      hostDisplayName: "Sanjay",
+      nightName: "Friday Game Night",
+      joinCode: "XK7M",
+      buyInCents: 2000,
+      joinUrl: "http://localhost:3000/join/XK7M",
+      zoomJoinUrl: zoom,
+    });
+    expect(text).toContain(`Join Zoom: ${zoom}`);
   });
 
   it("escapes host and night names", () => {

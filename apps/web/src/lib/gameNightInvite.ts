@@ -78,11 +78,13 @@ export function gameNightInviteHtml(opts: {
   joinCode: string;
   buyInCents: number;
   joinUrl: string;
+  zoomJoinUrl?: string | null;
 }): string {
   const host = escapeHtml(opts.hostDisplayName);
   const night = escapeHtml(opts.nightName);
   const code = escapeHtml(opts.joinCode);
   const buyIn = escapeHtml(formatCents(opts.buyInCents));
+  const zoomJoinUrl = opts.zoomJoinUrl?.trim() || null;
 
   return clubEmailHtml({
     heading: "Poker Night",
@@ -94,11 +96,21 @@ export function gameNightInviteHtml(opts: {
     <p style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:0.28em;font-weight:700;color:#34d399;">${code}</p>`,
       emailBody(`Buy-in (ledger): ${buyIn}`),
       emailCta(opts.joinUrl, "Join this game night"),
+      zoomJoinUrl
+        ? [
+            emailBody(
+              "This night has a Zoom call — join when you are ready to play."
+            ),
+            emailCta(zoomJoinUrl, "Join Zoom"),
+          ].join("\n    ")
+        : "",
       emailFinePrint(
         "If you are not signed in, this link opens a login page and we email a magic link. New players still need the club invite code to create an account. After you sign in you land in this game night."
       ),
       emailFinePrint(LEDGER_DISCLAIMER),
-    ].join("\n    "),
+    ]
+      .filter(Boolean)
+      .join("\n    "),
   });
 }
 
@@ -108,16 +120,24 @@ export function gameNightInviteText(opts: {
   joinCode: string;
   buyInCents: number;
   joinUrl: string;
+  zoomJoinUrl?: string | null;
 }): string {
-  return [
+  const lines = [
     `Poker Night`,
     `${opts.hostDisplayName} invited you to ${opts.nightName}.`,
     `Join code: ${opts.joinCode}`,
     `Buy-in (ledger): ${formatCents(opts.buyInCents)}`,
     `Join: ${opts.joinUrl}`,
+  ];
+  const zoomJoinUrl = opts.zoomJoinUrl?.trim();
+  if (zoomJoinUrl) {
+    lines.push(`Join Zoom: ${zoomJoinUrl}`);
+  }
+  lines.push(
     `If you are not signed in, we will email a login link. New players still need the club invite code to create an account.`,
-    LEDGER_DISCLAIMER,
-  ].join("\n");
+    LEDGER_DISCLAIMER
+  );
+  return lines.join("\n");
 }
 
 export async function listPastPlayers(opts: {
@@ -174,14 +194,17 @@ export async function sendGameNightInvites(opts: {
   joinCode: string;
   buyInCents: number;
   ip: string;
+  zoomJoinUrl?: string | null;
 }): Promise<{ results: InviteEmailResult[]; previewHtml: string; joinUrl: string }> {
   const joinUrl = inviteJoinUrl(opts.joinCode);
+  const zoomJoinUrl = opts.zoomJoinUrl?.trim() || null;
   const html = gameNightInviteHtml({
     hostDisplayName: opts.hostDisplayName,
     nightName: opts.nightName,
     joinCode: opts.joinCode,
     buyInCents: opts.buyInCents,
     joinUrl,
+    zoomJoinUrl,
   });
   const text = gameNightInviteText({
     hostDisplayName: opts.hostDisplayName,
@@ -189,6 +212,7 @@ export async function sendGameNightInvites(opts: {
     joinCode: opts.joinCode,
     buyInCents: opts.buyInCents,
     joinUrl,
+    zoomJoinUrl,
   });
   const subject = `You're invited to ${opts.nightName}`;
   const hostEmail = opts.hostEmail.trim().toLowerCase();
@@ -211,6 +235,7 @@ export async function sendGameNightInvites(opts: {
         to: email,
         joinUrl,
         joinCode: opts.joinCode,
+        hasZoom: Boolean(zoomJoinUrl),
       });
     }
 

@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@poker/db";
-import { normalizeMeetingNumber, parseZoomJoinUrl } from "@/lib/zoomJoinUrl";
+import {
+  isZoomHostname,
+  normalizeMeetingNumber,
+  parseZoomJoinUrl,
+  redactZoomUrlForLog,
+} from "@/lib/zoomJoinUrl";
 import { zoomMirrorConfigured } from "@/lib/zoomMeetingSdkJwt";
 
 type ZoomPublic = {
@@ -137,12 +142,29 @@ export async function PATCH(
       data.videoMode = "ZOOM_LINK";
       data.videoEnabledAt = new Date();
     } else {
-      // Store raw so Join still works; meeting number may be missing for SDK.
+      // Soft-store vanity / unrecognized Zoom paths so Join still opens the paste.
+      // Reject non-Zoom hosts entirely.
+      let host: string | null = null;
+      try {
+        host = new URL(parsed.raw).hostname;
+      } catch {
+        host = null;
+      }
+      if (!host || !isZoomHostname(host)) {
+        return NextResponse.json({ error: parsed.error }, { status: 400 });
+      }
       data.zoomJoinUrl = parsed.raw;
       data.zoomMeetingNumber = null;
       data.zoomPwdQuery = null;
       data.videoMode = "ZOOM_LINK";
       data.videoEnabledAt = new Date();
+    }
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[zoom] Host set join link (redacted):", {
+        tournamentId: id,
+        url: redactZoomUrlForLog(data.zoomJoinUrl ?? ""),
+        meetingNumber: data.zoomMeetingNumber ?? null,
+      });
     }
   } else if (body.zoomJoinUrl === null) {
     data.zoomJoinUrl = null;

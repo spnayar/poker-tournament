@@ -90,6 +90,7 @@ export async function POST(
     joinCode: tournament.inviteCode,
     buyInCents: tournament.buyInCents,
     ip: requestIp(req),
+    zoomJoinUrl: tournament.zoomJoinUrl,
   });
 
   return NextResponse.json({

@@ -171,9 +171,9 @@ export function ZoomNightPanel({ tournamentId, isHost }: ZoomNightPanelProps) {
                   href={zoom.zoomJoinUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-2.5 py-1.5 rounded border border-slate-600 text-xs text-slate-200 hover:bg-slate-800"
+                  className="px-2.5 py-1.5 rounded bg-emerald-600/90 text-white text-xs font-medium hover:bg-emerald-500"
                 >
-                  Open Zoom
+                  Join Zoom
                 </a>
                 <button
                   type="button"

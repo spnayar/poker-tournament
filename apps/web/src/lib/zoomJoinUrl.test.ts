@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeMeetingNumber, parseZoomJoinUrl } from "./zoomJoinUrl";
+import {
+  normalizeMeetingNumber,
+  parseZoomJoinUrl,
+  redactZoomUrlForLog,
+} from "./zoomJoinUrl";
 
 describe("parseZoomJoinUrl", () => {
   it("parses regional personal-meeting join URLs with pwd", () => {
@@ -32,5 +36,15 @@ describe("normalizeMeetingNumber", () => {
   it("strips non-digits and validates length", () => {
     expect(normalizeMeetingNumber("123 456 78901")).toBe("12345678901");
     expect(normalizeMeetingNumber("12345")).toBeNull();
+  });
+});
+
+describe("redactZoomUrlForLog", () => {
+  it("redacts pwd query", () => {
+    const redacted = redactZoomUrlForLog(
+      "https://us04web.zoom.us/j/12345678901?pwd=SuperSecret"
+    );
+    expect(redacted).not.toContain("SuperSecret");
+    expect(redacted).toContain("pwd=");
   });
 });

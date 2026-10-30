@@ -25,9 +25,26 @@ export type ZoomJoinParseResult = ZoomJoinParseOk | ZoomJoinParseFail;
 const MEETING_PATH =
   /^\/(?:j|wc\/join)\/(\d{9,11})(?:\/|$)/i;
 
-function isZoomHostname(hostname: string): boolean {
+export function isZoomHostname(hostname: string): boolean {
   const h = hostname.toLowerCase();
   return h === "zoom.us" || h === "zoom.com" || h.endsWith(".zoom.us") || h.endsWith(".zoom.com");
+}
+
+/** Strip pwd (and similar) from a URL string for safe logs / analytics. */
+export function redactZoomUrlForLog(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (/pwd|pass|token|secret|key/i.test(key)) {
+        parsed.searchParams.set(key, "[redacted]");
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return "[invalid-url]";
+  }
 }
 
 export function parseZoomJoinUrl(input: string): ZoomJoinParseResult {
