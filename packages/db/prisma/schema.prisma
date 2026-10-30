@@ -87,6 +87,13 @@ enum TournamentStatus {
   FINISHED
 }
 
+/// How video is attached to a game night. Video SDK is intentionally absent.
+enum VideoMode {
+  NONE
+  ZOOM_LINK
+  MEETING_SDK_MIRROR
+}
+
 enum GameStatus {
   RUNNING
   FINISHED
@@ -108,6 +115,18 @@ model Tournament {
   inviteCode     String           @unique @default(cuid())
   createdAt      DateTime         @default(now())
   closedAt       DateTime?
+
+  /// Optional Zoom / table-faces attachment (Phase 1 link + Phase 2 Meeting SDK mirror).
+  videoMode            VideoMode @default(NONE)
+  /// Canonical https join URL (may include ?pwd=). Friends-only members may see this.
+  zoomJoinUrl          String?
+  /// Digits-only meeting number parsed from the join URL when possible.
+  zoomMeetingNumber    String?
+  /// Opaque Zoom URL `pwd` query token (not the plain passcode).
+  zoomPwdQuery         String?
+  /// Plain meeting passcode for Meeting SDK join when URL `pwd` is encrypted-only.
+  zoomPasscodePlain    String?
+  videoEnabledAt       DateTime?
 
   host    User               @relation("Host", fields: [hostUserId], references: [id])
   players TournamentPlayer[]
