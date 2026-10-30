@@ -126,6 +126,14 @@ export function ChopDialog({
     total !== null && prizePoolCents !== null ? total - prizePoolCents : null;
   const canReview =
     allParsed && difference === 0 && prizePoolCents !== null && !loadError;
+  const poolStatus =
+    total === null || prizePoolCents === null
+      ? "Enter a dollar amount for each player."
+      : total === prizePoolCents
+        ? `Total ${formatCents(total)} matches the pool.`
+        : total > prizePoolCents
+          ? `Over by ${formatCents(total - prizePoolCents)}.`
+          : `Short by ${formatCents(prizePoolCents - total)}.`;
 
   if (!open) return null;
 
@@ -230,13 +238,7 @@ export function ChopDialog({
                 difference === 0 ? "text-emerald-400" : "text-amber-300"
               }`}
             >
-              {total === null || prizePoolCents === null
-                ? "Enter a dollar amount for each player."
-                : difference === 0
-                  ? `Total ${formatCents(total)} matches the pool.`
-                  : difference > 0
-                    ? `Over by ${formatCents(difference)}.`
-                    : `Short by ${formatCents(-difference)}.`}
+              {poolStatus}
             </p>
             {serverError && (
               <p className="text-sm text-red-400 mt-2" role="alert">
