@@ -15,6 +15,7 @@ import {
   validatePayoutPercents,
   type LastHostedDefaults,
 } from "@/lib/tournament";
+import { resolveZoomCreateAttach } from "@/lib/zoomJoinUrl";
 import {
   BLIND_LEVEL_MINUTE_OPTIONS,
   BLIND_PACE_LABELS,
@@ -126,6 +127,15 @@ export default function DashboardPage() {
       return;
     }
 
+    const zoomCheck = resolveZoomCreateAttach({
+      zoomJoinUrl: form.zoomJoinUrl,
+      zoomPasscodePlain: form.zoomPasscodePlain,
+    });
+    if (!zoomCheck.ok) {
+      alert(zoomCheck.error);
+      return;
+    }
+
     setCreating(true);
     const res = await fetch("/api/tournaments", {
       method: "POST",
@@ -138,6 +148,8 @@ export default function DashboardPage() {
         blindPace: form.blindPace,
         blindLevelMinutes: form.blindLevelMinutes,
         payoutPercents: parsePayoutPercents(payoutValues) ?? [],
+        zoomJoinUrl: form.zoomJoinUrl.trim() || undefined,
+        zoomPasscodePlain: form.zoomPasscodePlain.trim() || undefined,
       }),
     });
     const tournament = await res.json().catch(() => ({}));
@@ -566,6 +578,48 @@ export default function DashboardPage() {
             >
               {payoutError ?? `Total: ${payoutTotal}%`}
             </p>
+          </div>
+          <div className="mb-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-100">Zoom</h4>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Optional — paste your recurring join link so the lobby, invite
+                email, and Action Log already have Join / Copy. Different hosts
+                use different links; you can still edit in the lobby.
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">
+                Zoom join URL
+              </label>
+              <input
+                type="url"
+                value={form.zoomJoinUrl}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, zoomJoinUrl: e.target.value }))
+                }
+                placeholder="https://us04web.zoom.us/j/…?pwd=…"
+                className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">
+                Plain passcode{" "}
+                <span className="text-slate-500 font-normal">
+                  (for in-app faces — not the URL pwd token)
+                </span>
+              </label>
+              <input
+                type="text"
+                value={form.zoomPasscodePlain}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, zoomPasscodePlain: e.target.value }))
+                }
+                placeholder="Meeting passcode from Zoom"
+                autoComplete="off"
+                className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none text-sm"
+              />
+            </div>
           </div>
           <button
             onClick={createTournament}

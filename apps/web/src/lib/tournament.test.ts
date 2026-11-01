@@ -68,5 +68,25 @@ describe("createGameNightFormDefaults", () => {
       "",
     ]);
     expect(validatePayoutPercents(payoutValuesForPaidPlaces(form))).toBeNull();
+    expect(form.zoomJoinUrl).toBe("");
+    expect(form.zoomPasscodePlain).toBe("");
+  });
+
+  it("prefills Zoom join URL and plain passcode from the last hosted night", () => {
+    const form = createGameNightFormDefaults({
+      buyInCents: 2000,
+      startingChips: 5000,
+      maxPlayers: 9,
+      blindPace: "gradual",
+      blindPreset: "gradual",
+      blindLevelMinutes: 12,
+      payoutPercents: [70, 20, 10],
+      zoomJoinUrl: "https://us04web.zoom.us/j/12345678901?pwd=AbCd",
+      zoomPasscodePlain: "plain-night-pass",
+    });
+    expect(form.zoomJoinUrl).toBe(
+      "https://us04web.zoom.us/j/12345678901?pwd=AbCd"
+    );
+    expect(form.zoomPasscodePlain).toBe("plain-night-pass");
   });
 });

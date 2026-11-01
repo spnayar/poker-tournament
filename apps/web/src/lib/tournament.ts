@@ -67,6 +67,10 @@ export interface LastHostedDefaults {
   blindPreset: string;
   blindLevelMinutes: number;
   payoutPercents: number[];
+  /** Prior night Zoom join URL for create-form reuse (host-only). */
+  zoomJoinUrl?: string | null;
+  /** Prior night plain passcode for Meeting SDK (host-only prefill). */
+  zoomPasscodePlain?: string | null;
 }
 
 export type CreateGameNightForm = {
@@ -80,6 +84,10 @@ export type CreateGameNightForm = {
   payout1: string;
   payout2: string;
   payout3: string;
+  /** Optional Zoom join URL — persisted onto the tournament at create. */
+  zoomJoinUrl: string;
+  /** Optional plain passcode for Meeting SDK mirror (not the URL pwd token). */
+  zoomPasscodePlain: string;
 };
 
 const PAYOUT_FIELD_KEYS = ["payout1", "payout2", "payout3"] as const;
@@ -141,5 +149,7 @@ export function createGameNightFormDefaults(
     payout1,
     payout2,
     payout3,
+    zoomJoinUrl: lastHosted?.zoomJoinUrl?.trim() ?? "",
+    zoomPasscodePlain: lastHosted?.zoomPasscodePlain?.trim() ?? "",
   };
 }
