@@ -47,6 +47,46 @@ export function redactZoomUrlForLog(url: string): string {
   }
 }
 
+/**
+ * Read `pwd` from any URL-shaped string without requiring a canonical /j/ path.
+ * Returns null when missing, empty, or the input is not a URL.
+ */
+export function extractZoomPwdQuery(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  try {
+    const pwd = new URL(trimmed).searchParams.get("pwd");
+    return pwd && pwd.length > 0 ? pwd : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * When the join-URL field changes, sync the passcode input from `pwd=`.
+ * Keeps a user-typed passcode unless the URL's pwd value itself changed
+ * (or the field still holds the previous auto-filled pwd and that pwd was removed).
+ */
+export function nextPasscodeAfterJoinUrlChange(opts: {
+  previousJoinUrl: string;
+  nextJoinUrl: string;
+  passcode: string;
+}): string {
+  const prevPwd = extractZoomPwdQuery(opts.previousJoinUrl);
+  const nextPwd = extractZoomPwdQuery(opts.nextJoinUrl);
+  if (nextPwd === prevPwd) {
+    return opts.passcode;
+  }
+  if (nextPwd != null) {
+    return nextPwd;
+  }
+  // pwd removed from the URL — clear only if the field still mirrors the old pwd
+  if (opts.passcode === prevPwd) {
+    return "";
+  }
+  return opts.passcode;
+}
+
 export function parseZoomJoinUrl(input: string): ZoomJoinParseResult {
   const raw = input.trim();
   if (!raw) {

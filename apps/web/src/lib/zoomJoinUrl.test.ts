@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractZoomPwdQuery,
+  nextPasscodeAfterJoinUrlChange,
   normalizeMeetingNumber,
   parseZoomJoinUrl,
   redactZoomUrlForLog,
@@ -31,6 +33,77 @@ describe("parseZoomJoinUrl", () => {
   it("rejects non-https and non-zoom hosts", () => {
     expect(parseZoomJoinUrl("http://zoom.us/j/12345678901").ok).toBe(false);
     expect(parseZoomJoinUrl("https://example.com/j/12345678901").ok).toBe(false);
+  });
+});
+
+describe("extractZoomPwdQuery", () => {
+  it("reads pwd from join and soft vanity URLs", () => {
+    expect(
+      extractZoomPwdQuery(
+        "https://us04web.zoom.us/j/12345678901?pwd=AbCdEfGhIjKlMnOp"
+      )
+    ).toBe("AbCdEfGhIjKlMnOp");
+    expect(extractZoomPwdQuery("https://zoom.us/my/hostroom?pwd=Tok")).toBe(
+      "Tok"
+    );
+    expect(extractZoomPwdQuery("https://zoom.us/j/12345678901")).toBeNull();
+    expect(extractZoomPwdQuery("not-a-url")).toBeNull();
+  });
+});
+
+describe("nextPasscodeAfterJoinUrlChange", () => {
+  const withPwd = "https://zoom.us/j/12345678901?pwd=AbCd";
+  const withOtherPwd = "https://zoom.us/j/12345678901?pwd=XyZ9";
+  const noPwd = "https://zoom.us/j/12345678901";
+
+  it("fills an empty passcode from a newly pasted pwd", () => {
+    expect(
+      nextPasscodeAfterJoinUrlChange({
+        previousJoinUrl: "",
+        nextJoinUrl: withPwd,
+        passcode: "",
+      })
+    ).toBe("AbCd");
+  });
+
+  it("does not wipe a user-typed passcode when pwd is unchanged", () => {
+    expect(
+      nextPasscodeAfterJoinUrlChange({
+        previousJoinUrl: withPwd,
+        nextJoinUrl: `${withPwd}&from=invite`,
+        passcode: "human-typed",
+      })
+    ).toBe("human-typed");
+  });
+
+  it("replaces passcode when the URL pwd changes", () => {
+    expect(
+      nextPasscodeAfterJoinUrlChange({
+        previousJoinUrl: withPwd,
+        nextJoinUrl: withOtherPwd,
+        passcode: "human-typed",
+      })
+    ).toBe("XyZ9");
+  });
+
+  it("clears an auto-filled passcode when pwd is removed", () => {
+    expect(
+      nextPasscodeAfterJoinUrlChange({
+        previousJoinUrl: withPwd,
+        nextJoinUrl: noPwd,
+        passcode: "AbCd",
+      })
+    ).toBe("");
+  });
+
+  it("keeps a distinct user-typed passcode when pwd is removed", () => {
+    expect(
+      nextPasscodeAfterJoinUrlChange({
+        previousJoinUrl: withPwd,
+        nextJoinUrl: noPwd,
+        passcode: "human-typed",
+      })
+    ).toBe("human-typed");
   });
 });
 
