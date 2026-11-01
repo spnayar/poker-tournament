@@ -742,7 +742,7 @@ export default function TablePage() {
       {showFooter && (
         <div
           ref={footerRef}
-          className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-700/60 bg-slate-950/96 shadow-[0_-4px_16px_rgba(0,0,0,0.35)]"
+          className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-700/50 bg-slate-950/97 backdrop-blur-[2px] shadow-[0_-6px_20px_rgba(0,0,0,0.4)]"
         >
           <div className="max-w-7xl mx-auto px-2 py-1 safe-area-pb">
             {awayBanner && awaitingNextHand ? (
@@ -770,6 +770,7 @@ export default function TablePage() {
                 disabled={actionPending}
                 waitingLabel={waitingLabel}
                 awayBanner={awayBanner}
+                totalPot={tableState.totalPot}
                 actionDeadlineAt={
                   mySeat && mySeat.seatId === tableState.currentActorSeat
                     ? (tableState.actionDeadlineAt ?? null)
