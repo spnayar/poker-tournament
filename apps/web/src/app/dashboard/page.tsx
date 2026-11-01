@@ -15,7 +15,10 @@ import {
   validatePayoutPercents,
   type LastHostedDefaults,
 } from "@/lib/tournament";
-import { resolveZoomCreateAttach } from "@/lib/zoomJoinUrl";
+import {
+  nextPasscodeAfterJoinUrlChange,
+  resolveZoomCreateAttach,
+} from "@/lib/zoomJoinUrl";
 import {
   BLIND_LEVEL_MINUTE_OPTIONS,
   BLIND_PACE_LABELS,
@@ -595,18 +598,27 @@ export default function DashboardPage() {
               <input
                 type="url"
                 value={form.zoomJoinUrl}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, zoomJoinUrl: e.target.value }))
-                }
+                onChange={(e) => {
+                  const nextJoinUrl = e.target.value;
+                  setForm((f) => ({
+                    ...f,
+                    zoomJoinUrl: nextJoinUrl,
+                    zoomPasscodePlain: nextPasscodeAfterJoinUrlChange({
+                      previousJoinUrl: f.zoomJoinUrl,
+                      nextJoinUrl,
+                      passcode: f.zoomPasscodePlain,
+                    }),
+                  }));
+                }}
                 placeholder="https://us04web.zoom.us/j/…?pwd=…"
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none text-sm"
               />
             </div>
             <div>
               <label className="block text-sm text-slate-400 mb-1">
-                Plain passcode{" "}
+                Passcode{" "}
                 <span className="text-slate-500 font-normal">
-                  (for in-app faces — not the URL pwd token)
+                  (filled from URL pwd when present)
                 </span>
               </label>
               <input
@@ -619,6 +631,10 @@ export default function DashboardPage() {
                 autoComplete="off"
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none text-sm"
               />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Show table faces needs the passcode people type when joining
+                Zoom — replace the URL pwd blob here if they differ.
+              </p>
             </div>
           </div>
           <button

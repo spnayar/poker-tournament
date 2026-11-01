@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { nextPasscodeAfterJoinUrlChange } from "@/lib/zoomJoinUrl";
 
 type ZoomStatus = {
   videoMode: string;
@@ -140,13 +141,23 @@ export function ZoomNightPanel({ tournamentId, isHost }: ZoomNightPanelProps) {
             <input
               type="url"
               value={joinUrl}
-              onChange={(e) => setJoinUrl(e.target.value)}
+              onChange={(e) => {
+                const nextJoinUrl = e.target.value;
+                setPasscode((prev) =>
+                  nextPasscodeAfterJoinUrlChange({
+                    previousJoinUrl: joinUrl,
+                    nextJoinUrl,
+                    passcode: prev,
+                  })
+                );
+                setJoinUrl(nextJoinUrl);
+              }}
               placeholder="https://us04web.zoom.us/j/…?pwd=…"
               className="mt-1 w-full rounded border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-600"
             />
           </label>
           <label className="block text-xs text-slate-400">
-            Plain passcode (for in-app faces — not the URL pwd token)
+            Passcode (filled from URL pwd when present)
             <input
               type="text"
               value={passcode}
@@ -156,6 +167,10 @@ export function ZoomNightPanel({ tournamentId, isHost }: ZoomNightPanelProps) {
               className="mt-1 w-full rounded border border-slate-600 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-600"
             />
           </label>
+          <p className="text-[11px] text-slate-500">
+            Show table faces needs the passcode people type when joining Zoom —
+            replace the URL pwd blob here if they differ.
+          </p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
