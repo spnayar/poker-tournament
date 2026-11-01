@@ -107,3 +107,45 @@ body {
 .table-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Slim betting slider — keep the action bar one narrow row */
+.action-bet-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+.action-bet-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(51, 65, 85, 0.95),
+    rgba(251, 191, 36, 0.55)
+  );
+}
+.action-bet-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 999px;
+  background: #fbbf24;
+  border: 2px solid #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.action-bet-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(51, 65, 85, 0.95);
+}
+.action-bet-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fbbf24;
+  border: 2px solid #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
