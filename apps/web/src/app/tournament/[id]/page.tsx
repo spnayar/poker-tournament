@@ -36,6 +36,7 @@ interface Game {
   gameNumber: number;
   status: string;
   prizePoolCents: number;
+  chopped?: boolean;
   finishedAt: string | null;
   results: GameResult[];
 }
@@ -371,7 +372,8 @@ export default function TournamentLobbyPage() {
                   className="border border-slate-800 rounded-lg p-3"
                 >
                   <p className="font-medium text-sm mb-2">
-                    {formatSessionLabelShort(game.gameNumber)} ·{" "}
+                    {formatSessionLabelShort(game.gameNumber)}
+                    {game.chopped ? " · chopped" : ""} ·{" "}
                     {formatCents(game.prizePoolCents)} pool
                   </p>
                   <div className="flex flex-wrap gap-2">

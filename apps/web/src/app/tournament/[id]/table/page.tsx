@@ -398,11 +398,58 @@ export default function TablePage() {
     };
 
     const handleError = (err: { message: string }) => {
-      if (
-        err.message.includes("No game in progress") &&
-        gameFinishedRef.current
-      ) {
+      if (err.message.includes("No game in progress")) {
         watchTournament(socket!);
+        // Between tournaments / after a chop, restore results so reload
+        // is not stuck on "Loading table…".
+        if (!gameFinishedRef.current) {
+          void (async () => {
+            try {
+              const res = await fetch(`/api/tournaments/${tournamentId}`);
+              if (!res.ok) return;
+              const data = await res.json();
+              if (data?.tournament?.status === "FINISHED") {
+                router.push(`/tournament/${tournamentId}/results`);
+                return;
+              }
+              const finished = (data?.tournament?.games ?? []).find(
+                (g: { status: string }) => g.status === "FINISHED"
+              );
+              if (!finished || !Array.isArray(finished.results)) return;
+              const buyInCents =
+                typeof data.tournament?.buyInCents === "number"
+                  ? data.tournament.buyInCents
+                  : 0;
+              setGameFinished({
+                gameId: finished.id,
+                gameNumber: finished.gameNumber,
+                buyInCents,
+                hostUserId: data.tournament?.hostUserId ?? "",
+                finishOrder: finished.results.map(
+                  (r: {
+                    userId: string;
+                    finishPosition: number;
+                    payoutCents: number;
+                    user?: {
+                      displayName?: string;
+                      avatarUrl?: string | null;
+                    };
+                  }) => ({
+                    userId: r.userId,
+                    position: r.finishPosition,
+                    payoutCents: r.payoutCents,
+                    displayName: r.user?.displayName ?? "Player",
+                    avatarUrl: r.user?.avatarUrl ?? null,
+                  })
+                ),
+                prizePoolCents: finished.prizePoolCents ?? 0,
+                chopped: Boolean(finished.chopped),
+              });
+            } catch {
+              // Keep watching; host may start another tournament.
+            }
+          })();
+        }
         return;
       }
       console.error("Game error:", err.message);
@@ -550,6 +597,29 @@ export default function TablePage() {
     setHostActionLoading(false);
   }
 
+  // After a tournament ends the live room is gone; still show results on reload.
+  if (gameFinished && !tableState) {
+    const isHostOnly =
+      session?.user?.id === gameFinished.hostUserId;
+    return (
+      <div className="min-h-screen flex flex-col">
+        <div className="p-4">
+          <DashboardLink />
+        </div>
+        <div className="flex-1 flex items-start justify-center p-4">
+          <GameEndSidebar
+            tournamentId={tournamentId}
+            result={gameFinished}
+            isHost={isHostOnly}
+            actionLoading={hostActionLoading}
+            onPlayAnother={playAnotherGame}
+            onCloseNight={closePokerNight}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (!tableState) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -604,7 +674,11 @@ export default function TablePage() {
     actorAway: actorSeat?.away === true,
     actorSkipped: actorSeat?.skipped === true,
   });
-  const showFooter = isBetting || (awaitingNextHand && Boolean(nextDealer));
+  const iAmSatOut = Boolean(mySeat?.skipped) && !gameFinished;
+  const showFooter =
+    isBetting ||
+    (awaitingNextHand && Boolean(nextDealer)) ||
+    iAmSatOut;
   const footerPad = showFooter ? Math.max(footerH, 52) + 8 : 0;
 
   return (
@@ -763,7 +837,21 @@ export default function TablePage() {
                 }
               />
             )}
-            {isBetting && (
+            {iAmSatOut && mySeat ? (
+              <div className="flex items-center justify-center gap-3 py-1.5">
+                <p className="text-sm text-orange-300">
+                  You&apos;re sitting out — hands auto check/fold.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => unskipPlayer(mySeat.seatId)}
+                  className="h-8 px-4 rounded-full bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold text-white"
+                >
+                  I&apos;m back
+                </button>
+              </div>
+            ) : null}
+            {isBetting && !iAmSatOut && (
               <ActionPanel
                 legal={legalActions}
                 onAction={sendAction}

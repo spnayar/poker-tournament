@@ -33,6 +33,12 @@ export type NightRecapNamedCount = {
   count: number;
 };
 
+export type NightRecapChopShare = {
+  displayName: string;
+  payoutCents: number;
+  netCents: number;
+};
+
 export type NightRecapStats = {
   tournamentCount: number;
   totalHands: number;
@@ -42,6 +48,9 @@ export type NightRecapStats = {
     payoutCents: number;
     buyInCents: number;
     netCents: number;
+    /** Agreed chip chop — no sole winner. */
+    chopped?: boolean;
+    chopShares?: NightRecapChopShare[];
   }[];
   itm: NightRecapNamedCount[];
   /** Hands won across the night (any pot share counts as a hand won). */
@@ -143,6 +152,18 @@ export function buildNightRecapText(payload: NightRecapPayload): string {
     `Hands dealt: ${payload.stats.totalHands}`
   );
   for (const w of payload.stats.winners) {
+    if (w.chopped) {
+      const shares = (w.chopShares ?? [])
+        .map((s) => {
+          const netSign = s.netCents >= 0 ? "+" : "";
+          return `${s.displayName} ${netSign}${formatCents(s.netCents)} (${formatCents(s.payoutCents)})`;
+        })
+        .join("; ");
+      lines.push(
+        `${formatSessionLabelShort(w.gameNumber)} chopped${shares ? `: ${shares}` : ""}`
+      );
+      continue;
+    }
     const netSign = w.netCents >= 0 ? "+" : "";
     lines.push(
       `${w.displayName} won ${formatSessionLabelShort(w.gameNumber)}, ${netSign}${formatCents(w.netCents)} (${formatCents(w.payoutCents)} payout on a ${formatCents(w.buyInCents)} buy-in)`
@@ -285,6 +306,16 @@ function renderStatsBlock(stats: NightRecapStats): string {
       ? `<li>No finished tournaments — just good company.</li>`
       : stats.winners
           .map((w) => {
+            if (w.chopped) {
+              const shareHtml = (w.chopShares ?? [])
+                .map((s) => {
+                  const netSign = s.netCents >= 0 ? "+" : "";
+                  const netColor = s.netCents >= 0 ? "#34d399" : "#f87171";
+                  return `<strong style="color:#e2e8f0;">${escapeHtml(s.displayName)}</strong> <span style="color:${netColor};font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;">${netSign}${escapeHtml(formatCents(s.netCents))}</span> <span style="color:#94a3b8;">(${escapeHtml(formatCents(s.payoutCents))})</span>`;
+                })
+                .join(" · ");
+              return `<li><strong style="color:#fbbf24;">${escapeHtml(formatSessionLabelShort(w.gameNumber))}</strong> chopped${shareHtml ? ` — ${shareHtml}` : ""}</li>`;
+            }
             const netSign = w.netCents >= 0 ? "+" : "";
             const netColor = w.netCents >= 0 ? "#34d399" : "#f87171";
             return `<li><strong style="color:#e2e8f0;">${escapeHtml(w.displayName)}</strong> won <strong style="color:#fbbf24;">${escapeHtml(formatSessionLabelShort(w.gameNumber))}</strong>, <span style="color:${netColor};font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;">${netSign}${escapeHtml(formatCents(w.netCents))}</span> <span style="color:#94a3b8;">(${escapeHtml(formatCents(w.payoutCents))} payout on a ${escapeHtml(formatCents(w.buyInCents))} buy-in)</span></li>`;
@@ -511,10 +542,27 @@ export async function buildNightRecapPayload(
     );
   }
 
+  const buyInCents = tournament.buyInCents;
   const winners = tournament.games.map((g) => {
+    if (g.chopped) {
+      return {
+        displayName: "",
+        gameNumber: g.gameNumber,
+        payoutCents: 0,
+        buyInCents,
+        netCents: 0,
+        chopped: true as const,
+        chopShares: g.results
+          .filter((r) => r.payoutCents > 0)
+          .map((r) => ({
+            displayName: r.user.displayName,
+            payoutCents: r.payoutCents,
+            netCents: r.payoutCents - buyInCents,
+          })),
+      };
+    }
     const winner = g.results.find((r) => r.finishPosition === 1);
     const payoutCents = winner?.payoutCents ?? 0;
-    const buyInCents = tournament.buyInCents;
     return {
       displayName: winner?.user.displayName ?? "Unknown",
       gameNumber: g.gameNumber,
@@ -524,8 +572,10 @@ export async function buildNightRecapPayload(
     };
   });
 
+  // ITM = paid places in played-out tournaments only (exclude chop shares).
   const itmCounts = new Map<string, NightRecapNamedCount>();
   for (const g of tournament.games) {
+    if (g.chopped) continue;
     for (const r of g.results) {
       if (r.payoutCents <= 0) continue;
       const existing = itmCounts.get(r.userId);

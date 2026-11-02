@@ -25,6 +25,7 @@ export function GameEndSidebar({
   onCloseNight,
   seatAvatars,
 }: GameEndSidebarProps) {
+  const chopped = Boolean(result.chopped);
   const sorted = [...result.finishOrder].sort(
     (a, b) => a.position - b.position
   );
@@ -42,27 +43,29 @@ export function GameEndSidebar({
       <div className="bg-slate-900 rounded-xl p-4 border border-amber-500/30">
         <h2 className="text-lg font-bold text-amber-400 mb-1">
           {formatSessionLabel(result.gameNumber)}{" "}
-          {result.chopped ? "chopped" : "over"}
+          {chopped ? "chopped" : "over"}
         </h2>
         <p className="text-xs text-slate-500 mb-4">
           Prize pool {formatCents(result.prizePoolCents)} ·{" "}
           {formatCents(result.buyInCents)} buy-in each
+          {chopped ? " · no sole winner" : ""}
         </p>
 
         <div className="space-y-2 max-h-[50vh] overflow-y-auto">
           {sorted.map((row) => {
             const netCents = row.payoutCents - result.buyInCents;
+            const highlightWinner = !chopped && row.position === 1;
             return (
               <div
                 key={row.userId}
                 className={`flex items-center gap-2 p-2 rounded-lg border text-sm ${
-                  row.position === 1
+                  highlightWinner
                     ? "bg-amber-500/10 border-amber-500/30"
                     : "bg-slate-800/50 border-slate-700"
                 }`}
               >
                 <span className="text-slate-500 font-bold w-6">
-                  #{row.position}
+                  {chopped ? "·" : `#${row.position}`}
                 </span>
                 <img
                   src={getAvatarUrl(row.displayName, avatarFor(row))}
@@ -72,7 +75,8 @@ export function GameEndSidebar({
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{row.displayName}</p>
                   <p className="text-xs text-slate-500">
-                    Won {formatCents(row.payoutCents)}
+                    {chopped ? "Chop share" : "Payout"}{" "}
+                    {formatCents(row.payoutCents)}
                   </p>
                 </div>
                 <p

@@ -701,6 +701,8 @@ async function finishGame(
     }));
   }
 
+  const wasChopped = Boolean(chopShares);
+
   for (const { userId, position, payoutCents } of finishOrder) {
     await prisma.gameResult.create({
       data: {
@@ -711,20 +713,23 @@ async function finishGame(
       },
     });
 
+    const countsAsWin = !wasChopped && position === 1;
+    const countsAsItm = !wasChopped && payoutCents > 0;
+
     await prisma.userStats.upsert({
       where: { userId },
       create: {
         userId,
         tournamentsPlayed: 1,
-        wins: position === 1 ? 1 : 0,
-        itmCount: payoutCents > 0 ? 1 : 0,
+        wins: countsAsWin ? 1 : 0,
+        itmCount: countsAsItm ? 1 : 0,
         totalBuyInCents: room.buyInCents,
         totalPayoutCents: payoutCents,
       },
       update: {
         tournamentsPlayed: { increment: 1 },
-        wins: position === 1 ? { increment: 1 } : undefined,
-        itmCount: payoutCents > 0 ? { increment: 1 } : undefined,
+        wins: countsAsWin ? { increment: 1 } : undefined,
+        itmCount: countsAsItm ? { increment: 1 } : undefined,
         totalBuyInCents: { increment: room.buyInCents },
         totalPayoutCents: { increment: payoutCents },
       },
@@ -746,6 +751,7 @@ async function finishGame(
       status: "FINISHED",
       finishedAt: new Date(),
       prizePoolCents: prizePool,
+      chopped: wasChopped,
       funStats,
     },
   });
@@ -757,7 +763,7 @@ async function finishGame(
     hostUserId: tournament?.hostUserId ?? "",
     finishOrder,
     prizePoolCents: prizePool,
-    chopped: Boolean(chopShares),
+    chopped: wasChopped,
   });
 
   await clearGameRedis(tournamentId, room.gameNumber);
@@ -860,6 +866,49 @@ async function beginGame(tournamentId: string): Promise<boolean> {
   }
 }
 
+/** Replay the latest finished game so a table reload after end is not stuck loading. */
+async function emitLastFinishedGame(
+  socket: import("socket.io").Socket,
+  tournamentId: string
+): Promise<boolean> {
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { hostUserId: true, buyInCents: true },
+  });
+  if (!tournament) return false;
+
+  const game = await prisma.game.findFirst({
+    where: { tournamentId, status: "FINISHED" },
+    orderBy: { gameNumber: "desc" },
+    include: {
+      results: {
+        include: {
+          user: { select: { displayName: true, avatarUrl: true } },
+        },
+        orderBy: { finishPosition: "asc" },
+      },
+    },
+  });
+  if (!game || game.results.length === 0) return false;
+
+  socket.emit(ServerEvents.GAME_FINISHED, {
+    gameId: game.id,
+    gameNumber: game.gameNumber,
+    buyInCents: tournament.buyInCents,
+    hostUserId: tournament.hostUserId,
+    finishOrder: game.results.map((r) => ({
+      userId: r.userId,
+      position: r.finishPosition,
+      payoutCents: r.payoutCents,
+      displayName: r.user.displayName,
+      avatarUrl: r.user.avatarUrl,
+    })),
+    prizePoolCents: game.prizePoolCents,
+    chopped: game.chopped,
+  });
+  return true;
+}
+
 async function joinAsRegisteredWatcher(
   socket: import("socket.io").Socket,
   userId: string,
@@ -883,6 +932,10 @@ async function joinAsRegisteredWatcher(
     "EX",
     86400
   );
+
+  // Between tournaments the in-memory room is gone — restore results so /table
+  // does not hang on "Loading table…" after a refresh.
+  await emitLastFinishedGame(socket, tournamentId);
   return true;
 }
 
@@ -962,6 +1015,24 @@ io.on("connection", (socket) => {
         tournamentId
       );
       if (watching) return;
+
+      // Closed night: deliver last results and send clients to /results.
+      const closed = await prisma.tournament.findUnique({
+        where: { id: tournamentId },
+        include: { players: { select: { userId: true } } },
+      });
+      if (
+        closed?.status === "FINISHED" &&
+        closed.players.some((p) => p.userId === user.userId)
+      ) {
+        await socket.join(`tournament:${tournamentId}`);
+        await socket.join(`tournament-watch:${tournamentId}`);
+        await emitLastFinishedGame(socket, tournamentId);
+        socket.emit(ServerEvents.TOURNAMENT_FINISHED, {
+          tournamentId,
+        });
+        return;
+      }
 
       socket.emit(ServerEvents.ERROR, {
         message:
@@ -1119,14 +1190,19 @@ io.on("connection", (socket) => {
     const room = rooms.get(tournamentId);
     if (!room) return;
 
-    if (room.hostUserId !== user.userId) {
+    const { seatId } = parsed.data;
+    const mySeatId = room.seatByUserId.get(user.userId);
+    const isHost = room.hostUserId === user.userId;
+    const isSelf = mySeatId === seatId;
+
+    // Host can unsit anyone; a sat-out player can sit themselves back in.
+    if (!isHost && !isSelf) {
       socket.emit(ServerEvents.ERROR, {
-        message: "Only the host can unskip a player",
+        message: "Only the host can unskip another player",
       });
       return;
     }
 
-    const { seatId } = parsed.data;
     if (!room.table.setSkipped(seatId, false)) {
       socket.emit(ServerEvents.ERROR, {
         message: "Could not unskip that player",
@@ -1137,7 +1213,13 @@ io.on("connection", (socket) => {
     const seatedUserId = [...room.seatByUserId.entries()].find(
       ([, seat]) => seat === seatId
     )?.[0];
-    if (seatedUserId && !room.playerSockets.has(seatedUserId)) {
+    // Self-return always clears sit-out (socket is live). Host unsitting an
+    // offline seat falls back to disconnect sit-out.
+    if (
+      !isSelf &&
+      seatedUserId &&
+      !room.playerSockets.has(seatedUserId)
+    ) {
       room.table.setSkipped(seatId, true, "disconnect");
     }
 

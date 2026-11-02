@@ -218,7 +218,7 @@ export function PlayerSeat({
             {seat.chipCount.toLocaleString()}
             {seat.allIn ? (
               <span className="text-amber-300/90 font-sans text-[9px] ml-0.5">
-                AI
+                all-in
               </span>
             ) : null}
           </p>

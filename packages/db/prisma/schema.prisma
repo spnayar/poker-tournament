@@ -151,6 +151,8 @@ model Game {
   gameNumber     Int
   status         GameStatus @default(RUNNING)
   prizePoolCents Int        @default(0)
+  /// Host ended with an agreed chip chop instead of playing out a winner.
+  chopped        Boolean    @default(false)
   /// Hands dealt in this tournament (no cards stored).
   handsPlayed    Int        @default(0)
   /// Fun-fact aggregates for night recap (hands won, knockouts, largest pot, best showdown hand).
