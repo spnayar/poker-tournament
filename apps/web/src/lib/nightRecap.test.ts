@@ -139,6 +139,50 @@ describe("night recap email", () => {
     );
   });
 
+  it("labels chops without a sole winner and keeps ITM separate in copy", () => {
+    const payload = samplePayload();
+    payload.stats.winners = [
+      {
+        displayName: "Alice",
+        gameNumber: 1,
+        payoutCents: 4000,
+        buyInCents: 2000,
+        netCents: 2000,
+      },
+      {
+        displayName: "",
+        gameNumber: 2,
+        payoutCents: 0,
+        buyInCents: 2000,
+        netCents: 0,
+        chopped: true,
+        chopShares: [
+          {
+            displayName: "Bob",
+            payoutCents: 2030,
+            netCents: 30,
+          },
+          {
+            displayName: "Alice",
+            payoutCents: 1970,
+            netCents: -30,
+          },
+        ],
+      },
+    ];
+    payload.stats.itm = [{ displayName: "Alice", count: 1 }];
+    const html = buildNightRecapHtml(payload);
+    expect(html).toContain("chopped");
+    expect(html).toContain("Tournament #2");
+    expect(html).not.toMatch(/Bob<\/strong> won/);
+    expect(html).toContain("In the money: Alice");
+    expect(html).not.toContain("In the money: Alice (×2)");
+    const text = buildNightRecapText(payload);
+    expect(text).toContain("Tournament #2 chopped");
+    expect(text).toContain("Bob +$0.30");
+    expect(text).not.toContain("Bob won Tournament #2");
+  });
+
   it("formats negative ledger nets as -$X.XX", () => {
     const html = buildNightRecapHtml(samplePayload());
     expect(html).toContain("-$30.00");

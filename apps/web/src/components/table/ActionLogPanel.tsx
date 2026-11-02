@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { getAvatarUrl } from "@/lib/utils";
 import type { ActionLogEntry } from "@poker/protocol";
 import { ZoomActionLogBanner } from "./ZoomActionLogBanner";
@@ -87,6 +87,7 @@ export function ActionLogPanel({
 }: ActionLogPanelProps) {
   const scrollRef = useRef<HTMLUListElement>(null);
   const stickToBottomRef = useRef(true);
+  const lastEntryRef = useRef<HTMLLIElement | null>(null);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -96,13 +97,27 @@ export function ActionLogPanel({
     stickToBottomRef.current = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD_PX;
   }, []);
 
+  const scrollToLatest = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !stickToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+    lastEntryRef.current?.scrollIntoView({ block: "end" });
+  }, []);
+
+  // Stick to the latest hand on open / updates (not hand 1 at the top).
+  useLayoutEffect(() => {
+    scrollToLatest();
+  }, [actionLog, handNumber, scrollToLatest]);
+
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    if (stickToBottomRef.current) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [actionLog]);
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      scrollToLatest();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [actionLog.length, scrollToLatest]);
 
   return (
     <aside className="table-chrome w-full lg:w-64 xl:w-72 shrink-0 rounded-md p-2 sm:p-2.5 flex flex-col min-h-0 max-h-full max-sm:flex-none max-sm:max-h-[34%] overflow-hidden relative z-0">
@@ -131,13 +146,14 @@ export function ActionLogPanel({
           className="table-scroll space-y-0.5 overflow-y-auto flex-1 min-h-0 overscroll-contain"
         >
           {actionLog.map((entry, index) => {
+            const isLast = index === actionLog.length - 1;
             if (hideAwards && entry.action.startsWith("Wins")) {
               return null;
             }
 
             if (entry.seatId === -1) {
               return (
-                <li key={entry.id}>
+                <li key={entry.id} ref={isLast ? lastEntryRef : undefined}>
                   <p className="text-xs font-semibold text-amber-400/90 py-2 px-1 border-t border-slate-800 first:border-t-0">
                     {entry.action}
                   </p>
@@ -164,7 +180,7 @@ export function ActionLogPanel({
               if (streetShown <= 0) return null;
               const cardsToShow = entry.cards.slice(0, streetShown);
               return (
-                <li key={entry.id}>
+                <li key={entry.id} ref={isLast ? lastEntryRef : undefined}>
                   <div className="py-1.5 px-2 rounded-lg bg-slate-800/40">
                     <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5">
                       {entry.action}
@@ -184,7 +200,7 @@ export function ActionLogPanel({
               index === 0 || entry.street !== prevStreet;
 
             return (
-              <li key={entry.id}>
+              <li key={entry.id} ref={isLast ? lastEntryRef : undefined}>
                 {showStreetHeader && entry.street !== "hand" && (
                   <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold py-2 px-1">
                     {streetLabel(entry.street)}

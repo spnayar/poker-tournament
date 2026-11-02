@@ -43,6 +43,7 @@ interface Game {
   gameNumber: number;
   status: string;
   prizePoolCents: number;
+  chopped?: boolean;
   results: GameResult[];
 }
 
@@ -234,45 +235,52 @@ function ResultsContent() {
       {latestGame && gameStandings.length > 0 && (
         <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 mb-6">
           <h2 className="text-sm font-semibold text-slate-400 mb-3">
-            {formatSessionLabelShort(latestGame.gameNumber)} — all players
+            {formatSessionLabelShort(latestGame.gameNumber)}
+            {latestGame.chopped ? " chopped" : ""} — all players
           </h2>
           <p className="text-xs text-slate-500 mb-3">
-            {formatCents(tournament.buyInCents)} buy-in · net win/loss per player
+            {formatCents(tournament.buyInCents)} buy-in · net first, payout labeled
+            {latestGame.chopped ? " · no sole winner" : ""}
           </p>
           <div className="space-y-2">
-            {gameStandings.map((r) => (
-              <div
-                key={r.userId}
-                className={`flex items-center gap-3 p-3 rounded-lg border ${
-                  r.finishPosition === 1
-                    ? "bg-amber-500/10 border-amber-500/30"
-                    : "bg-slate-900 border-slate-800"
-                }`}
-              >
-                <span className="text-lg font-bold text-slate-500 w-8">
-                  #{r.finishPosition}
-                </span>
-                <img
-                  src={getAvatarUrl(r.displayName, r.avatarUrl)}
-                  alt=""
-                  className="w-10 h-10 rounded-full"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{r.displayName}</p>
-                  <p className="text-xs text-slate-500">
-                    Won {formatCents(r.payoutCents)}
-                  </p>
-                </div>
-                <p
-                  className={`font-mono font-semibold shrink-0 ${
-                    r.netCents >= 0 ? "text-emerald-400" : "text-red-400"
+            {gameStandings.map((r) => {
+              const chopped = Boolean(latestGame.chopped);
+              const highlightWinner = !chopped && r.finishPosition === 1;
+              return (
+                <div
+                  key={r.userId}
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    highlightWinner
+                      ? "bg-amber-500/10 border-amber-500/30"
+                      : "bg-slate-900 border-slate-800"
                   }`}
                 >
-                  {r.netCents >= 0 ? "+" : ""}
-                  {formatCents(r.netCents)}
-                </p>
-              </div>
-            ))}
+                  <span className="text-lg font-bold text-slate-500 w-8">
+                    {chopped ? "·" : `#${r.finishPosition}`}
+                  </span>
+                  <img
+                    src={getAvatarUrl(r.displayName, r.avatarUrl)}
+                    alt=""
+                    className="w-10 h-10 rounded-full"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{r.displayName}</p>
+                    <p className="text-xs text-slate-500">
+                      {chopped ? "Chop share" : "Payout"}{" "}
+                      {formatCents(r.payoutCents)}
+                    </p>
+                  </div>
+                  <p
+                    className={`font-mono font-semibold shrink-0 ${
+                      r.netCents >= 0 ? "text-emerald-400" : "text-red-400"
+                    }`}
+                  >
+                    {r.netCents >= 0 ? "+" : ""}
+                    {formatCents(r.netCents)}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -357,6 +365,17 @@ function ResultsContent() {
           </h2>
           <div className="space-y-2 text-sm">
             {finishedGames.map((game) => {
+              if (game.chopped) {
+                return (
+                  <div
+                    key={game.id}
+                    className="flex justify-between py-1 border-b border-slate-800 last:border-0"
+                  >
+                    <span>{formatSessionLabelShort(game.gameNumber)}</span>
+                    <span className="text-slate-400">chopped</span>
+                  </div>
+                );
+              }
               const winner = game.results.find((r) => r.finishPosition === 1);
               return (
                 <div
@@ -365,8 +384,11 @@ function ResultsContent() {
                 >
                   <span>{formatSessionLabelShort(game.gameNumber)}</span>
                   <span className="text-slate-400">
-                    {winner?.user.displayName} won{" "}
-                    {formatCents(winner?.payoutCents ?? 0)}
+                    {winner?.user.displayName} · net{" "}
+                    {formatCents(
+                      (winner?.payoutCents ?? 0) - tournament.buyInCents
+                    )}{" "}
+                    (payout {formatCents(winner?.payoutCents ?? 0)})
                   </span>
                 </div>
               );

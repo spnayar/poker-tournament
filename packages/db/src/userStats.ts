@@ -11,14 +11,22 @@ export async function recomputeUserStats(
     where: { userId },
     include: {
       game: {
-        select: { tournament: { select: { buyInCents: true } } },
+        select: {
+          chopped: true,
+          tournament: { select: { buyInCents: true } },
+        },
       },
     },
   });
 
   const tournamentsPlayed = results.length;
-  const wins = results.filter((r) => r.finishPosition === 1).length;
-  const itmCount = results.filter((r) => r.payoutCents > 0).length;
+  // Chops have no sole winner and are not "in the money" finishes.
+  const wins = results.filter(
+    (r) => r.finishPosition === 1 && !r.game.chopped
+  ).length;
+  const itmCount = results.filter(
+    (r) => r.payoutCents > 0 && !r.game.chopped
+  ).length;
   const totalBuyInCents = results.reduce(
     (sum, r) => sum + r.game.tournament.buyInCents,
     0
