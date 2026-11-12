@@ -157,6 +157,7 @@ export default function TablePolishPreviewPage() {
             legal={raiseLegal}
             onAction={() => undefined}
             totalPot={450}
+            bigBlind={50}
             actionDeadlineAt={Date.now() + 18000}
           />
         </div>

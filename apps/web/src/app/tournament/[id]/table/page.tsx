@@ -923,6 +923,7 @@ export default function TablePage() {
                 waitingLabel={waitingLabel}
                 awayBanner={awayBanner}
                 totalPot={tableState.totalPot}
+                bigBlind={tableState.bigBlind}
                 actionDeadlineAt={
                   mySeat && mySeat.seatId === tableState.currentActorSeat
                     ? (tableState.actionDeadlineAt ?? null)
