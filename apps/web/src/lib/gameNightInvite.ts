@@ -9,9 +9,10 @@ import {
   emailBody,
   emailCta,
   emailFinePrint,
+  emailTextLink,
   escapeHtml,
+  isProduction,
 } from "./emailLayout";
-import { isProduction } from "./emailLayout";
 import { joinPath } from "./joinNight";
 import { createEmailCallbackUrl } from "./magicLinkToken";
 import { emailMaxAgeSec } from "./sendMagicLink";
@@ -139,40 +140,54 @@ export function gameNightInviteHtml(opts: {
   const magicUrl = opts.magicUrl?.trim() || null;
   const minutes = Math.round(emailMaxAgeSec() / 60);
 
+  const magicBlock = magicUrl
+    ? [
+        emailBody(
+          opts.isNewAccount
+            ? "Use this one-time link to create your account and join this table — no password or club invite code needed."
+            : "Use this one-time link to sign in on this device and join this table."
+        ),
+        emailCta(
+          magicUrl,
+          opts.isNewAccount
+            ? "Create account & join the table"
+            : "Sign in & join the table"
+        ),
+        emailFinePrint(`This login link expires in ${minutes} minutes.`),
+      ].join("\n    ")
+    : "";
+
+  const joinOnlyCta = magicUrl
+    ? ""
+    : emailCta(opts.joinUrl, "Join this game night");
+
+  const zoomBlock = zoomJoinUrl
+    ? emailBody(
+        `This night has a Zoom call — ${emailTextLink(zoomJoinUrl, "Join Zoom")} when you are ready to play.`
+      )
+    : "";
+
+  const alreadySignedIn = magicUrl
+    ? emailFinePrint(
+        `Already signed in? ${emailTextLink(opts.joinUrl, "Open this game night")} with the join code above. New players get an account from this invite — no separate club code.`
+      )
+    : emailFinePrint(
+        "New players get an account from this invite — no separate club code."
+      );
+
   return clubEmailHtml({
     heading: "Poker Night",
     innerHtml: [
       emailBody(
         `${host} invited you to <strong style="color:#e2e8f0;">${night}</strong>.`
       ),
-      magicUrl
-        ? [
-            emailBody(
-              opts.isNewAccount
-                ? "Use this one-time link to create your account and sign in — no password or club invite code needed."
-                : "Use this one-time link to sign in on this device, then you will land in the game night."
-            ),
-            emailCta(magicUrl, opts.isNewAccount ? "Create account & join" : "Sign in & join"),
-            emailFinePrint(
-              `This login link expires in ${minutes} minutes.`
-            ),
-          ].join("\n    ")
-        : "",
+      magicBlock,
       `<p style="margin:20px 0 8px;color:#94a3b8;font-size:13px;">Join code</p>
     <p style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:0.28em;font-weight:700;color:#34d399;">${code}</p>`,
       emailBody(`Buy-in (ledger): ${buyIn}`),
-      emailCta(opts.joinUrl, "Join this game night"),
-      zoomJoinUrl
-        ? [
-            emailBody(
-              "This night has a Zoom call — join when you are ready to play."
-            ),
-            emailCta(zoomJoinUrl, "Join Zoom"),
-          ].join("\n    ")
-        : "",
-      emailFinePrint(
-        "Already signed in? The join link takes you straight to the lobby. New players get an account from this invite — no separate club code."
-      ),
+      joinOnlyCta,
+      zoomBlock,
+      alreadySignedIn,
       emailFinePrint(LEDGER_DISCLAIMER),
     ]
       .filter(Boolean)
@@ -199,16 +214,20 @@ export function gameNightInviteText(opts: {
     const minutes = Math.round(emailMaxAgeSec() / 60);
     lines.push(
       opts.isNewAccount
-        ? `Create your account and sign in (expires in ${minutes} minutes):`
-        : `Sign in (expires in ${minutes} minutes):`,
+        ? `Create your account and join the table (expires in ${minutes} minutes):`
+        : `Sign in and join the table (expires in ${minutes} minutes):`,
       magicUrl
     );
+  } else {
+    lines.push(`Join: ${opts.joinUrl}`);
   }
   lines.push(
     `Join code: ${opts.joinCode}`,
-    `Buy-in (ledger): ${formatCents(opts.buyInCents)}`,
-    `Join: ${opts.joinUrl}`
+    `Buy-in (ledger): ${formatCents(opts.buyInCents)}`
   );
+  if (magicUrl) {
+    lines.push(`Already signed in? Open: ${opts.joinUrl}`);
+  }
   const zoomJoinUrl = opts.zoomJoinUrl?.trim();
   if (zoomJoinUrl) {
     lines.push(`Join Zoom: ${zoomJoinUrl}`);
