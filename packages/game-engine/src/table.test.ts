@@ -443,6 +443,67 @@ describe("TableEngine", () => {
     expect(table.getPublicState().currentActorSeat).toBe(2);
   });
 
+  it("next-to-act advances clockwise across seats after a mid-street fold", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.addPlayer(3, "u4", "Dave", null, 1000);
+
+    // Pin BTN 0 / SB 1 / BB 2 / UTG 3.
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    table.startHand();
+
+    expect(table.getPublicState().dealerSeat).toBe(0);
+    expect(table.getPublicState().currentActorSeat).toBe(3);
+    table.applyAction(3, { type: "call" });
+    table.applyAction(0, { type: "call" });
+    table.applyAction(1, { type: "call" });
+    table.applyAction(2, { type: "check" });
+    expect(table.getPublicState().phase).toBe("flop");
+
+    // Postflop first actor is seat after dealer → 1. Bet, then fold mid-ring.
+    expect(table.getPublicState().currentActorSeat).toBe(1);
+    table.applyAction(1, { type: "bet", amount: 50 });
+    expect(table.getPublicState().currentActorSeat).toBe(2);
+    table.applyAction(2, { type: "fold" });
+    // Must continue clockwise to 3, not jump back to the lowest live seat (0).
+    expect(table.getPublicState().currentActorSeat).toBe(3);
+    table.applyAction(3, { type: "fold" });
+    expect(table.getPublicState().currentActorSeat).toBe(0);
+  });
+
+  it("next-to-act walks sparse seats clockwise (gaps in seat ids)", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(2, "u2", "Bob", null, 1000);
+    table.addPlayer(5, "u3", "Carol", null, 1000);
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    // activeSeats [0,2,5]; floor(0.5*3)=1 → dealer seat 2.
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    table.startHand();
+
+    // BTN 2 / SB 5 / BB 0; UTG = seat after BB = 2.
+    expect(table.getPublicState().dealerSeat).toBe(2);
+    expect(table.getPublicState().currentActorSeat).toBe(2);
+    table.applyAction(2, { type: "call" });
+    expect(table.getPublicState().currentActorSeat).toBe(5);
+    table.applyAction(5, { type: "call" });
+    expect(table.getPublicState().currentActorSeat).toBe(0);
+    table.applyAction(0, { type: "check" });
+    expect(table.getPublicState().phase).toBe("flop");
+    // Flop: first to act is seat after dealer 2 → 5.
+    expect(table.getPublicState().currentActorSeat).toBe(5);
+    table.applyAction(5, { type: "bet", amount: 50 });
+    expect(table.getPublicState().currentActorSeat).toBe(0);
+    table.applyAction(0, { type: "fold" });
+    expect(table.getPublicState().currentActorSeat).toBe(2);
+  });
+
   it("showdown: better hand wins after opponent calls all-in", () => {
     const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u2", "Bob", null, 500);

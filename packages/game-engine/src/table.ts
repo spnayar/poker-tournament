@@ -512,9 +512,18 @@ export class TableEngine {
     return this.nextActiveSeatClockwise(this.dealerSeat, activeSeats);
   }
 
+  /**
+   * Next seat in ascending (clockwise) order within `seatsInOrder`.
+   * If `seat` is absent (e.g. just folded), still advances from that seat id
+   * on the table ring so action never jumps to the lowest index.
+   */
   private seatAfter(seat: number, seatsInOrder: number[]): number {
+    if (seatsInOrder.length === 0) return seat;
     const idx = seatsInOrder.indexOf(seat);
-    return seatsInOrder[(idx + 1) % seatsInOrder.length]!;
+    if (idx !== -1) {
+      return seatsInOrder[(idx + 1) % seatsInOrder.length]!;
+    }
+    return this.nextActiveSeatClockwise(seat, seatsInOrder);
   }
 
   private postBlinds(activeSeats: number[]): void {

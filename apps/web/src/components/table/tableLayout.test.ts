@@ -57,4 +57,27 @@ describe("tableLayout", () => {
       expect(Math.max(...xs)).toBeGreaterThan(55);
     }
   });
+
+  it("places ascending seats clockwise from the hero (left through top to right)", () => {
+    for (const viewer of [0, 2, 5]) {
+      const total = 7;
+      // Walk ascending seat indices after the viewer (= engine clockwise order).
+      const others = Array.from({ length: total - 1 }, (_, k) => {
+        const i = (viewer + 1 + k) % total;
+        return {
+          i,
+          pos: getSeatPositionForViewer(i, total, viewer, false),
+        };
+      });
+
+      // First seat after viewer sits on the left; last before viewer on the right.
+      expect(others[0]!.pos.x).toBeLessThan(50);
+      expect(others[others.length - 1]!.pos.x).toBeGreaterThan(50);
+
+      // Clockwise along the arc: x rises left → top → right.
+      for (let k = 1; k < others.length; k++) {
+        expect(others[k]!.pos.x).toBeGreaterThan(others[k - 1]!.pos.x);
+      }
+    }
+  });
 });
