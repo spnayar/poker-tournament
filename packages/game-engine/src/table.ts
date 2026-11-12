@@ -802,9 +802,18 @@ export class TableEngine {
   }
 
   getLegalActions(seatId: number): LegalActions | null {
+    if (
+      this.phase === "hand-complete" ||
+      this.phase === "waiting" ||
+      this.phase === "showdown" ||
+      this.phase === "tournament-complete" ||
+      this.phase === "dealing"
+    ) {
+      return null;
+    }
     if (this.currentActorSeat !== seatId) return null;
     const player = this.players.get(seatId);
-    if (!player || player.folded || player.allIn) return null;
+    if (!player || player.folded || player.allIn || player.eliminated) return null;
 
     const toCall = this.currentBet - player.betThisRound;
     const canCheck = toCall === 0;
@@ -1208,6 +1217,7 @@ export class TableEngine {
     const result = this.resolvePots(pots);
     this.phase = "hand-complete";
     this.lastHandResult = result;
+    this.currentActorSeat = null;
     const eliminated = this.checkEliminations();
     this.recordHandStats(result, eliminated);
     this.pendingEvents.push({ type: "handResult", payload: result });
@@ -1278,6 +1288,7 @@ export class TableEngine {
     };
     this.phase = "hand-complete";
     this.lastHandResult = result;
+    this.currentActorSeat = null;
     this.resetHandBets();
     const eliminated = this.checkEliminations();
     this.recordHandStats(result, eliminated);
@@ -1441,6 +1452,8 @@ export class TableEngine {
     for (const p of this.players.values()) {
       p.betThisRound = 0;
       p.totalBet = 0;
+      // Hand resolved — clear all-in chrome so busted seats aren't "0 all-in".
+      p.allIn = false;
     }
   }
 
@@ -1450,6 +1463,7 @@ export class TableEngine {
     for (const p of this.players.values()) {
       if (!p.eliminated && p.chips === 0) {
         p.eliminated = true;
+        p.allIn = false;
         p.skipped = false;
         p.skipReason = null;
         this.eliminationOrder.push(p.seatId);

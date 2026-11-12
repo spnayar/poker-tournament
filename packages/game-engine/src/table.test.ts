@@ -533,6 +533,83 @@ describe("TableEngine", () => {
    * (Sanjay), so the original bettor acted twice before the player between
    * the folder and the bettor.
    */
+  it("hand-complete after away fold clears actor and all-in so Deal is unblocked", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "sanjay", "Sanjay", null, 16000);
+    table.addPlayer(1, "siv", "sivnayar123", null, 3500);
+
+    // HU: dealer/SB = Sanjay (0), BB = siv (1); preflop actor = Sanjay.
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    table.startHand();
+    expect(table.getPublicState().currentActorSeat).toBe(0);
+
+    // Raise so the away seat must fold (not free-check) when action lands.
+    table.applyAction(0, { type: "raise", amount: 100 });
+    expect(table.getPublicState().currentActorSeat).toBe(1);
+    expect(table.setSkipped(1, true, "disconnect")).toBe(true);
+
+    const state = table.getPublicState();
+    expect(state.phase).toBe("hand-complete");
+    expect(state.currentActorSeat).toBeNull();
+    expect(table.getLegalActions(0)).toBeNull();
+    expect(table.getLegalActions(1)).toBeNull();
+    expect(state.nextDealerSeat).toBe(1);
+    expect(
+      state.actionLog.some(
+        (e) => e.seatId === 1 && e.action.includes("Fold (away)")
+      )
+    ).toBe(true);
+    for (const seat of state.seats) {
+      if (seat.chipCount === 0) expect(seat.allIn).toBe(false);
+    }
+    expect(table.isTournamentComplete()).toBe(false);
+    expect(table.startHand()).toBe(true);
+  });
+
+  it("eliminates busted all-in seats and still allows the next hand", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "sanjay", "Sanjay", null, 1000);
+    table.addPlayer(1, "short", "srcoyne", null, 25);
+
+    table.startHand();
+    // SB/BB posts leave short stack all-in; Sanjay calls to showdown/award.
+    const actor = table.getPublicState().currentActorSeat!;
+    if (table.getLegalActions(actor)?.canCall) {
+      table.applyAction(actor, { type: "call" });
+    } else if (table.getLegalActions(actor)?.canCheck) {
+      table.applyAction(actor, { type: "check" });
+    }
+
+    let guard = 0;
+    while (
+      table.getPublicState().phase !== "hand-complete" &&
+      guard++ < 20
+    ) {
+      const seat = table.getPublicState().currentActorSeat;
+      if (seat === null) break;
+      const legal = table.getLegalActions(seat);
+      if (!legal) break;
+      if (legal.canCheck) table.applyAction(seat, { type: "check" });
+      else if (legal.canCall) table.applyAction(seat, { type: "call" });
+      else table.applyAction(seat, { type: "fold" });
+    }
+
+    const state = table.getPublicState();
+    expect(state.phase).toBe("hand-complete");
+    expect(state.currentActorSeat).toBeNull();
+    const busted = state.seats.filter((s) => s.chipCount === 0);
+    for (const seat of busted) {
+      expect(seat.allIn).toBe(false);
+    }
+    if (table.isTournamentComplete()) {
+      expect(table.getActivePlayerCount()).toBe(1);
+    } else {
+      expect(table.startHand()).toBe(true);
+    }
+  });
+
   it("after flop bet-raise-fold, next seat is clockwise of folder not the bettor", () => {
     const table = new TableEngine(testTableConfig());
     // Seats ascending clockwise: Sanjay → siv → lcot → srcoyne → Sanjay

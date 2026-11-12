@@ -29,6 +29,11 @@ import {
 } from "@/lib/sounds";
 import { LEDGER_DISCLAIMER } from "@/lib/utils";
 import {
+  canDealNextHand,
+  isAwaitingNextHand,
+  shouldShowDealNextBar,
+} from "@/lib/dealNextHand";
+import {
   ServerEvents,
   ClientEvents,
   type TableState,
@@ -355,7 +360,16 @@ export default function TablePage() {
     const handleActionRequired = (legal: LegalActions) => {
       setLegalActions(legal);
       setActionPending(false);
-      setHandResult(null);
+      // Never clear handResult on a stale ACTION_REQUIRED after hand-complete —
+      // that hid Deal next hand when away seats synced mid between-hands.
+      const phase = tableStateRef.current?.phase;
+      if (
+        phase !== "hand-complete" &&
+        phase !== "showdown" &&
+        phase !== "waiting"
+      ) {
+        setHandResult(null);
+      }
     };
 
     const handleHandResult = (result: HandResult) => {
@@ -743,7 +757,7 @@ export default function TablePage() {
       blindTimer?.hostUserId ??
       hostUserId ??
       undefined);
-  // Phase may reach hand-complete during an all-in runout — wait for board + result.
+  // Phase may reach hand-complete during an all-in runout — wait for board reveal.
   const handCompletePhase =
     tableState.phase === "hand-complete" && !gameFinished;
   const seatingReady = tableState.seatingReady === true;
@@ -760,8 +774,12 @@ export default function TablePage() {
     tableState.phase === "waiting" &&
     tableState.handNumber === 0 &&
     !seatingReady;
-  const awaitingNextHand =
-    handCompletePhase && !boardRevealing && handResult !== null;
+  // Do not require handResult — reconnect/away sync can miss or clear it.
+  const awaitingNextHand = isAwaitingNextHand({
+    phase: tableState.phase,
+    gameFinished: Boolean(gameFinished),
+    boardRevealing,
+  });
   const nextDealerSeat = tableState.nextDealerSeat ?? null;
   const nextDealer = tableState.seats.find(
     (s) => s.seatId === nextDealerSeat
@@ -769,11 +787,20 @@ export default function TablePage() {
   const nextDealerSkipped = nextDealer?.skipped === true;
   const nextDealerAway = nextDealer?.away === true;
   const nextDealerUnavailable = nextDealerSkipped || nextDealerAway;
-  const canDealNext =
-    (awaitingNextHand || awaitingFirstDeal) &&
-    mySeat !== undefined &&
-    (nextDealerSeat === mySeat.seatId ||
-      (Boolean(isHost) && nextDealerUnavailable));
+  const canDealNext = canDealNextHand({
+    awaitingNextHand,
+    awaitingFirstDeal,
+    mySeatId: mySeat?.seatId,
+    nextDealerSeat,
+    isHost: Boolean(isHost),
+    nextDealerUnavailable,
+  });
+  const showDealBar = shouldShowDealNextBar({
+    awaitingNextHand,
+    awaitingFirstDeal,
+    nextDealerSeat,
+    isHost: Boolean(isHost),
+  });
   const canShowFoldWinCards =
     awaitingNextHand &&
     mySeat !== undefined &&
@@ -804,8 +831,7 @@ export default function TablePage() {
   const iAmSatOut = Boolean(mySeat?.skipped) && !gameFinished;
   const showFooter =
     isBetting ||
-    (awaitingNextHand && Boolean(nextDealer)) ||
-    awaitingFirstDeal ||
+    showDealBar ||
     awaitingHostReady ||
     iAmSatOut;
   const footerPad = showFooter ? Math.max(footerH, 52) + 8 : 0;
@@ -1004,15 +1030,15 @@ export default function TablePage() {
                 onShow={showFoldWinCards}
               />
             ) : null}
-            {(awaitingNextHand || awaitingFirstDeal) && nextDealer && (
+            {showDealBar && (
               <DealNextHandBar
-                dealerName={nextDealer.displayName}
+                dealerName={nextDealer?.displayName ?? "the host"}
                 canDeal={canDealNext}
                 pending={dealNextPending}
                 onDeal={dealNextHand}
                 dealerAway={
                   Boolean(isHost) &&
-                  nextDealerUnavailable &&
+                  (nextDealerUnavailable || nextDealerSeat == null) &&
                   nextDealerSeat !== mySeat?.seatId
                 }
               />
