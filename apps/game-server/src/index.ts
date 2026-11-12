@@ -26,9 +26,11 @@ import {
   shouldResumeOnReconnect,
   applySocketAwayFlags,
   ChopTournamentSchema,
+  AdvanceBlindLevelSchema,
   rankChopFinish,
   validateChopShares,
   type BlindLevel,
+  type BlindsUp,
   type TableState,
 } from "@poker/protocol";
 import {
@@ -221,9 +223,26 @@ function broadcastBlindTimer(tournamentId: string, room: TournamentRoom): void {
   });
 }
 
+function broadcastBlindsUp(tournamentId: string, room: TournamentRoom): void {
+  const pendingIndex = room.blindTimer.getPendingLevelIndex();
+  if (pendingIndex === null) return;
+  const level = room.blindLevels[pendingIndex];
+  if (!level) return;
+  const payload: BlindsUp = {
+    sb: level.sb,
+    bb: level.bb,
+    levelNumber: pendingIndex + 1,
+    pending: true,
+  };
+  io.to(`tournament:${tournamentId}`).emit(ServerEvents.BLINDS_UP, payload);
+}
+
 async function applyPendingBlindIncrease(room: TournamentRoom): Promise<boolean> {
   if (!room.blindTimer.getIncreasePending()) return false;
-  const applied = room.table.applyScheduledBlindIncrease();
+  const pendingIndex = room.blindTimer.getPendingLevelIndex();
+  const applied = room.table.applyScheduledBlindIncrease(
+    pendingIndex ?? undefined
+  );
   if (applied) {
     room.blindTimer.onLevelApplied(room.table.toSnapshot().blindLevel);
     return true;
@@ -1613,7 +1632,7 @@ io.on("connection", (socket) => {
     );
   });
 
-  socket.on(ClientEvents.ADVANCE_BLIND_LEVEL, async () => {
+  socket.on(ClientEvents.ADVANCE_BLIND_LEVEL, async (data: unknown) => {
     const tournamentId = await redis.get(`player:${user.userId}:tournament`);
     if (!tournamentId) return;
 
@@ -1627,17 +1646,34 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (!room.blindTimer.forceNextLevel()) {
+    const parsed = AdvanceBlindLevelSchema.safeParse(data ?? {});
+    if (!parsed.success) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Could not read blind level choice",
+      });
+      return;
+    }
+
+    const target = parsed.data.targetLevelIndex;
+    const ok =
+      target === undefined
+        ? room.blindTimer.forceNextLevel()
+        : room.blindTimer.forceToLevel(target);
+
+    if (!ok) {
       socket.emit(ServerEvents.ERROR, {
         message: room.blindTimer.getIncreasePending()
           ? "Next blinds already scheduled for the next hand"
-          : "Already at the final blind level",
+          : target !== undefined
+            ? "Pick a higher blind level from the structure"
+            : "Already at the final blind level",
       });
       return;
     }
 
     await persistRoom(tournamentId, room);
     broadcastBlindTimer(tournamentId, room);
+    broadcastBlindsUp(tournamentId, room);
   });
 
   socket.on("disconnect", () => {
@@ -1675,6 +1711,7 @@ setInterval(() => {
     if (changed) {
       void persistRoom(tournamentId, room).then(() => {
         broadcastBlindTimer(tournamentId, room);
+        broadcastBlindsUp(tournamentId, room);
       });
     }
   }

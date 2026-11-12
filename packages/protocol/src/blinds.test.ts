@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  AdvanceBlindLevelSchema,
+  BlindsUpSchema,
   buildBlindLevels,
   getBlindLevelAt,
   resolveBlindLevels,
@@ -34,6 +36,21 @@ describe("blind structure", () => {
     const levels = buildBlindLevels(5000, "hyper");
     const last = levels[levels.length - 1]!;
     expect(getBlindLevelAt(levels, 99)).toEqual(last);
+  });
+
+  it("parses host blind advance payloads", () => {
+    expect(AdvanceBlindLevelSchema.parse({}).targetLevelIndex).toBeUndefined();
+    expect(
+      AdvanceBlindLevelSchema.parse({ targetLevelIndex: 4 }).targetLevelIndex
+    ).toBe(4);
+    expect(
+      BlindsUpSchema.parse({
+        sb: 100,
+        bb: 200,
+        levelNumber: 3,
+        pending: true,
+      }).bb
+    ).toBe(200);
   });
 
   it("roundBlindAmount uses sensible steps", () => {

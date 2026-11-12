@@ -538,10 +538,20 @@ export class TableEngine {
     return null;
   }
 
-  /** Apply the next blind level when the level timer expires (before a new hand). */
-  applyScheduledBlindIncrease(): boolean {
-    if (this.blindLevel >= this.config.blindLevels.length - 1) return false;
-    this.blindLevel++;
+  /**
+   * Apply a scheduled blind increase before a new hand.
+   * Defaults to +1 level; host jumps pass an explicit structure index.
+   */
+  applyScheduledBlindIncrease(toLevelIndex?: number): boolean {
+    const target = toLevelIndex ?? this.blindLevel + 1;
+    if (
+      !Number.isInteger(target) ||
+      target <= this.blindLevel ||
+      target > this.config.blindLevels.length - 1
+    ) {
+      return false;
+    }
+    this.blindLevel = target;
     const blinds = getBlindLevelAt(this.config.blindLevels, this.blindLevel);
     this.smallBlind = blinds.sb;
     this.bigBlind = blinds.bb;

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { BlindTimerState } from "@poker/protocol";
+import { useEffect, useRef, useState } from "react";
+import type { BlindLevel, BlindTimerState } from "@poker/protocol";
 
 function formatCountdown(ms: number | null): string {
   if (ms === null) return "—";
@@ -16,7 +16,8 @@ interface BlindTimerBarProps {
   myUserId: string;
   onPause: () => void;
   onResume: () => void;
-  onAdvance: () => void;
+  /** Host chose a structure level (0-based index) to schedule for next hand. */
+  onAdvanceToLevel: (targetLevelIndex: number) => void;
   actionLoading?: boolean;
 }
 
@@ -25,10 +26,12 @@ export function BlindTimerBar({
   myUserId,
   onPause,
   onResume,
-  onAdvance,
+  onAdvanceToLevel,
   actionLoading = false,
 }: BlindTimerBarProps) {
   const [now, setNow] = useState(() => Date.now());
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (timer.paused || timer.increasePending || timer.levelEndsAt === null) {
@@ -38,8 +41,31 @@ export function BlindTimerBar({
     return () => clearInterval(id);
   }, [timer]);
 
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!pickerRef.current?.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [pickerOpen]);
+
+  useEffect(() => {
+    if (timer.increasePending) setPickerOpen(false);
+  }, [timer.increasePending]);
+
   const isHost = timer.hostUserId === myUserId;
-  const canAdvance = timer.nextBb !== null && !timer.increasePending;
+  const advanceOptions: BlindLevel[] = timer.advanceOptions ?? [];
+  const canAdvance = advanceOptions.length > 0 && !timer.increasePending;
   const displayRemaining = timer.increasePending
     ? 0
     : timer.paused
@@ -47,6 +73,9 @@ export function BlindTimerBar({
       : timer.levelEndsAt !== null
         ? Math.max(0, timer.levelEndsAt - now)
         : null;
+
+  const pendingSb = timer.pendingSb ?? timer.nextSb;
+  const pendingBb = timer.pendingBb ?? timer.nextBb;
 
   const timerLabel = timer.increasePending
     ? "Next hand"
@@ -80,11 +109,13 @@ export function BlindTimerBar({
         </div>
 
         <div className="hidden sm:flex items-baseline gap-1 text-[11px] min-w-0 shrink text-slate-400">
-          {timer.nextBb !== null ? (
+          {pendingBb !== null ? (
             <>
-              <span className="text-slate-500">Next</span>
+              <span className="text-slate-500">
+                {timer.increasePending ? "To" : "Next"}
+              </span>
               <span className="font-mono text-slate-300 tabular-nums">
-                {timer.nextSb}/{timer.nextBb}
+                {pendingSb}/{pendingBb}
               </span>
             </>
           ) : (
@@ -93,7 +124,7 @@ export function BlindTimerBar({
         </div>
 
         {isHost && (
-          <div className="flex flex-nowrap items-center gap-1 ml-auto shrink-0">
+          <div className="relative flex flex-nowrap items-center gap-1 ml-auto shrink-0" ref={pickerRef}>
             {!timer.increasePending &&
               (timer.paused ? (
                 <button
@@ -114,21 +145,67 @@ export function BlindTimerBar({
                   Pause
                 </button>
               ))}
-            <button
-              type="button"
-              onClick={onAdvance}
-              disabled={actionLoading || !canAdvance}
-              title={
-                timer.increasePending
-                  ? "Next blinds already scheduled"
-                  : timer.nextBb === null
-                    ? "Already at the final level"
-                    : `Move to ${timer.nextSb} / ${timer.nextBb} on the next hand`
-              }
-              className="h-6 px-2 text-[11px] bg-amber-600 hover:bg-amber-500 rounded-md font-medium disabled:opacity-50"
-            >
-              {timer.increasePending ? "Set" : "Advance"}
-            </button>
+            {timer.increasePending ? (
+              <button
+                type="button"
+                disabled
+                className="h-6 px-2 text-[11px] bg-amber-600/70 rounded-md font-medium disabled:opacity-70"
+                title="Next blinds already scheduled"
+              >
+                Set
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen((o) => !o)}
+                  disabled={actionLoading || !canAdvance}
+                  aria-haspopup="listbox"
+                  aria-expanded={pickerOpen}
+                  title={
+                    !canAdvance
+                      ? "Already at the final level"
+                      : "Choose which blind level to move to next hand"
+                  }
+                  className="h-6 px-2 text-[11px] bg-amber-600 hover:bg-amber-500 rounded-md font-medium disabled:opacity-50"
+                >
+                  Advance
+                </button>
+                {pickerOpen && canAdvance ? (
+                  <div
+                    role="listbox"
+                    aria-label="Blind levels"
+                    className="absolute right-0 top-full z-[80] mt-1 max-h-56 w-44 overflow-y-auto rounded-lg border border-slate-600 bg-slate-950 py-1 shadow-2xl"
+                  >
+                    <p className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-slate-500">
+                      Next hand →
+                    </p>
+                    {advanceOptions.map((level) => {
+                      const index = level.level - 1;
+                      return (
+                        <button
+                          key={level.level}
+                          type="button"
+                          role="option"
+                          className="flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left text-sm text-slate-100 hover:bg-slate-800"
+                          onClick={() => {
+                            setPickerOpen(false);
+                            onAdvanceToLevel(index);
+                          }}
+                        >
+                          <span className="text-slate-400 text-xs">
+                            L{level.level}
+                          </span>
+                          <span className="font-mono tabular-nums text-amber-300">
+                            {level.sb}/{level.bb}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
         )}
       </div>

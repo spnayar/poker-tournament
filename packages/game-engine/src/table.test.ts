@@ -458,6 +458,22 @@ describe("TableEngine", () => {
     expect(level2.bigBlind).toBeGreaterThan(level1.bigBlind);
   });
 
+  it("applyScheduledBlindIncrease can jump to a chosen structure level", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.startHand();
+    const before = table.getPublicState();
+
+    expect(table.applyScheduledBlindIncrease(3)).toBe(true);
+    const state = table.getPublicState();
+    // Public blindLevel is 1-based display (index 3 → level 4).
+    expect(state.blindLevel).toBe(4);
+    expect(state.bigBlind).toBeGreaterThan(before.bigBlind);
+    expect(table.applyScheduledBlindIncrease(2)).toBe(false);
+    expect(table.applyScheduledBlindIncrease(3)).toBe(false);
+  });
+
   it("action after middle raise goes to player after raiser", () => {
     const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);

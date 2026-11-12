@@ -201,6 +201,8 @@ export type LegalActions = z.infer<typeof LegalActionsSchema>;
 export const ServerEvents = {
   TABLE_STATE: "table:state",
   BLIND_TIMER: "blind:timer",
+  /** Non-blocking toast: next hand blinds rise to sb/bb. */
+  BLINDS_UP: "blind:up",
   PLAYER_CARDS: "player:cards",
   ACTION_REQUIRED: "action:required",
   HAND_RESULT: "hand:result",

@@ -11,6 +11,7 @@ import { HandResultOverlay, HandWinnerChipBurst } from "@/components/table/HandR
 import { POST_REVEAL_PAUSE_MS } from "@/components/table/tableAnimation";
 import { GameEndSidebar } from "@/components/table/GameEndSidebar";
 import { BlindTimerBar } from "@/components/table/BlindTimerBar";
+import { BlindsUpToast } from "@/components/table/BlindsUpToast";
 import { ActionTimerControls } from "@/components/table/ActionTimerControls";
 import { ActionTimerNudge } from "@/components/table/ActionTimerNudge";
 import { DealNextHandBar } from "@/components/table/DealNextHandBar";
@@ -37,6 +38,7 @@ import {
   type ActionLogEntry,
   type ShownHand,
   type BlindTimerState,
+  type BlindsUp,
   awayDisplayNames,
   formatActorWaitingLabel,
   formatAwayBanner,
@@ -104,6 +106,7 @@ export default function TablePage() {
   const [blindTimer, setBlindTimer] = useState<
     (BlindTimerState & { hostUserId?: string }) | null
   >(null);
+  const [blindsUpEvent, setBlindsUpEvent] = useState<BlindsUp | null>(null);
   const [timerActionLoading, setTimerActionLoading] = useState(false);
   const [animateDeal, setAnimateDeal] = useState(true);
   const [viewerSeatId, setViewerSeatId] = useState<number | null>(null);
@@ -384,6 +387,10 @@ export default function TablePage() {
       setBlindTimer(payload);
     };
 
+    const handleBlindsUp = (payload: BlindsUp) => {
+      setBlindsUpEvent({ ...payload });
+    };
+
     const handleGameStarted = (_payload: GameStarted) => {
       gameFinishedRef.current = false;
       setGameFinished(null);
@@ -506,6 +513,7 @@ export default function TablePage() {
     socket.on(ServerEvents.GAME_FINISHED, handleGameFinished);
     socket.on(ServerEvents.GAME_STARTED, handleGameStarted);
     socket.on(ServerEvents.BLIND_TIMER, handleBlindTimer);
+    socket.on(ServerEvents.BLINDS_UP, handleBlindsUp);
     socket.on(ServerEvents.TOURNAMENT_FINISHED, handleTournamentFinished);
     socket.on(ServerEvents.ERROR, handleError);
 
@@ -523,6 +531,7 @@ export default function TablePage() {
       socket.off(ServerEvents.GAME_FINISHED, handleGameFinished);
       socket.off(ServerEvents.GAME_STARTED, handleGameStarted);
       socket.off(ServerEvents.BLIND_TIMER, handleBlindTimer);
+      socket.off(ServerEvents.BLINDS_UP, handleBlindsUp);
       socket.off(ServerEvents.TOURNAMENT_FINISHED, handleTournamentFinished);
       socket.off(ServerEvents.ERROR, handleError);
     };
@@ -569,10 +578,12 @@ export default function TablePage() {
     setTimeout(() => setTimerActionLoading(false), 300);
   }
 
-  function advanceBlindLevel() {
+  function advanceBlindToLevel(targetLevelIndex: number) {
     if (!socketRef.current || timerActionLoading) return;
     setTimerActionLoading(true);
-    socketRef.current.emit(ClientEvents.ADVANCE_BLIND_LEVEL);
+    socketRef.current.emit(ClientEvents.ADVANCE_BLIND_LEVEL, {
+      targetLevelIndex,
+    });
     setTimeout(() => setTimerActionLoading(false), 300);
   }
 
@@ -823,10 +834,11 @@ export default function TablePage() {
               myUserId={session?.user?.id ?? ""}
               onPause={pauseBlindTimer}
               onResume={resumeBlindTimer}
-              onAdvance={advanceBlindLevel}
+              onAdvanceToLevel={advanceBlindToLevel}
               actionLoading={timerActionLoading}
             />
           )}
+          <BlindsUpToast event={blindsUpEvent} />
           {isHost && !gameFinished && isBetting && (
             <ActionTimerControls
               actionTimerSeconds={tableState.actionTimerSeconds ?? 60}
