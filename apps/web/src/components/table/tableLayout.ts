@@ -22,15 +22,48 @@ export function getVisualSeatIndex(
 function ellipseRadii(total: number, compact: boolean): { rx: number; ry: number } {
   const crowded = total >= 6;
   if (compact) {
-    return { rx: crowded ? 38 : 34, ry: crowded ? 32 : 28 };
+    // Keep rx inside the felt so pods aren't clipped; ry spreads vertical gaps.
+    return { rx: crowded ? 40 : 38, ry: crowded ? 34 : 30 };
   }
-  return { rx: crowded ? 43 : 42, ry: crowded ? 36 : 35 };
+  return { rx: crowded ? 44 : 43, ry: crowded ? 36 : 35 };
 }
 
 export function heroBottomY(compact = false): number {
   // Anchor at the bottom of the felt; seat uses translateY(-100%) so the
   // hole-card row sits on this line and the avatar stacks upward.
-  return compact ? 92 : 94;
+  return compact ? 97 : 95;
+}
+
+/**
+ * Open arc for opponents: ~8 o'clock through 12 to ~4 o'clock.
+ * Must never pass through 6 o'clock (π/2) — that was stacking neighbors on the hero.
+ */
+export function opponentArcAngles(others: number, compact = false): number[] {
+  if (others <= 0) return [];
+  // Phones need more clearance so side pods clear the hero card stack.
+  const bottomClearance = Math.PI * (compact ? 0.5 : 0.38);
+  const start = Math.PI / 2 + bottomClearance;
+  const end = Math.PI / 2 + 2 * Math.PI - bottomClearance;
+  if (others === 1) return [start + (end - start) * 0.5];
+  return Array.from({ length: others }, (_, i) => {
+    const t = i / (others - 1);
+    return start + (end - start) * t;
+  });
+}
+
+function clampOpponentPoint(
+  x: number,
+  y: number,
+  compact: boolean
+): { x: number; y: number } {
+  const maxY = heroBottomY(compact) - (compact ? 32 : 18);
+  const minY = compact ? 18 : 12;
+  const minX = compact ? 12 : 8;
+  const maxX = 100 - minX;
+  return {
+    x: Math.min(maxX, Math.max(minX, x)),
+    y: Math.min(maxY, Math.max(minY, y)),
+  };
 }
 
 /**
@@ -48,14 +81,14 @@ export function getSeatPosition(
   const x = 50 + rx * Math.cos(angle);
 
   const maxBottomY = heroBottomY(compact) - 6;
-  const minTopY = compact ? 16 : 12;
+  const minTopY = compact ? 18 : 12;
   y = Math.min(maxBottomY, Math.max(minTopY, y));
 
   return { x, y };
 }
 
 /**
- * Anchor transforms:
+ * Anchor transforms from ellipse angle:
  * - Top seats: hang downward so chrome clears host blind controls
  * - Bottom seats: hang upward so hole cards stay inside the felt box
  */
@@ -68,6 +101,23 @@ export function seatAnchorTransform(visualIndex: number, total: number): string 
   else if (y > 0.2) ty = "-78%";
   else if (y > 0.05) ty = "-65%";
   return `translate(-50%, ${ty})`;
+}
+
+/** Prefer actual laid-out Y so open-arc opponents get the right hang direction. */
+export function seatAnchorTransformFromY(
+  yPercent: number,
+  isViewer: boolean,
+  compact = false
+): string {
+  if (isViewer) return "translate(-50%, -100%)";
+  // Top rail: hang upward (outside) so pods do not cover the board/pot.
+  if (yPercent < (compact ? 30 : 28)) {
+    return "translate(-50%, -100%)";
+  }
+  if (yPercent > 72) return "translate(-50%, -90%)";
+  if (yPercent > 60) return "translate(-50%, -78%)";
+  if (yPercent > 50) return "translate(-50%, -65%)";
+  return "translate(-50%, -50%)";
 }
 
 /** Force the viewer seat onto exact 6 o'clock regardless of odd seat counts. */
@@ -93,6 +143,78 @@ export function getViewerSortedSeatIndex(
   return -1;
 }
 
+type SeatPos = { x: number; y: number; visualIndex: number; isViewer: boolean };
+
+/**
+ * Place every seat for a viewer-centric table. Opponents sit on an open top arc;
+ * a separation pass keeps pods from stacking on phones.
+ */
+export function layoutSeatsForViewer(
+  total: number,
+  viewerSortedSeatIndex: number,
+  compact = false
+): SeatPos[] {
+  const { rx, ry } = ellipseRadii(total, compact);
+  const minDist = compact ? (total >= 6 ? 22 : 24) : total >= 6 ? 20 : 22;
+  const positions: SeatPos[] = [];
+
+  for (let i = 0; i < total; i++) {
+    positions.push(
+      getSeatPositionForViewer(i, total, viewerSortedSeatIndex, compact)
+    );
+  }
+
+  if (viewerSortedSeatIndex < 0 || total < 3) return positions;
+
+  // Nudge non-hero seats apart along the ellipse when too close.
+  const others = positions
+    .map((p, index) => ({ ...p, index }))
+    .filter((p) => !p.isViewer);
+
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = false;
+    for (let a = 0; a < others.length; a++) {
+      for (let b = a + 1; b < others.length; b++) {
+        const A = others[a]!;
+        const B = others[b]!;
+        const dx = B.x - A.x;
+        const dy = B.y - A.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist >= minDist || dist < 0.001) continue;
+        const push = ((minDist - dist) / 2) * 1.05;
+        const ux = dx / dist;
+        const uy = dy / dist;
+        const aClamped = clampOpponentPoint(A.x - ux * push, A.y - uy * push, compact);
+        const bClamped = clampOpponentPoint(B.x + ux * push, B.y + uy * push, compact);
+        A.x = aClamped.x;
+        A.y = aClamped.y;
+        B.x = bClamped.x;
+        B.y = bClamped.y;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
+  // Pull nudged points back toward the ellipse rim so they still hug the rail.
+  for (const o of others) {
+    const vx = (o.x - 50) / rx;
+    const vy = (o.y - 50) / ry;
+    const mag = Math.hypot(vx, vy) || 1;
+    const target = clampOpponentPoint(50 + rx * (vx / mag), 50 + ry * (vy / mag), compact);
+    o.x = target.x;
+    o.y = target.y;
+    positions[o.index] = {
+      x: o.x,
+      y: o.y,
+      visualIndex: o.visualIndex,
+      isViewer: false,
+    };
+  }
+
+  return positions;
+}
+
 /**
  * Place opponents on an open arc that leaves the bottom for the hero.
  * visualIndex 0 is top; hero is excluded and pinned to 6 o'clock.
@@ -102,7 +224,7 @@ export function getSeatPositionForViewer(
   total: number,
   viewerSortedSeatIndex: number,
   compact = false
-): { x: number; y: number; visualIndex: number; isViewer: boolean } {
+): SeatPos {
   const visualIndex = getVisualSeatIndex(
     sortedSeatIndex,
     total,
@@ -124,23 +246,21 @@ export function getSeatPositionForViewer(
     return { ...pos, visualIndex, isViewer: false };
   }
 
-  // Re-index the other seats across the top arc (exclude bottom).
+  // Re-index the other seats across the top arc (exclude bottom / 6 o'clock).
   // Engine turn order advances ascending seatId as clockwise on the ring.
   // From the hero at 6 o'clock, clockwise is left → top → right, so the seat
   // immediately after the viewer (ascending) must sit on the viewer's left.
   const others = total - 1;
   const orderAmongOthers =
     (sortedSeatIndex - viewerSortedSeatIndex - 1 + total) % total;
-  // Sweep left-bottomish through top to right-bottomish (never exact 6 o'clock).
-  // Angles increase through the top (≈1.5π); the short arc would go through bottom.
-  const start = -Math.PI / 2 + Math.PI * 1.72;
-  const end = -Math.PI / 2 + Math.PI * 2.28;
-  const t = others <= 1 ? 0.5 : orderAmongOthers / (others - 1);
-  const angle = start + (end - start) * t;
+  const angles = opponentArcAngles(others, compact);
+  const angle = angles[orderAmongOthers] ?? angles[0]!;
   const { rx, ry } = ellipseRadii(total, compact);
-  let x = 50 + rx * Math.cos(angle);
-  let y = 50 + ry * Math.sin(angle);
-  y = Math.min(heroBottomY(compact) - 8, Math.max(compact ? 16 : 12, y));
+  const point = clampOpponentPoint(
+    50 + rx * Math.cos(angle),
+    50 + ry * Math.sin(angle),
+    compact
+  );
 
-  return { x, y, visualIndex, isViewer: false };
+  return { ...point, visualIndex, isViewer: false };
 }

@@ -14,9 +14,9 @@ import {
 import { getAvatarUrl } from "@/lib/utils";
 import { lastActionTone } from "@/lib/lastActionStyle";
 import {
-  getSeatPositionForViewer,
   getViewerSortedSeatIndex,
-  seatAnchorTransformForViewer,
+  layoutSeatsForViewer,
+  seatAnchorTransformFromY,
 } from "./tableLayout";
 import type { SeatPublic, ShownHand } from "@poker/protocol";
 import { hostSeatControl } from "@poker/protocol";
@@ -41,6 +41,7 @@ interface PlayerSeatProps {
   position: { x: number; y: number };
   visualIndex: number;
   seatCount: number;
+  compact?: boolean;
   isActive: boolean;
   animateDeal?: boolean;
   revealHoleCards?: boolean;
@@ -58,8 +59,9 @@ export function PlayerSeat({
   myCards,
   showCards,
   position,
-  visualIndex,
+  visualIndex: _visualIndex,
   seatCount,
+  compact = false,
   isActive,
   animateDeal = true,
   revealHoleCards = false,
@@ -138,21 +140,24 @@ export function PlayerSeat({
     });
   }, [menuOpen, hostControl]);
 
-  // Top-half seats: cards hang below the pod (toward center).
-  // Bottom/hero: cards sit above the pod (toward center / above action bar).
-  const cardsBelowPod = !isMe && position.y < 58;
+  // Hero: pod above, hole cards on the felt bottom pin (must not cover the board).
+  // Opponents: tuck face-down cards under the avatar; only fan a full row at showdown.
+  const showOpponentFan = !isMe && revealHoleCards && showCards;
+  const cardsBelowPod = isMe || (showOpponentFan && position.y < 48);
   const cardScale = isMe
-    ? ""
+    ? compact
+      ? "scale-[0.62] origin-bottom"
+      : "scale-[0.9] sm:scale-100 origin-bottom"
     : seatCount >= 6
-      ? `scale-[0.62] ${cardsBelowPod ? "origin-top" : "origin-bottom"}`
-      : `scale-[0.78] ${cardsBelowPod ? "origin-top" : "origin-bottom"}`;
+      ? `scale-[0.55] ${cardsBelowPod ? "origin-top" : "origin-bottom"}`
+      : `scale-[0.68] ${cardsBelowPod ? "origin-top" : "origin-bottom"}`;
 
   const holeCardRow =
     cardsToShow.length === 0 ? null : (
       <div
         className={`flex gap-0.5 sm:gap-1 relative z-20 ${cardScale} ${
-          cardsBelowPod ? "mt-[-0.35rem]" : "mb-[-0.35rem]"
-        } ${isMe ? "mb-[-0.15rem]" : ""}`}
+          isMe ? "-mt-0.5 mb-0" : cardsBelowPod ? "mt-[-0.35rem]" : "mb-[-0.35rem]"
+        }`}
       >
         {cardsToShow.map((card, i) => (
           <PlayingCard
@@ -165,6 +170,24 @@ export function PlayerSeat({
         ))}
       </div>
     );
+
+  const tuckedOpponentCards =
+    !isMe && !showOpponentFan && cardsToShow.length > 0 ? (
+      <div
+        className="pointer-events-none absolute -bottom-0.5 left-1/2 z-[5] flex -translate-x-1/2 gap-px scale-[0.38] origin-bottom"
+        aria-hidden
+      >
+        {cardsToShow.map((card, i) => (
+          <PlayingCard
+            key={i}
+            card={card}
+            faceDown
+            delay={i * HOLE_CARD_DELAY_SEC}
+            animateDeal={animateDeal}
+          />
+        ))}
+      </div>
+    ) : null;
 
   const seatPod = (
       <div
@@ -199,6 +222,7 @@ export function PlayerSeat({
                     : "border-slate-500"
             }`}
           />
+          {tuckedOpponentCards}
           {statusBadge === "out" ? (
             <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1 py-px rounded text-[8px] font-bold text-slate-950 whitespace-nowrap bg-slate-300">
               Out
@@ -302,57 +326,64 @@ export function PlayerSeat({
       </div>
   );
 
+  const actionLabel =
+    seat.lastAction && actionTone ? (
+      <motion.p
+        key={seat.lastAction}
+        initial={{ opacity: 0.4, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={`mb-0.5 px-1.5 py-0.5 rounded border text-[10px] sm:text-[11px] font-semibold max-w-[7.5rem] truncate shadow-sm ${actionTone.text} ${actionTone.ring}`}
+      >
+        {seat.lastAction}
+      </motion.p>
+    ) : null;
+
+  const betChip =
+    seat.betThisRound > 0 ? (
+      <p className="mb-0.5 px-1.5 py-0.5 rounded-full bg-slate-950/70 border border-emerald-700/40 text-[10px] sm:text-[11px] text-emerald-300 font-mono tabular-nums shadow-sm">
+        {seat.betThisRound.toLocaleString()}
+      </p>
+    ) : null;
+
   return (
     <motion.div
-      className={`absolute flex flex-col items-center${revealHoleCards || isMe ? " z-20" : " z-10"}`}
+      className={`absolute flex flex-col items-center${
+        revealHoleCards || isMe ? " z-20" : " z-10"
+      }`}
       style={{
         left: `${position.x}%`,
         top: `${position.y}%`,
-        transform: seatAnchorTransformForViewer(visualIndex, seatCount, isMe),
+        transform: seatAnchorTransformFromY(position.y, isMe, compact),
       }}
       animate={{
         opacity: isOut ? 0.5 : seat.folded ? 0.38 : statusBadge ? 0.55 : 1,
       }}
     >
-      {seat.lastAction && actionTone && cardsBelowPod ? (
-        <motion.p
-          key={seat.lastAction}
-          initial={{ opacity: 0.4, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className={`mb-0.5 px-1.5 py-0.5 rounded border text-[10px] sm:text-[11px] font-semibold max-w-[7.5rem] truncate shadow-sm ${actionTone.text} ${actionTone.ring}`}
-        >
-          {seat.lastAction}
-        </motion.p>
-      ) : null}
-
-      {cardsBelowPod ? (
-        <>
-          {seatPod}
-          {holeCardRow}
-          {seat.betThisRound > 0 ? (
-            <p className="mt-0.5 px-1.5 py-0.5 rounded-full bg-slate-950/70 border border-emerald-700/40 text-[10px] sm:text-[11px] text-emerald-300 font-mono tabular-nums shadow-sm">
-              {seat.betThisRound.toLocaleString()}
-            </p>
-          ) : null}
-        </>
+      {isMe || showOpponentFan ? (
+        cardsBelowPod ? (
+          <>
+            {actionLabel}
+            {isMe ? betChip : null}
+            {seatPod}
+            {holeCardRow}
+            {!isMe && seat.betThisRound > 0 ? (
+              <p className="mt-0.5 px-1.5 py-0.5 rounded-full bg-slate-950/70 border border-emerald-700/40 text-[10px] sm:text-[11px] text-emerald-300 font-mono tabular-nums shadow-sm">
+                {seat.betThisRound.toLocaleString()}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {actionLabel}
+            {betChip}
+            {holeCardRow}
+            {seatPod}
+          </>
+        )
       ) : (
         <>
-          {seat.lastAction && actionTone ? (
-            <motion.p
-              key={seat.lastAction}
-              initial={{ opacity: 0.4, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className={`mb-0.5 px-1.5 py-0.5 rounded border text-[10px] sm:text-[11px] font-semibold max-w-[7.5rem] truncate shadow-sm ${actionTone.text} ${actionTone.ring}`}
-            >
-              {seat.lastAction}
-            </motion.p>
-          ) : null}
-          {seat.betThisRound > 0 ? (
-            <p className="mb-0.5 px-1.5 py-0.5 rounded-full bg-slate-950/70 border border-emerald-700/40 text-[10px] sm:text-[11px] text-emerald-300 font-mono tabular-nums shadow-sm">
-              {seat.betThisRound.toLocaleString()}
-            </p>
-          ) : null}
-          {holeCardRow}
+          {actionLabel}
+          {betChip}
           {seatPod}
         </>
       )}
@@ -420,6 +451,11 @@ export function PokerTable({
   const prevBoardRef = useRef<string[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [compactSeats, setCompactSeats] = useState(false);
+  const seatPositions = layoutSeatsForViewer(
+    sortedSeats.length,
+    viewerSeatIndex,
+    compactSeats
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -448,7 +484,7 @@ export function PokerTable({
       return;
     }
 
-    if (next.length <= prev.length) {
+    if (!animateDeal || next.length <= prev.length) {
       setVisibleBoard(padBoard(next));
       prevBoardRef.current = next;
       onBoardRevealChange?.(false);
@@ -481,7 +517,7 @@ export function PokerTable({
       prevBoardRef.current = next;
       onBoardRevealChange?.(false);
     }, totalMs);
-  }, [board, onBoardRevealChange]);
+  }, [board, animateDeal, onBoardRevealChange]);
 
   useEffect(() => {
     return () => {
@@ -534,8 +570,8 @@ export function PokerTable({
 
       <div className="absolute inset-[8%] rounded-[50%] border border-emerald-950/35 pointer-events-none" />
 
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10">
-        <div className="flex gap-1 sm:gap-1.5 mb-2 min-h-[3.5rem] sm:min-h-[4.5rem]">
+      <div className="absolute top-[44%] sm:top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 pointer-events-none">
+        <div className="flex gap-1 sm:gap-1.5 mb-1.5 sm:mb-2 min-h-[3.25rem] sm:min-h-[4.5rem]">
           {[0, 1, 2, 3, 4].map((slot) => (
             <PlayingCard
               key={slot}
@@ -579,12 +615,12 @@ export function PokerTable({
       </div>
 
       {sortedSeats.map((seat, i) => {
-        const pos = getSeatPositionForViewer(
-          i,
-          sortedSeats.length,
-          viewerSeatIndex,
-          compactSeats
-        );
+        const pos = seatPositions[i] ?? {
+          x: 50,
+          y: 50,
+          visualIndex: i,
+          isViewer: false,
+        };
         const shown = shownCards.find((s) => s.seatId === seat.seatId);
         const isMe = seat.userId === myUserId;
         const holeCardsForSeat = isMe
@@ -605,6 +641,7 @@ export function PokerTable({
             position={{ x: pos.x, y: pos.y }}
             visualIndex={pos.visualIndex}
             seatCount={sortedSeats.length}
+            compact={compactSeats}
             isActive={seat.seatId === currentActorSeat}
             animateDeal={animateDeal}
             isHost={isHost}
