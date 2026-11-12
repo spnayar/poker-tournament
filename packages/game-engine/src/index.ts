@@ -12,6 +12,7 @@ export {
   cardToPokersolver,
   evaluateHand,
   findPotWinners,
+  formatHandDescr,
   splitPotAmount,
   type EvaluatedHand,
 } from "./handEval";
