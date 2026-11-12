@@ -113,10 +113,12 @@ export function EmailLoginForm({
             role="status"
             className="text-sm text-amber-300 mb-3 text-balance"
           >
-            This email isn&apos;t signed up, so a login link won&apos;t get you
-            in. You need a club invite code. A game night code does not create
-            an account. Without a club invite code, you can&apos;t access the
-            site yet. No club invite code? Email{" "}
+            No account for this email yet. Enter a club invite code to create
+            one
+            {joiningNight
+              ? " — not this night's join code"
+              : " — not a game night code"}
+            . No invite? Email{" "}
             <a
               href={`mailto:${CLUB_CONTACT_EMAIL}`}
               className="underline hover:text-amber-200"
@@ -145,11 +147,6 @@ export function EmailLoginForm({
             required
             autoFocus
           />
-          <p className="text-slate-400 text-sm mt-2">
-            {joiningNight
-              ? "Enter the club invite code, not this night's join code. We'll email a login link, and after you sign in you'll join this game night."
-              : "Enter the club invite code, not a game night code. We'll email a login link."}
-          </p>
         </div>
       )}
       {error && (

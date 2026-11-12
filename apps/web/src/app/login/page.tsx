@@ -2,9 +2,9 @@
 
 import { Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
 import { EmailLoginForm } from "@/components/EmailLoginForm";
+import { InstagramFollowLink } from "@/components/InstagramFollowLink";
 import { CLUB_CONTACT_EMAIL } from "@/lib/clubContact";
 import { MAGIC_LINK_SEND_ERROR } from "@/lib/magicLinkUi";
 
@@ -44,61 +44,34 @@ function LoginForm() {
         </div>
         <h1 className="text-3xl font-bold text-center mb-2">Poker Night</h1>
         <p className="text-slate-400 text-center mb-6 text-sm text-balance">
-          Texas Hold&apos;em game nights with friends. Open signup isn&apos;t
-          available yet — use the path that fits you.
+          Texas Hold&apos;em with friends. Friends-only — we email a login
+          link. No password.
         </p>
 
         {error && (
           <p className="text-red-400 text-sm text-center mb-4">{error}</p>
         )}
 
-        <ol className="space-y-6">
-          <li>
-            <h2 className="text-sm font-semibold text-slate-100">
-              1. Already signed up
-            </h2>
-            <p className="text-slate-400 text-sm mt-1 mb-3 text-balance">
-              Get a magic link for the email on your account. No password.
-            </p>
-            <EmailLoginForm
-              callbackUrl={callbackUrl}
-              initialEmail={initialEmail}
-            />
-          </li>
-          <li>
-            <h2 className="text-sm font-semibold text-slate-100">
-              2. You were invited
-            </h2>
-            <p className="text-slate-400 text-sm mt-1 text-balance">
-              Sign up with a club invite code. That code creates your account.
-              It is separate from a game night code, which only joins you to
-              one night after you already have an account.
-            </p>
-            <p className="mt-2">
-              <Link
-                href="/register"
-                className="text-emerald-400 hover:underline text-sm"
-              >
-                Register with a club invite code
-              </Link>
-            </p>
-          </li>
-          <li>
-            <h2 className="text-sm font-semibold text-slate-100">
-              3. Neither of those
-            </h2>
-            <p className="text-slate-400 text-sm mt-1 text-balance">
-              You can&apos;t access the site yet. Email{" "}
-              <a
-                href={`mailto:${CLUB_CONTACT_EMAIL}`}
-                className="text-emerald-400 hover:underline"
-              >
-                {CLUB_CONTACT_EMAIL}
-              </a>{" "}
-              and we&apos;ll tell you how to get in.
-            </p>
-          </li>
-        </ol>
+        <EmailLoginForm
+          callbackUrl={callbackUrl}
+          initialEmail={initialEmail}
+        />
+
+        <p className="mt-5 text-center text-slate-500 text-xs text-balance">
+          New here? Try your email first — if you don&apos;t have an account
+          yet, we&apos;ll ask for a club invite code. No code? Email{" "}
+          <a
+            href={`mailto:${CLUB_CONTACT_EMAIL}`}
+            className="text-emerald-400/90 hover:text-emerald-300 hover:underline"
+          >
+            {CLUB_CONTACT_EMAIL}
+          </a>
+          .
+        </p>
+
+        <div className="mt-6 pt-4 border-t border-slate-800/80 flex justify-center">
+          <InstagramFollowLink />
+        </div>
       </div>
     </div>
   );
