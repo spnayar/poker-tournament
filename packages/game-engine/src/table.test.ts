@@ -713,6 +713,41 @@ describe("TableEngine", () => {
     }
   });
 
+  it("keeps busted players in public seats as eliminated Out watchers without new cards", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 5000);
+    table.addPlayer(1, "u2", "Bob", null, 200);
+    table.addPlayer(2, "u3", "Carol", null, 5000);
+    table.startHand();
+
+    const snap = table.toSnapshot();
+    const bob = snap.players.find((p) => p.seatId === 1)!;
+    bob.chips = 0;
+    bob.eliminated = true;
+    bob.holeCards = ["2c", "3d"];
+    snap.eliminationOrder = [1];
+    snap.phase = "hand-complete";
+    snap.currentActorSeat = null;
+    snap.board = ["Kc", "Kd", "Kh", "9s", "9c"];
+
+    const restored = TableEngine.fromSnapshot(snap);
+    const reviewing = restored.getPublicState();
+    expect(reviewing.seats).toHaveLength(3);
+    expect(reviewing.seats.find((s) => s.seatId === 1)!.eliminated).toBe(true);
+
+    expect(restored.startHand()).toBe(true);
+    const next = restored.getPublicState();
+    expect(next.seats).toHaveLength(3);
+    const bobNext = next.seats.find((s) => s.seatId === 1)!;
+    expect(bobNext.eliminated).toBe(true);
+    expect(bobNext.chipCount).toBe(0);
+    expect(restored.getHoleCards(1)).toEqual([]);
+    expect(next.currentActorSeat).not.toBe(1);
+    expect(restored.getHoleCards(0)).toHaveLength(2);
+    expect(restored.getHoleCards(2)).toHaveLength(2);
+    expect(next.seats.filter((s) => !s.eliminated)).toHaveLength(2);
+  });
+
   it("facing sole all-in opponent: call or fold only", () => {
     const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 10000);

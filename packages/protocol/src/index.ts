@@ -37,6 +37,8 @@ export const SeatPublicSchema = z.object({
   totalBet: z.number().int().nonnegative(),
   folded: z.boolean(),
   allIn: z.boolean(),
+  /** Busted (0 chips) — stays seated watching; no more cards or actions. */
+  eliminated: z.boolean().optional().default(false),
   /** Host/AFK sit-out: still posts blinds, auto check/fold when facing action. */
   skipped: z.boolean(),
   /** True while the player's live socket is gone (disconnected / dropped). */
@@ -116,10 +118,12 @@ export function formatActorWaitingLabel(opts: {
 /**
  * Host seat menu: Mark Away (sit-out auto check/fold) or Mark Back.
  * Works for host/disconnect/timeout sits — host can return anyone.
+ * Eliminated (busted) seats have no Away control — they stay Out.
  */
 export function hostSeatControl(
-  seat: { skipped: boolean }
-): "away" | "back" {
+  seat: { skipped: boolean; eliminated?: boolean }
+): "away" | "back" | null {
+  if (seat.eliminated) return null;
   return seat.skipped ? "back" : "away";
 }
 

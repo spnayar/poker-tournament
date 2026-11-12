@@ -20,7 +20,7 @@ describe("shouldResumeOnReconnect", () => {
 });
 
 describe("SeatPublic away fields", () => {
-  it("defaults away and skipReason when omitted", () => {
+  it("defaults away, eliminated, and skipReason when omitted", () => {
     const seat = SeatPublicSchema.parse({
       seatId: 0,
       userId: "u1",
@@ -38,6 +38,7 @@ describe("SeatPublic away fields", () => {
       lastAction: null,
     });
     expect(seat.away).toBe(false);
+    expect(seat.eliminated).toBe(false);
     expect(seat.skipReason).toBeNull();
   });
 });
@@ -96,5 +97,10 @@ describe("hostSeatControl", () => {
   it("offers Mark Back for sat-out seats and Mark Away otherwise", () => {
     expect(hostSeatControl({ skipped: true })).toBe("back");
     expect(hostSeatControl({ skipped: false })).toBe("away");
+  });
+
+  it("hides Away controls for eliminated seats", () => {
+    expect(hostSeatControl({ skipped: false, eliminated: true })).toBeNull();
+    expect(hostSeatControl({ skipped: true, eliminated: true })).toBeNull();
   });
 });

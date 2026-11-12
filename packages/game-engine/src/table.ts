@@ -442,7 +442,18 @@ export class TableEngine {
     this.lastAwardedPots = [];
 
     for (const p of this.players.values()) {
-      if (!p.eliminated && p.chips > 0) {
+      if (p.eliminated) {
+        // Stay seated as Out watchers — clear leftover cards from the busting hand.
+        p.holeCards = [];
+        p.folded = false;
+        p.allIn = false;
+        p.betThisRound = 0;
+        p.totalBet = 0;
+        p.hasActed = false;
+        p.lastAction = null;
+        continue;
+      }
+      if (p.chips > 0) {
         p.holeCards = [];
         p.folded = false;
         p.allIn = false;
@@ -1483,35 +1494,29 @@ export class TableEngine {
   }
 
   private buildPublicSeats(): SeatPublic[] {
-    const reviewingHand =
-      this.phase === "hand-complete" || this.phase === "showdown";
     const { dealer: dealerSeat, sb: sbSeat, bb: bbSeat } =
       this.getDisplayBlindRoles();
 
-    return [...this.players.values()]
-      .filter(
-        (p) =>
-          !p.eliminated ||
-          (reviewingHand && p.holeCards.length > 0)
-      )
-      .map((p) => ({
-        seatId: p.seatId,
-        userId: p.userId,
-        displayName: p.displayName,
-        avatarUrl: p.avatarUrl,
-        chipCount: p.chips,
-        betThisRound: p.betThisRound,
-        totalBet: p.totalBet,
-        folded: p.folded,
-        allIn: p.allIn,
-        skipped: p.skipped,
-        isDealer: p.seatId === dealerSeat,
-        isSmallBlind: p.seatId === sbSeat,
-        isBigBlind: p.seatId === bbSeat,
-        lastAction: p.lastAction,
-        away: false,
-        skipReason: p.skipReason,
-      }));
+    // Busted players stay in seats as Out watchers (no deal/blinds/action).
+    return [...this.players.values()].map((p) => ({
+      seatId: p.seatId,
+      userId: p.userId,
+      displayName: p.displayName,
+      avatarUrl: p.avatarUrl,
+      chipCount: p.chips,
+      betThisRound: p.betThisRound,
+      totalBet: p.totalBet,
+      folded: p.folded,
+      allIn: p.allIn,
+      eliminated: p.eliminated,
+      skipped: p.skipped,
+      isDealer: !p.eliminated && p.seatId === dealerSeat,
+      isSmallBlind: !p.eliminated && p.seatId === sbSeat,
+      isBigBlind: !p.eliminated && p.seatId === bbSeat,
+      lastAction: p.lastAction,
+      away: false,
+      skipReason: p.skipReason,
+    }));
   }
 
   private emitState(): void {
