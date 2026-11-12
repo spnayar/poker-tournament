@@ -22,6 +22,9 @@ export type ZoomEmbeddedClient = {
   getAttendeeslist?: () => { userId: number; displayName?: string }[];
   on?: (event: string, cb: (...args: unknown[]) => void) => void;
   off?: (event: string, cb: (...args: unknown[]) => void) => void;
+  /** Component View: speaker | ribbon | gallery | minimized | active */
+  setViewType?: (viewType: string) => Promise<unknown> | unknown;
+  updateVideoOptions?: (videoOptions: Record<string, unknown>) => void;
 };
 
 export type ZoomMtgEmbeddedGlobal = {

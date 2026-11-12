@@ -20,7 +20,11 @@ import { SoundToggle } from "@/components/table/SoundToggle";
 import { DashboardLink } from "@/components/table/DashboardLink";
 import { HostMenu } from "@/components/table/HostMenu";
 import { ChopDialog } from "@/components/table/ChopDialog";
-import { ZoomMirrorStrip } from "@/components/table/ZoomMirrorStrip";
+import {
+  ZoomMirrorProvider,
+  ZoomMirrorToolbar,
+  ZoomMirrorFacesFrame,
+} from "@/components/table/ZoomMirrorStrip";
 import { useSoundPreference } from "@/hooks/useSoundPreference";
 import {
   playHandEndCheer,
@@ -838,6 +842,11 @@ export default function TablePage() {
   const footerPad = showFooter ? Math.max(footerH, 52) + 8 : 0;
 
   return (
+    <ZoomMirrorProvider
+      tournamentId={tournamentId}
+      seats={tableState.seats}
+      onSpeakingUserIds={setSpeakingUserIds}
+    >
     <div
       className="table-play-shell p-2 sm:p-3 flex flex-col min-h-0"
       style={{
@@ -881,11 +890,8 @@ export default function TablePage() {
         )}
         <SoundToggle enabled={soundEnabled} onToggle={toggleSound} />
       </div>
-      <ZoomMirrorStrip
-        tournamentId={tournamentId}
-        seats={tableState.seats}
-        onSpeakingUserIds={setSpeakingUserIds}
-      />
+      {/* Controls only — video lives in the sidebar so the table keeps height. */}
+      <ZoomMirrorToolbar />
       {tableState && !connected && (
         <p className="text-center text-amber-300 text-xs mb-1 shrink-0">
           Connection lost — reconnecting…
@@ -978,15 +984,21 @@ export default function TablePage() {
               </div>
             </div>
 
-            <ActionLogPanel
-              actionLog={actionLog}
-              currentActorSeat={tableState.currentActorSeat}
-              handNumber={tableState.handNumber}
-              visibleBoard={visibleBoard}
-              hideAwards={boardRevealing}
-              zoomJoinUrl={zoomJoinUrl}
-              zoomMeetingNumber={zoomMeetingNumber}
-            />
+            {/* Side column: faces above Action Log on sm+; under it on phone. */}
+            <div className="flex flex-col gap-1.5 w-full lg:w-64 xl:w-72 shrink-0 min-h-0 max-h-full max-sm:flex-none max-sm:max-h-[30%] overflow-hidden">
+              <div className="order-last sm:order-first">
+                <ZoomMirrorFacesFrame />
+              </div>
+              <ActionLogPanel
+                actionLog={actionLog}
+                currentActorSeat={tableState.currentActorSeat}
+                handNumber={tableState.handNumber}
+                visibleBoard={visibleBoard}
+                hideAwards={boardRevealing}
+                zoomJoinUrl={zoomJoinUrl}
+                zoomMeetingNumber={zoomMeetingNumber}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1113,5 +1125,6 @@ export default function TablePage() {
         }}
       />
     </div>
+    </ZoomMirrorProvider>
   );
 }
