@@ -69,6 +69,10 @@ describe("night recap preview writer", () => {
           { displayName: "Alice", count: 28 },
           { displayName: "Bob", count: 19 },
         ],
+        flopsSeen: [
+          { displayName: "Alice", percent: 72, seen: 34, dealt: 47 },
+          { displayName: "Bob", percent: 55, seen: 26, dealt: 47 },
+        ],
         knockouts: [
           { displayName: "Alice", count: 3 },
           { displayName: "Bob", count: 1 },

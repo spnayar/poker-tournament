@@ -69,6 +69,10 @@ function samplePayload(): NightRecapPayload {
         { displayName: "Alice", count: 28 },
         { displayName: "Bob", count: 19 },
       ],
+      flopsSeen: [
+        { displayName: "Alice", percent: 72, seen: 34, dealt: 47 },
+        { displayName: "Bob", percent: 55, seen: 26, dealt: 47 },
+      ],
       knockouts: [
         { displayName: "Alice", count: 3 },
         { displayName: "Bob", count: 1 },
@@ -213,7 +217,7 @@ describe("night recap email", () => {
 });
 
 describe("aggregateNightFunFacts", () => {
-  it("merges hands won / knockouts and picks best hand + largest pot", () => {
+  it("merges hands won / knockouts / flops and picks best hand + largest pot", () => {
     const names = new Map([
       ["alice", "Alice"],
       ["bob", "Bob"],
@@ -225,6 +229,8 @@ describe("aggregateNightFunFacts", () => {
           funStats: {
             handsWonByUserId: { alice: 10, bob: 8 },
             knockoutsByUserId: { alice: 1 },
+            handsDealtByUserId: { alice: 20, bob: 20 },
+            flopsSeenByUserId: { alice: 14, bob: 10 },
             largestPot: {
               amountChips: 5000,
               winnerUserIds: ["bob"],
@@ -243,6 +249,8 @@ describe("aggregateNightFunFacts", () => {
           funStats: {
             handsWonByUserId: { alice: 12, bob: 7 },
             knockoutsByUserId: { alice: 2, bob: 1 },
+            handsDealtByUserId: { alice: 27, bob: 27 },
+            flopsSeenByUserId: { alice: 20, bob: 16 },
             largestPot: {
               amountChips: 12400,
               winnerUserIds: ["alice"],
@@ -268,6 +276,10 @@ describe("aggregateNightFunFacts", () => {
       { displayName: "Alice", count: 3 },
       { displayName: "Bob", count: 1 },
     ]);
+    expect(result.flopsSeen).toEqual([
+      { displayName: "Alice", percent: 72, seen: 34, dealt: 47 },
+      { displayName: "Bob", percent: 55, seen: 26, dealt: 47 },
+    ]);
     expect(result.largestPot?.amountChips).toBe(12400);
     expect(result.largestPot?.winnerNames).toEqual(["Alice"]);
     expect(result.bestHand?.displayName).toBe("Alice");
@@ -281,7 +293,18 @@ describe("aggregateNightFunFacts", () => {
     );
     expect(result.handsWon).toEqual([]);
     expect(result.knockouts).toEqual([]);
+    expect(result.flopsSeen).toEqual([]);
     expect(result.largestPot).toBeNull();
     expect(result.bestHand).toBeNull();
+  });
+});
+
+describe("night recap flops + hands won copy", () => {
+  it("renders flops seen percents", () => {
+    const html = buildNightRecapHtml(samplePayload());
+    expect(html).toContain("Flops seen");
+    expect(html).toContain("72%");
+    const text = buildNightRecapText(samplePayload());
+    expect(text).toContain("Flops seen: Alice 72%, Bob 55%");
   });
 });

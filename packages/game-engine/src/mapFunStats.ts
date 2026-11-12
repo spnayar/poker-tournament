@@ -2,6 +2,18 @@ import type { GameFunStats } from "@poker/protocol";
 import { emptyGameFunStats } from "@poker/protocol";
 import type { TableFunStats } from "./funStats";
 
+function addSeatCounts(
+  target: Record<string, number>,
+  bySeat: Record<number, number>,
+  lookup: (seat: number) => string | undefined
+): void {
+  for (const [seatKey, count] of Object.entries(bySeat)) {
+    const userId = lookup(Number(seatKey));
+    if (!userId || count <= 0) continue;
+    target[userId] = (target[userId] ?? 0) + count;
+  }
+}
+
 /** Map seat-keyed table fun stats to user-keyed persisted GameFunStats. */
 export function mapTableFunStatsToGame(
   stats: TableFunStats,
@@ -14,18 +26,10 @@ export function mapTableFunStatsToGame(
 
   const out = emptyGameFunStats();
 
-  for (const [seatKey, count] of Object.entries(stats.handsWonBySeat)) {
-    const userId = lookup(Number(seatKey));
-    if (!userId || count <= 0) continue;
-    out.handsWonByUserId[userId] = (out.handsWonByUserId[userId] ?? 0) + count;
-  }
-
-  for (const [seatKey, count] of Object.entries(stats.knockoutsBySeat)) {
-    const userId = lookup(Number(seatKey));
-    if (!userId || count <= 0) continue;
-    out.knockoutsByUserId[userId] =
-      (out.knockoutsByUserId[userId] ?? 0) + count;
-  }
+  addSeatCounts(out.handsWonByUserId, stats.handsWonBySeat, lookup);
+  addSeatCounts(out.knockoutsByUserId, stats.knockoutsBySeat, lookup);
+  addSeatCounts(out.handsDealtByUserId, stats.handsDealtBySeat, lookup);
+  addSeatCounts(out.flopsSeenByUserId, stats.flopsSeenBySeat, lookup);
 
   if (stats.largestPot) {
     const winnerUserIds = stats.largestPot.winnerSeatIds

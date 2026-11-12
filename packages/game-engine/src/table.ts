@@ -714,6 +714,10 @@ export class TableEngine {
         player.holeCards.push(card);
       }
     }
+    for (const seatId of seatOrder) {
+      this.funStats.handsDealtBySeat[seatId] =
+        (this.funStats.handsDealtBySeat[seatId] ?? 0) + 1;
+    }
     this.pendingEvents.push({
       type: "deal",
       payload: { seatOrder, cardIndex: 1 },
@@ -1108,6 +1112,11 @@ export class TableEngine {
       });
     }
     this.logCommunityCards("flop", dealt);
+    // Still in the hand when flop lands (includes preflop all-ins).
+    for (const seatId of this.getHandSeats()) {
+      this.funStats.flopsSeenBySeat[seatId] =
+        (this.funStats.flopsSeenBySeat[seatId] ?? 0) + 1;
+    }
   }
 
   private dealTurn(): void {
@@ -1424,6 +1433,29 @@ export class TableEngine {
   }
 
   /**
+   * Seats that took the largest chip share this hand (primary winners).
+   * Side-pot secondaries do not count as a "hand won".
+   */
+  private primaryHandWinnerSeats(result: HandResult): number[] {
+    if (result.winners.length === 0) return [];
+    const amountBySeat = new Map<number, number>();
+    for (const w of result.winners) {
+      amountBySeat.set(
+        w.seatId,
+        (amountBySeat.get(w.seatId) ?? 0) + w.amount
+      );
+    }
+    let maxAmount = -1;
+    for (const amount of amountBySeat.values()) {
+      if (amount > maxAmount) maxAmount = amount;
+    }
+    return [...amountBySeat.entries()]
+      .filter(([, amount]) => amount === maxAmount)
+      .map(([seatId]) => seatId)
+      .sort((a, b) => a - b);
+  }
+
+  /**
    * Update fun-fact counters after a hand resolves.
    * Best-hand uses showdown five-card hands only (public at showdown).
    */
@@ -1431,8 +1463,8 @@ export class TableEngine {
     result: HandResult,
     newlyEliminated: number[]
   ): void {
-    const winnerSeats = [...new Set(result.winners.map((w) => w.seatId))];
-    for (const seatId of winnerSeats) {
+    const primarySeats = this.primaryHandWinnerSeats(result);
+    for (const seatId of primarySeats) {
       this.funStats.handsWonBySeat[seatId] =
         (this.funStats.handsWonBySeat[seatId] ?? 0) + 1;
     }
@@ -1444,7 +1476,7 @@ export class TableEngine {
     ) {
       this.funStats.largestPot = {
         amountChips: result.totalAwarded,
-        winnerSeatIds: winnerSeats,
+        winnerSeatIds: primarySeats,
         handNumber,
       };
     }
