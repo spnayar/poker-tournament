@@ -1163,4 +1163,148 @@ describe("TableEngine", () => {
     expect(after.currentActorSeat).not.toBe(actor);
     expect(after.seats.find((s) => s.seatId === actor)!.folded).toBe(true);
   });
+
+  it("fold-created contribution levels do not invent side pots or double Wins", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 2000);
+    table.addPlayer(1, "u2", "Bob", null, 2000);
+    table.addPlayer(2, "u3", "Carol", null, 2000);
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    table.startHand();
+
+    // BTN 0 / SB 1 / BB 2 / UTG 0. Call → SB call → BB check to flop.
+    expect(table.getPublicState().dealerSeat).toBe(0);
+    table.applyAction(0, { type: "call" });
+    table.applyAction(1, { type: "call" });
+    table.applyAction(2, { type: "check" });
+    expect(table.getPublicState().phase).toBe("flop");
+
+    // Carol folds after putting in blinds/calls; Alice & Bob build a pot.
+    expect(table.getPublicState().currentActorSeat).toBe(1);
+    table.applyAction(1, { type: "check" });
+    table.applyAction(2, { type: "fold" });
+    table.applyAction(0, { type: "bet", amount: 100 });
+    table.applyAction(1, { type: "call" });
+
+    // No all-in: live table must show a single pot layer.
+    const mid = table.getPublicState();
+    expect(mid.pots).toHaveLength(1);
+    expect(mid.uncalledAmount ?? 0).toBe(0);
+
+    // Check down to showdown.
+    while (table.getPublicState().phase !== "hand-complete") {
+      const st = table.getPublicState();
+      if (st.currentActorSeat === null) break;
+      const legal = table.getLegalActions(st.currentActorSeat)!;
+      if (legal.canCheck) {
+        table.applyAction(st.currentActorSeat, { type: "check" });
+      } else if (legal.canCall) {
+        table.applyAction(st.currentActorSeat, { type: "call" });
+      } else {
+        break;
+      }
+    }
+
+    const done = table.getPublicState();
+    expect(done.phase).toBe("hand-complete");
+    expect(done.pots).toHaveLength(1);
+    const winLines = done.actionLog.filter(
+      (e) => e.handNumber === done.handNumber && e.action.startsWith("Wins ")
+    );
+    expect(winLines).toHaveLength(1);
+  });
+
+  it("showdown returns uncalled shove excess without a Side/Wins line", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Short", null, 300);
+    table.addPlayer(1, "u2", "Mid", null, 500);
+    table.addPlayer(2, "u3", "Big", null, 5000);
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    table.startHand();
+
+    // BTN 0 / SB 1 / BB 2. Short all-in, Mid all-in, Big calls (leaves uncalled).
+    expect(table.getPublicState().currentActorSeat).toBe(0);
+    table.applyAction(0, { type: "all-in" });
+    table.applyAction(1, { type: "all-in" });
+    table.applyAction(2, { type: "all-in" });
+
+    const done = table.getPublicState();
+    expect(done.phase).toBe("hand-complete");
+    // Contested layers only — unmatched Big chips are not a Side pot.
+    expect(done.pots.every((p) => (p.contributorCount ?? 2) >= 2)).toBe(true);
+    expect(done.pots.some((p) => (p.contributorCount ?? 2) === 1)).toBe(false);
+
+    const events = table.drainEvents();
+    const handResult = events.find((e) => e.type === "handResult");
+    expect(handResult).toBeDefined();
+    const result = handResult!.payload as import("@poker/protocol").HandResult;
+    // One aggregated Wins row per seat that actually won contested pots.
+    const winsBySeat = new Map<number, number>();
+    for (const w of result.winners) {
+      winsBySeat.set(w.seatId, (winsBySeat.get(w.seatId) ?? 0) + 1);
+    }
+    for (const count of winsBySeat.values()) {
+      expect(count).toBe(1);
+    }
+
+    const winLines = done.actionLog.filter(
+      (e) => e.handNumber === done.handNumber && e.action.startsWith("Wins ")
+    );
+    const seatsLogged = winLines.map((e) => e.seatId);
+    expect(new Set(seatsLogged).size).toBe(seatsLogged.length);
+  });
+
+  it("coalesces multi-pot Wins for one player while keeping real side pots", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Short", null, 200);
+    table.addPlayer(1, "u2", "DeepA", null, 2000);
+    table.addPlayer(2, "u3", "DeepB", null, 2000);
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    table.startHand();
+
+    const snap = table.toSnapshot();
+    const short = snap.players.find((p) => p.seatId === 0)!;
+    const deepA = snap.players.find((p) => p.seatId === 1)!;
+    const deepB = snap.players.find((p) => p.seatId === 2)!;
+    short.holeCards = ["2c", "3d"];
+    deepA.holeCards = ["Ad", "Ah"];
+    deepB.holeCards = ["Kd", "Kh"];
+    // Burn/deal order for runout after preflop all-in.
+    snap.deck = ["As", "Kc", "7h", "8d", "9s", "2h", "3h", "4h", "5c", "6c"];
+    const rigged = TableEngine.fromSnapshot(snap);
+
+    expect(rigged.getPublicState().currentActorSeat).toBe(0);
+    rigged.applyAction(0, { type: "all-in" });
+    rigged.applyAction(1, { type: "all-in" });
+    rigged.applyAction(2, { type: "call" });
+
+    const done = rigged.getPublicState();
+    expect(done.phase).toBe("hand-complete");
+    // Short all-in + continuing deep stacks → real Main + Side.
+    expect(done.pots.length).toBeGreaterThanOrEqual(2);
+
+    const events = rigged.drainEvents();
+    const handResult = events.find((e) => e.type === "handResult");
+    const result = handResult!.payload as import("@poker/protocol").HandResult;
+    expect(new Set(result.winners.map((w) => w.seatId)).size).toBe(
+      result.winners.length
+    );
+
+    const winLines = done.actionLog.filter(
+      (e) => e.handNumber === done.handNumber && e.action.startsWith("Wins ")
+    );
+    expect(winLines).toHaveLength(result.winners.length);
+    // DeepA (aces) should take every contested pot in one coalesced Wins line.
+    const deepAWins = winLines.filter((e) => e.seatId === 1);
+    expect(deepAWins).toHaveLength(1);
+  });
 });
