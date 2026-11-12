@@ -29,9 +29,10 @@ describe("getAvatarUrl", () => {
     );
   });
 
-  it("falls back to a seeded DiceBear portrait when none is saved", () => {
-    expect(getAvatarUrl("be97plus")).toBe(
-      "https://api.dicebear.com/7.x/avataaars/svg?seed=be97plus"
-    );
+  it("falls back to a stable local library portrait when none is saved", () => {
+    const url = getAvatarUrl("be97plus");
+    expect(url.startsWith("/avatars/")).toBe(true);
+    expect(getAvatarUrl("be97plus")).toBe(url);
+    expect(getAvatarUrl("Sanjay")).not.toMatch(/api\.dicebear\.com/);
   });
 });

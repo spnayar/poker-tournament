@@ -153,3 +153,25 @@ export function findAvatarByUrl(url: string | null | undefined): AvatarOption | 
   if (!resolved) return undefined;
   return AVATAR_LIBRARY.find((avatar) => avatar.url === resolved);
 }
+
+/** Stable 32-bit hash so every client picks the same fallback tile for a seed. */
+function hashSeed(seed: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * When a seat has no saved avatarUrl, pick a deterministic library asset from
+ * the display-name seed. Avoids remote DiceBear faces that disagree with a
+ * player's chosen profile avatar and can diverge across clients/networks.
+ */
+export function fallbackAvatarUrl(seed: string): string {
+  const list = AVATAR_LIBRARY;
+  if (list.length === 0) return localPath("man-jack");
+  const index = hashSeed(seed || "player") % list.length;
+  return list[index]!.url;
+}

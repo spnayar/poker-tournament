@@ -161,6 +161,37 @@ export class TableEngine {
     });
   }
 
+  /**
+   * Refresh display name / avatar from the user profile without touching chips
+   * or hole cards. Used so live seats stay in sync with profile picks.
+   * Returns true when any seated player changed.
+   */
+  syncPlayerIdentities(
+    identities: Iterable<{
+      userId: string;
+      displayName: string;
+      avatarUrl: string | null;
+    }>
+  ): boolean {
+    const byUser = new Map(
+      [...identities].map((row) => [row.userId, row] as const)
+    );
+    let changed = false;
+    for (const player of this.players.values()) {
+      const next = byUser.get(player.userId);
+      if (!next) continue;
+      if (player.displayName !== next.displayName) {
+        player.displayName = next.displayName;
+        changed = true;
+      }
+      if (player.avatarUrl !== next.avatarUrl) {
+        player.avatarUrl = next.avatarUrl;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   /** First unused seat id in `[0, maxPlayers)`, or null if full. */
   findOpenSeat(maxPlayers: number): number | null {
     const max = Math.max(0, Math.floor(maxPlayers));

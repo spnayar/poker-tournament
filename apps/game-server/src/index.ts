@@ -434,9 +434,38 @@ async function createRoomFromDb(tournamentId: string): Promise<TournamentRoom | 
   return room;
 }
 
+/**
+ * Re-apply User.displayName / User.avatarUrl onto live seats so every client
+ * renders the same chosen avatar (snapshots can freeze a stale or null URL).
+ */
+async function syncSeatIdentitiesFromDb(
+  tournamentId: string,
+  room: TournamentRoom
+): Promise<boolean> {
+  const players = await prisma.tournamentPlayer.findMany({
+    where: { tournamentId },
+    include: {
+      user: { select: { displayName: true, avatarUrl: true } },
+    },
+  });
+  return room.table.syncPlayerIdentities(
+    players.map((p) => ({
+      userId: p.userId,
+      displayName: p.user.displayName,
+      avatarUrl: p.user.avatarUrl,
+    }))
+  );
+}
+
 async function loadOrCreateRoom(tournamentId: string): Promise<TournamentRoom | null> {
   const existing = rooms.get(tournamentId);
-  if (existing) return existing;
+  if (existing) {
+    const changed = await syncSeatIdentitiesFromDb(tournamentId, existing);
+    if (changed) {
+      await persistRoom(tournamentId, existing);
+    }
+    return existing;
+  }
 
   const runningGame = await getRunningGame(tournamentId);
   if (!runningGame) return null;
@@ -465,6 +494,10 @@ async function loadOrCreateRoom(tournamentId: string): Promise<TournamentRoom | 
         : undefined;
       const room = buildRoom(table, tournament, runningGame, timerSnapshot);
       rooms.set(tournamentId, room);
+      const changed = await syncSeatIdentitiesFromDb(tournamentId, room);
+      if (changed) {
+        await persistRoom(tournamentId, room);
+      }
       return room;
     } catch (err) {
       console.error("Failed to restore game snapshot:", err);
@@ -672,6 +705,8 @@ async function openTable(tournamentId: string): Promise<boolean> {
   }
   if (!room) return false;
 
+  // Lobby profile picks after createRoomFromDb must land in public seats.
+  await syncSeatIdentitiesFromDb(tournamentId, room);
   await persistRoom(tournamentId, room);
   broadcastGameStarted(tournamentId, room);
   broadcastBlindTimer(tournamentId, room);
@@ -683,6 +718,7 @@ async function openTable(tournamentId: string): Promise<boolean> {
 async function readySeating(tournamentId: string): Promise<boolean> {
   const room = await loadOrCreateRoom(tournamentId);
   if (!room) return false;
+  await syncSeatIdentitiesFromDb(tournamentId, room);
   const ok = room.table.prepareTournamentStart();
   if (!ok) return false;
   room.seatByUserId = buildSeatMap(room.table);
