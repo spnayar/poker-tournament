@@ -125,13 +125,16 @@ export function getSeatPositionForViewer(
   }
 
   // Re-index the other seats across the top arc (exclude bottom).
+  // Engine turn order advances ascending seatId as clockwise on the ring.
+  // From the hero at 6 o'clock, clockwise is left → top → right, so the seat
+  // immediately after the viewer (ascending) must sit on the viewer's left.
   const others = total - 1;
   const orderAmongOthers =
     (sortedSeatIndex - viewerSortedSeatIndex - 1 + total) % total;
-  // Sweep from ~200° to ~-20° (left-bottomish through top to right-bottomish),
-  // never occupying exact 6 o'clock.
-  const start = (-Math.PI / 2) + (Math.PI * 0.28);
-  const end = (-Math.PI / 2) + (Math.PI * 1.72);
+  // Sweep left-bottomish through top to right-bottomish (never exact 6 o'clock).
+  // Angles increase through the top (≈1.5π); the short arc would go through bottom.
+  const start = -Math.PI / 2 + Math.PI * 1.72;
+  const end = -Math.PI / 2 + Math.PI * 2.28;
   const t = others <= 1 ? 0.5 : orderAmongOthers / (others - 1);
   const angle = start + (end - start) * t;
   const { rx, ry } = ellipseRadii(total, compact);
