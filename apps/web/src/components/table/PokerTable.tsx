@@ -96,16 +96,23 @@ export function PlayerSeat({
     };
   }, [menuOpen]);
 
+  const isOut = seat.eliminated === true;
   const holeCards = myCards ?? [];
-  const cardsToShow =
-    isMe && holeCards.length > 0
+  // Busted seats watch with no cards — never show face-down backs.
+  const cardsToShow = isOut
+    ? []
+    : isMe && holeCards.length > 0
       ? holeCards
       : showCards && holeCards.length > 0
         ? holeCards
         : [undefined, undefined];
 
-  // Host sit-out and disconnect both surface as Away; sticky host sits stay Away.
-  const statusBadge = seat.skipped || seat.away ? "away" : null;
+  // Out beats Away. Host sit-out and disconnect both surface as Away.
+  const statusBadge = isOut
+    ? "out"
+    : seat.skipped || seat.away
+      ? "away"
+      : null;
 
   const actionTone = seat.lastAction ? lastActionTone(seat.lastAction) : null;
   const hostControl = isHost && !isMe ? hostSeatControl(seat) : null;
@@ -140,23 +147,24 @@ export function PlayerSeat({
       ? `scale-[0.62] ${cardsBelowPod ? "origin-top" : "origin-bottom"}`
       : `scale-[0.78] ${cardsBelowPod ? "origin-top" : "origin-bottom"}`;
 
-  const holeCardRow = (
-    <div
-      className={`flex gap-0.5 sm:gap-1 relative z-20 ${cardScale} ${
-        cardsBelowPod ? "mt-[-0.35rem]" : "mb-[-0.35rem]"
-      } ${isMe ? "mb-[-0.15rem]" : ""}`}
-    >
-      {cardsToShow.map((card, i) => (
-        <PlayingCard
-          key={i}
-          card={card}
-          faceDown={!card || (!isMe && !showCards)}
-          delay={i * HOLE_CARD_DELAY_SEC}
-          animateDeal={animateDeal}
-        />
-      ))}
-    </div>
-  );
+  const holeCardRow =
+    cardsToShow.length === 0 ? null : (
+      <div
+        className={`flex gap-0.5 sm:gap-1 relative z-20 ${cardScale} ${
+          cardsBelowPod ? "mt-[-0.35rem]" : "mb-[-0.35rem]"
+        } ${isMe ? "mb-[-0.15rem]" : ""}`}
+      >
+        {cardsToShow.map((card, i) => (
+          <PlayingCard
+            key={i}
+            card={card}
+            faceDown={!card || (!isMe && !showCards)}
+            delay={i * HOLE_CARD_DELAY_SEC}
+            animateDeal={animateDeal}
+          />
+        ))}
+      </div>
+    );
 
   const seatPod = (
       <div
@@ -191,7 +199,11 @@ export function PlayerSeat({
                     : "border-slate-500"
             }`}
           />
-          {statusBadge ? (
+          {statusBadge === "out" ? (
+            <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1 py-px rounded text-[8px] font-bold text-slate-950 whitespace-nowrap bg-slate-300">
+              Out
+            </span>
+          ) : statusBadge === "away" ? (
             <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1 py-px rounded text-[8px] font-bold text-white whitespace-nowrap bg-slate-600">
               Away
             </span>
@@ -230,14 +242,20 @@ export function PlayerSeat({
               {seat.displayName}
             </p>
           )}
-          <p className="text-[11px] sm:text-xs text-amber-400 font-mono tabular-nums font-semibold">
-            {seat.chipCount.toLocaleString()}
-            {seat.allIn ? (
-              <span className="text-amber-300/90 font-sans text-[9px] ml-0.5">
-                all-in
-              </span>
-            ) : null}
-          </p>
+          {isOut ? (
+            <p className="text-[11px] sm:text-xs text-slate-400 font-semibold">
+              Out
+            </p>
+          ) : (
+            <p className="text-[11px] sm:text-xs text-amber-400 font-mono tabular-nums font-semibold">
+              {seat.chipCount.toLocaleString()}
+              {seat.allIn ? (
+                <span className="text-amber-300/90 font-sans text-[9px] ml-0.5">
+                  all-in
+                </span>
+              ) : null}
+            </p>
+          )}
           {menuOpen && hostControl && menuPos
             ? createPortal(
                 <div
@@ -292,7 +310,9 @@ export function PlayerSeat({
         top: `${position.y}%`,
         transform: seatAnchorTransformForViewer(visualIndex, seatCount, isMe),
       }}
-      animate={{ opacity: seat.folded ? 0.38 : statusBadge ? 0.55 : 1 }}
+      animate={{
+        opacity: isOut ? 0.5 : seat.folded ? 0.38 : statusBadge ? 0.55 : 1,
+      }}
     >
       {seat.lastAction && actionTone && cardsBelowPod ? (
         <motion.p

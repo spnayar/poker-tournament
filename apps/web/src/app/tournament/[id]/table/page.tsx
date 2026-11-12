@@ -282,7 +282,11 @@ export default function TablePage() {
         setDealNextPending(false);
         cheeredHandRef.current = null;
         const activePlayers = state.seats.filter(
-          (s) => s.userId && !s.folded && (s.chipCount > 0 || s.allIn)
+          (s) =>
+            s.userId &&
+            !s.eliminated &&
+            !s.folded &&
+            (s.chipCount > 0 || s.allIn)
         ).length;
         playNewHandSounds(Math.max(activePlayers, 2));
       } else if (handAdvanced && joinedMidHand) {

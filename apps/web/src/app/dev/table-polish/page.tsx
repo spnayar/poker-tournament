@@ -35,6 +35,7 @@ function mockSeats(count: number): SeatPublic[] {
       totalBet: i === 2 ? 150 : i === 0 ? 50 : 0,
       folded: i === 5,
       allIn: false,
+      eliminated: false,
       away: false,
       skipped: false,
       skipReason: null,
