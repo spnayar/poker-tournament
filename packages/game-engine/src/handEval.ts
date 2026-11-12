@@ -50,6 +50,14 @@ export function evaluateHand(
   return { seatId, hand, cards };
 }
 
+/**
+ * Pokersolver flush/straight-flush labels include a suit (`Flush, Ah High`).
+ * Show rank only for UI copy (`Flush, A High`).
+ */
+export function formatHandDescr(descr: string): string {
+  return descr.replace(/\b(10|[AKQJT2-9])[cdhs]\s+High\b/gi, "$1 High");
+}
+
 export function findPotWinners(
   eligible: EvaluatedHand[]
 ): { winners: EvaluatedHand[]; handName: string } {
@@ -57,7 +65,7 @@ export function findPotWinners(
   if (eligible.length === 1) {
     return {
       winners: eligible,
-      handName: eligible[0]!.hand.descr,
+      handName: formatHandDescr(eligible[0]!.hand.descr),
     };
   }
   const hands = eligible.map((e) => e.hand);
@@ -65,7 +73,7 @@ export function findPotWinners(
   const winners = eligible.filter((e) => winningHands.includes(e.hand));
   return {
     winners,
-    handName: winners[0]?.hand.descr ?? "",
+    handName: formatHandDescr(winners[0]?.hand.descr ?? ""),
   };
 }
 
