@@ -475,6 +475,53 @@ describe("TableEngine", () => {
     expect(table.getPublicState().currentActorSeat).toBe(0);
   });
 
+  /**
+   * Live-night regression (Sanjay flop evidence):
+   * Sanjay bet → siv raise → lcot fold must go to srcoyne before Sanjay
+   * re-acts. Pre-#42 seatAfter after fold jumped to the lowest live seat
+   * (Sanjay), so the original bettor acted twice before the player between
+   * the folder and the bettor.
+   */
+  it("after flop bet-raise-fold, next seat is clockwise of folder not the bettor", () => {
+    const table = new TableEngine(testTableConfig());
+    // Seats ascending clockwise: Sanjay → siv → lcot → srcoyne → Sanjay
+    table.addPlayer(0, "sanjay", "Sanjay", null, 2000);
+    table.addPlayer(1, "siv", "sivnayar123", null, 2000);
+    table.addPlayer(2, "lcot", "lcot", null, 2000);
+    table.addPlayer(3, "srcoyne", "srcoyne", null, 2000);
+
+    // BTN = srcoyne (3) so flop first-to-act is Sanjay (0).
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    expect(table.getPublicState().dealerSeat).toBe(3);
+    table.startHand();
+    expect(table.getPublicState().dealerSeat).toBe(3);
+
+    // Limp to flop.
+    while (table.getPublicState().phase === "preflop") {
+      const actor = table.getPublicState().currentActorSeat!;
+      const legal = table.getLegalActions(actor)!;
+      if (legal.canCheck) table.applyAction(actor, { type: "check" });
+      else table.applyAction(actor, { type: "call" });
+    }
+    expect(table.getPublicState().phase).toBe("flop");
+    expect(table.getPublicState().currentActorSeat).toBe(0);
+
+    table.applyAction(0, { type: "bet", amount: 150 });
+    expect(table.getPublicState().currentActorSeat).toBe(1);
+    table.applyAction(1, { type: "raise", amount: 300 });
+    expect(table.getPublicState().currentActorSeat).toBe(2);
+    table.applyAction(2, { type: "fold" });
+
+    // Must be srcoyne (3), not Sanjay (0) — the #42 failure mode.
+    expect(table.getPublicState().currentActorSeat).toBe(3);
+    table.applyAction(3, { type: "call" });
+    expect(table.getPublicState().currentActorSeat).toBe(0);
+    table.applyAction(0, { type: "call" });
+    expect(table.getPublicState().phase).toBe("turn");
+  });
+
   it("next-to-act walks sparse seats clockwise (gaps in seat ids)", () => {
     const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
