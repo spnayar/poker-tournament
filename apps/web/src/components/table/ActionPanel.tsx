@@ -192,7 +192,7 @@ export function ActionPanel({
 
   const allInTitle =
     actionSecondsLeft !== null
-      ? `Timer still running — ${actionSecondsLeft}s left. If it hits zero you fold and sit out.`
+      ? `Timer still running — ${actionSecondsLeft}s left. If it hits zero you check or fold for this hand only.`
       : undefined;
 
   const middleLabel = legal.canCheck

@@ -22,6 +22,7 @@ import {
   PlayerActionSchema,
   SeatIdPayloadSchema,
   resolveBlindLevels,
+  resolveActionTimerSeconds,
   shouldResumeOnReconnect,
   applySocketAwayFlags,
   ChopTournamentSchema,
@@ -59,7 +60,6 @@ const JWT_SECRET = resolveJwtSecret({
 });
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const SNAPSHOT_TTL_SEC = 60 * 60 * 24 * 7;
-const ACTION_TIMEOUT_MS = 60_000;
 /** Brief reconnect window so socket.io blips don't immediately fold a seat. */
 const DISCONNECT_GRACE_MS = 8_000;
 /** Current actor drop: fold quickly so the hand does not stall on Waiting. */
@@ -120,8 +120,14 @@ interface TournamentRoom {
   hostUserId: string;
   blindLevels: BlindLevel[];
   blindTimer: BlindTimer;
+  /** Active session length; 0 = off. Host can disable without changing DB. */
+  actionTimerSeconds: number;
+  /** Original night setting — used when host resets after turning the timer off. */
+  actionTimerConfiguredSeconds: number;
   actionTimer: ReturnType<typeof setTimeout> | null;
   actionDeadlineAt: number | null;
+  actionTimerPaused: boolean;
+  actionTimerPausedRemainingMs: number | null;
   actionTimerGeneration: number;
   disconnectTimers: Map<string, ReturnType<typeof setTimeout>>;
   syncSeq: number;
@@ -168,6 +174,7 @@ type TournamentSettings = {
   blindPace: string;
   blindPreset: string;
   blindLevelMinutes: number;
+  actionTimerSeconds?: number | null;
 };
 
 function getBlindLevelsForTournament(tournament: TournamentSettings): BlindLevel[] {
@@ -231,6 +238,8 @@ function clearActionTimer(room: TournamentRoom): void {
     room.actionTimer = null;
   }
   room.actionDeadlineAt = null;
+  room.actionTimerPaused = false;
+  room.actionTimerPausedRemainingMs = null;
   room.actionTimerGeneration += 1;
 }
 
@@ -249,6 +258,9 @@ function publicTableState(room: TournamentRoom): TableState {
   return {
     ...state,
     actionDeadlineAt: room.actionDeadlineAt,
+    actionTimerSeconds: room.actionTimerSeconds,
+    actionTimerPaused: room.actionTimerPaused,
+    actionTimerPausedRemainingMs: room.actionTimerPausedRemainingMs,
     syncSeq: room.syncSeq,
     seats: applySocketAwayFlags(
       state.seats,
@@ -258,8 +270,16 @@ function publicTableState(room: TournamentRoom): TableState {
   };
 }
 
-function armActionTimer(tournamentId: string, room: TournamentRoom): void {
+function armActionTimer(
+  tournamentId: string,
+  room: TournamentRoom,
+  durationMs?: number
+): void {
   clearActionTimer(room);
+
+  if (room.actionTimerSeconds <= 0) {
+    return;
+  }
 
   let state = room.table.getPublicState();
   if (!isBettingPhase(state.phase) || state.currentActorSeat === null) {
@@ -282,9 +302,11 @@ function armActionTimer(tournamentId: string, room: TournamentRoom): void {
   const legal = room.table.getLegalActions(actorSeat);
   if (!legal) return;
 
+  const timeoutMs =
+    durationMs ?? Math.max(1_000, room.actionTimerSeconds * 1000);
   const handNumber = state.handNumber;
   const generation = room.actionTimerGeneration;
-  room.actionDeadlineAt = Date.now() + ACTION_TIMEOUT_MS;
+  room.actionDeadlineAt = Date.now() + timeoutMs;
   room.actionTimer = setTimeout(() => {
     void (async () => {
       if (room.actionTimerGeneration !== generation) return;
@@ -301,10 +323,11 @@ function armActionTimer(tournamentId: string, room: TournamentRoom): void {
       }
       if (room.table.isSkipped(actorSeat)) return;
 
-      room.table.setSkipped(actorSeat, true, "timeout");
+      // Timeout = check/fold for this hand only — not a sit-out.
+      if (!room.table.applyActionTimeout(actorSeat)) return;
       await afterAction(tournamentId, room);
     })();
-  }, ACTION_TIMEOUT_MS);
+  }, timeoutMs);
 }
 
 function buildSeatMap(table: TableEngine): Map<string, number> {
@@ -323,6 +346,9 @@ function buildRoom(
 ): TournamentRoom {
   const blindLevels = getBlindLevelsForTournament(tournament);
   const levelDurationMs = tournament.blindLevelMinutes * 60 * 1000;
+  const actionTimerSeconds = resolveActionTimerSeconds(
+    tournament.actionTimerSeconds
+  );
   return {
     table,
     playerSockets: new Map(),
@@ -335,8 +361,12 @@ function buildRoom(
     hostUserId: tournament.hostUserId,
     blindLevels,
     blindTimer: new BlindTimer(blindLevels, levelDurationMs, blindTimerSnapshot),
+    actionTimerSeconds,
+    actionTimerConfiguredSeconds: actionTimerSeconds,
     actionTimer: null,
     actionDeadlineAt: null,
+    actionTimerPaused: false,
+    actionTimerPausedRemainingMs: null,
     actionTimerGeneration: 0,
     disconnectTimers: new Map(),
     syncSeq: 0,
@@ -1318,14 +1348,16 @@ io.on("connection", (socket) => {
 
     if (room.hostUserId !== user.userId) {
       socket.emit(ServerEvents.ERROR, {
-        message: "Only the host can skip a player",
+        message: "Only the host can mark a player away",
       });
       return;
     }
 
     const { seatId } = parsed.data;
     if (!room.table.setSkipped(seatId, true, "host")) {
-      socket.emit(ServerEvents.ERROR, { message: "Could not skip that player" });
+      socket.emit(ServerEvents.ERROR, {
+        message: "Could not mark that player away",
+      });
       return;
     }
 
@@ -1347,17 +1379,17 @@ io.on("connection", (socket) => {
     const isHost = room.hostUserId === user.userId;
     const isSelf = mySeatId === seatId;
 
-    // Host can unsit anyone; a sat-out player can sit themselves back in.
+    // Host can mark anyone back; a sat-out player can return themselves.
     if (!isHost && !isSelf) {
       socket.emit(ServerEvents.ERROR, {
-        message: "Only the host can unskip another player",
+        message: "Only the host can mark another player back",
       });
       return;
     }
 
     if (!room.table.setSkipped(seatId, false)) {
       socket.emit(ServerEvents.ERROR, {
-        message: "Could not unskip that player",
+        message: "Could not mark that player back",
       });
       return;
     }
@@ -1466,6 +1498,119 @@ io.on("connection", (socket) => {
     room.blindTimer.resume();
     await persistRoom(tournamentId, room);
     broadcastBlindTimer(tournamentId, room);
+  });
+
+  socket.on(ClientEvents.PAUSE_ACTION_TIMER, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the host can pause the action timer",
+      });
+      return;
+    }
+
+    if (room.actionTimerSeconds <= 0 || room.actionTimerPaused) return;
+    if (room.actionDeadlineAt === null) return;
+
+    const remaining = Math.max(0, room.actionDeadlineAt - Date.now());
+    if (room.actionTimer) {
+      clearTimeout(room.actionTimer);
+      room.actionTimer = null;
+    }
+    room.actionTimerGeneration += 1;
+    room.actionDeadlineAt = null;
+    room.actionTimerPaused = true;
+    room.actionTimerPausedRemainingMs = remaining;
+    io.to(`tournament:${tournamentId}`).emit(
+      ServerEvents.TABLE_STATE,
+      publicTableState(room)
+    );
+  });
+
+  socket.on(ClientEvents.RESUME_ACTION_TIMER, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the host can resume the action timer",
+      });
+      return;
+    }
+
+    if (!room.actionTimerPaused) return;
+    const remaining = room.actionTimerPausedRemainingMs ?? 0;
+    room.actionTimerPaused = false;
+    room.actionTimerPausedRemainingMs = null;
+    if (room.actionTimerSeconds <= 0) {
+      io.to(`tournament:${tournamentId}`).emit(
+        ServerEvents.TABLE_STATE,
+        publicTableState(room)
+      );
+      return;
+    }
+    armActionTimer(tournamentId, room, Math.max(1_000, remaining));
+    io.to(`tournament:${tournamentId}`).emit(
+      ServerEvents.TABLE_STATE,
+      publicTableState(room)
+    );
+  });
+
+  socket.on(ClientEvents.RESET_ACTION_TIMER, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the host can reset the action timer",
+      });
+      return;
+    }
+
+    if (room.actionTimerSeconds <= 0) {
+      room.actionTimerSeconds =
+        room.actionTimerConfiguredSeconds > 0
+          ? room.actionTimerConfiguredSeconds
+          : 60;
+    }
+    armActionTimer(tournamentId, room);
+    io.to(`tournament:${tournamentId}`).emit(
+      ServerEvents.TABLE_STATE,
+      publicTableState(room)
+    );
+  });
+
+  socket.on(ClientEvents.DISABLE_ACTION_TIMER, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the host can turn off the action timer",
+      });
+      return;
+    }
+
+    room.actionTimerSeconds = 0;
+    clearActionTimer(room);
+    io.to(`tournament:${tournamentId}`).emit(
+      ServerEvents.TABLE_STATE,
+      publicTableState(room)
+    );
   });
 
   socket.on(ClientEvents.ADVANCE_BLIND_LEVEL, async () => {

@@ -20,6 +20,7 @@ import {
   BlindPaceSchema,
   BLIND_LEVEL_MINUTE_OPTIONS,
   buildBlindLevels,
+  resolveActionTimerSeconds,
 } from "@poker/protocol";
 
 export async function GET() {
@@ -65,6 +66,7 @@ export async function GET() {
           blindPace: true,
           blindPreset: true,
           blindLevelMinutes: true,
+          actionTimerSeconds: true,
           payoutPercents: true,
           zoomJoinUrl: true,
           zoomPasscodePlain: true,
@@ -111,6 +113,7 @@ export async function POST(req: Request) {
     maxPlayers = 9,
     blindPace = "gradual",
     blindLevelMinutes = 12,
+    actionTimerSeconds = 60,
     payoutPercents: rawPayouts,
     zoomJoinUrl,
     zoomPasscodePlain,
@@ -131,6 +134,8 @@ export async function POST(req: Request) {
   const resolvedMinutes = BLIND_LEVEL_MINUTE_OPTIONS.includes(blindLevelMinutes)
     ? blindLevelMinutes
     : 12;
+  const resolvedActionTimerSeconds =
+    resolveActionTimerSeconds(actionTimerSeconds);
   const blindLevels = buildBlindLevels(startingChips, resolvedPace);
 
   if (Array.isArray(rawPayouts)) {
@@ -172,6 +177,7 @@ export async function POST(req: Request) {
         blindPreset: resolvedPace,
         blindPace: resolvedPace,
         blindLevelMinutes: resolvedMinutes,
+        actionTimerSeconds: resolvedActionTimerSeconds,
         blindLevels,
         payoutPercents,
         inviteCode: joinCode,

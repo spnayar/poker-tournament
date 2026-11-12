@@ -7,9 +7,11 @@ import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
 import { BrandLockup } from "@/components/BrandMark";
 import {
+  ACTION_TIMER_SECONDS_OPTIONS,
   BLIND_PACE_LABELS,
   computePayoutsFromPercents,
   defaultPayoutPercents,
+  formatActionTimerLabel,
   resolveBlindLevels,
   type BlindPace,
   type NightLedgerEntry,
@@ -51,6 +53,7 @@ interface Tournament {
   blindPreset: string;
   blindPace?: string;
   blindLevelMinutes?: number;
+  actionTimerSeconds?: number;
   blindLevels?: { level: number; sb: number; bb: number }[];
   hostUserId: string;
   inviteCode: string;
@@ -299,6 +302,48 @@ export default function TournamentLobbyPage() {
             <p className="font-semibold">
               {tournament.blindLevelMinutes ?? 12} min
             </p>
+          </div>
+          <div>
+            <p className="text-slate-400">Action timer</p>
+            {isHost && tournament.status === "LOBBY" ? (
+              <select
+                value={tournament.actionTimerSeconds ?? 60}
+                onChange={async (e) => {
+                  const next = parseInt(e.target.value, 10);
+                  const res = await fetch(`/api/tournaments/${tournament.id}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "updateSettings",
+                      actionTimerSeconds: next,
+                    }),
+                  });
+                  if (res.ok) {
+                    setTournament((t) =>
+                      t ? { ...t, actionTimerSeconds: next } : t
+                    );
+                  } else {
+                    const data = await res.json().catch(() => ({}));
+                    alert(data.error || "Could not update action timer");
+                  }
+                }}
+                className="mt-1 w-full max-w-[12rem] px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-sm font-semibold focus:border-emerald-500 focus:outline-none"
+              >
+                {ACTION_TIMER_SECONDS_OPTIONS.map((secs) => (
+                  <option key={secs} value={secs}>
+                    {secs === 0
+                      ? "Off"
+                      : `${formatActionTimerLabel(secs)} per action`}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="font-semibold">
+                {(tournament.actionTimerSeconds ?? 60) === 0
+                  ? "Off"
+                  : `${formatActionTimerLabel(tournament.actionTimerSeconds ?? 60)} per action`}
+              </p>
+            )}
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-slate-800">

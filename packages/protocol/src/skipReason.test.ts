@@ -93,8 +93,8 @@ describe("formatActorWaitingLabel", () => {
 });
 
 describe("hostSeatControl", () => {
-  it("offers Unskip for disconnect sits, not Skip", () => {
-    expect(hostSeatControl({ skipped: true })).toBe("unskip");
-    expect(hostSeatControl({ skipped: false })).toBe("skip");
+  it("offers Mark Back for sat-out seats and Mark Away otherwise", () => {
+    expect(hostSeatControl({ skipped: true })).toBe("back");
+    expect(hostSeatControl({ skipped: false })).toBe("away");
   });
 });

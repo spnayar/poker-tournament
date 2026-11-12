@@ -282,6 +282,28 @@ export class TableEngine {
     }
   }
 
+  /**
+   * Action-timer expiry: check if free, otherwise fold. Does NOT sit the
+   * player out — they are dealt back into the next hand normally.
+   */
+  applyActionTimeout(seatId: number): boolean {
+    if (this.currentActorSeat !== seatId) return false;
+    const player = this.players.get(seatId);
+    if (!player || player.folded || player.allIn || player.eliminated) {
+      return false;
+    }
+    if (player.skipped) {
+      this.resolveSkippedActors();
+      return true;
+    }
+    const toCall = this.currentBet - player.betThisRound;
+    return this.applyAction(
+      seatId,
+      toCall === 0 ? { type: "check" } : { type: "fold" },
+      { timeout: true }
+    );
+  }
+
   toSnapshot(): import("./snapshot.js").TableSnapshot {
     return {
       config: { ...this.config },
@@ -696,7 +718,11 @@ export class TableEngine {
   applyAction(
     seatId: number,
     action: PlayerAction,
-    options?: { sitOut?: boolean; skipReason?: SkipReason | null }
+    options?: {
+      sitOut?: boolean;
+      skipReason?: SkipReason | null;
+      timeout?: boolean;
+    }
   ): boolean {
     if (this.currentActorSeat !== seatId) return false;
     const player = this.players.get(seatId);
@@ -704,20 +730,22 @@ export class TableEngine {
     if (player.skipped && !options?.sitOut) return false;
 
     const handSeats = this.getHandSeats();
-    const sitOutLabel = options?.sitOut
-      ? options.skipReason === "disconnect"
-        ? " (away)"
-        : " (sit-out)"
-      : "";
+    const autoLabel = options?.timeout
+      ? " (timeout)"
+      : options?.sitOut
+        ? options.skipReason === "disconnect"
+          ? " (away)"
+          : " (sit-out)"
+        : "";
 
     switch (action.type) {
       case "fold":
         player.folded = true;
-        this.logAction(seatId, `Fold${sitOutLabel}`);
+        this.logAction(seatId, `Fold${autoLabel}`);
         break;
       case "check":
         if (this.currentBet - player.betThisRound > 0) return false;
-        this.logAction(seatId, `Check${sitOutLabel}`);
+        this.logAction(seatId, `Check${autoLabel}`);
         break;
       case "call": {
         const toCall = Math.min(

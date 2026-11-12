@@ -112,6 +112,8 @@ model Tournament {
   blindPace      String           @default("gradual")
   blindLevelMinutes Int           @default(12)
   blindLevels    Json             @default("[]")
+  /// Seconds per player action. 0 = timer off. Default 60 for casual nights.
+  actionTimerSeconds Int          @default(60)
   inviteCode     String           @unique @default(cuid())
   createdAt      DateTime         @default(now())
   closedAt       DateTime?
