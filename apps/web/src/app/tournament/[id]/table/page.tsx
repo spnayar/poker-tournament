@@ -11,6 +11,8 @@ import { HandResultOverlay, HandWinnerChipBurst } from "@/components/table/HandR
 import { POST_REVEAL_PAUSE_MS } from "@/components/table/tableAnimation";
 import { GameEndSidebar } from "@/components/table/GameEndSidebar";
 import { BlindTimerBar } from "@/components/table/BlindTimerBar";
+import { ActionTimerControls } from "@/components/table/ActionTimerControls";
+import { ActionTimerNudge } from "@/components/table/ActionTimerNudge";
 import { DealNextHandBar } from "@/components/table/DealNextHandBar";
 import { SoundToggle } from "@/components/table/SoundToggle";
 import { DashboardLink } from "@/components/table/DashboardLink";
@@ -574,6 +576,34 @@ export default function TablePage() {
     setTimeout(() => setTimerActionLoading(false), 300);
   }
 
+  function pauseActionTimer() {
+    if (!socketRef.current || timerActionLoading) return;
+    setTimerActionLoading(true);
+    socketRef.current.emit(ClientEvents.PAUSE_ACTION_TIMER);
+    setTimeout(() => setTimerActionLoading(false), 300);
+  }
+
+  function resumeActionTimer() {
+    if (!socketRef.current || timerActionLoading) return;
+    setTimerActionLoading(true);
+    socketRef.current.emit(ClientEvents.RESUME_ACTION_TIMER);
+    setTimeout(() => setTimerActionLoading(false), 300);
+  }
+
+  function resetActionTimer() {
+    if (!socketRef.current || timerActionLoading) return;
+    setTimerActionLoading(true);
+    socketRef.current.emit(ClientEvents.RESET_ACTION_TIMER);
+    setTimeout(() => setTimerActionLoading(false), 300);
+  }
+
+  function disableActionTimer() {
+    if (!socketRef.current || timerActionLoading) return;
+    setTimerActionLoading(true);
+    socketRef.current.emit(ClientEvents.DISABLE_ACTION_TIMER);
+    setTimeout(() => setTimerActionLoading(false), 300);
+  }
+
   function skipPlayer(seatId: number) {
     socketRef.current?.emit(ClientEvents.SKIP_PLAYER, { seatId });
   }
@@ -797,6 +827,21 @@ export default function TablePage() {
               actionLoading={timerActionLoading}
             />
           )}
+          {isHost && !gameFinished && isBetting && (
+            <ActionTimerControls
+              actionTimerSeconds={tableState.actionTimerSeconds ?? 60}
+              actionTimerPaused={tableState.actionTimerPaused === true}
+              actionDeadlineAt={tableState.actionDeadlineAt ?? null}
+              actionTimerPausedRemainingMs={
+                tableState.actionTimerPausedRemainingMs ?? null
+              }
+              onPause={pauseActionTimer}
+              onResume={resumeActionTimer}
+              onReset={resetActionTimer}
+              onDisable={disableActionTimer}
+              actionLoading={timerActionLoading}
+            />
+          )}
           <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch min-h-0 overflow-visible">
             <div className="flex-[1.4] flex items-center justify-center min-w-0 min-h-0 overflow-visible max-sm:min-h-[46%] max-sm:flex-[1.35]">
               <div className="relative w-full h-full max-w-3xl max-h-full pb-6 sm:pb-8 overflow-visible">
@@ -818,6 +863,10 @@ export default function TablePage() {
                   onVisibleBoardChange={handleVisibleBoardChange}
                   isHost={Boolean(isHost)}
                   actionDeadlineAt={tableState.actionDeadlineAt ?? null}
+                  actionTimerPaused={tableState.actionTimerPaused === true}
+                  actionTimerPausedRemainingMs={
+                    tableState.actionTimerPausedRemainingMs ?? null
+                  }
                   speakingUserIds={speakingUserIds}
                   onSkipPlayer={skipPlayer}
                   onUnskipPlayer={unskipPlayer}
@@ -903,8 +952,8 @@ export default function TablePage() {
             )}
             {iAmSatOut && mySeat ? (
               <div className="flex items-center justify-center gap-3 py-1.5">
-                <p className="text-sm text-orange-300">
-                  You&apos;re sitting out — hands auto check/fold.
+                <p className="text-sm text-slate-300">
+                  You&apos;re away — hands auto check/fold until you return.
                 </p>
                 <button
                   type="button"
@@ -924,7 +973,9 @@ export default function TablePage() {
                 awayBanner={awayBanner}
                 totalPot={tableState.totalPot}
                 actionDeadlineAt={
-                  mySeat && mySeat.seatId === tableState.currentActorSeat
+                  mySeat &&
+                  mySeat.seatId === tableState.currentActorSeat &&
+                  !tableState.actionTimerPaused
                     ? (tableState.actionDeadlineAt ?? null)
                     : null
                 }
@@ -933,6 +984,16 @@ export default function TablePage() {
           </div>
         </div>
       )}
+      {isBetting &&
+      !iAmSatOut &&
+      mySeat &&
+      mySeat.seatId === tableState.currentActorSeat &&
+      !tableState.actionTimerPaused ? (
+        <ActionTimerNudge
+          actionDeadlineAt={tableState.actionDeadlineAt ?? null}
+          soundEnabled={soundEnabled}
+        />
+      ) : null}
       <ChopDialog
         open={chopOpen && !gameFinished}
         tournamentId={tournamentId}

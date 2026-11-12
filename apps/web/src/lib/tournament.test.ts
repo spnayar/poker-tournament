@@ -44,6 +44,7 @@ describe("createGameNightFormDefaults", () => {
   it("opens on three-place 70/20/10 when the host has no prior night", () => {
     const form = createGameNightFormDefaults();
     expect(form.paidPlaces).toBe(3);
+    expect(form.actionTimerSeconds).toBe(60);
     expect([form.payout1, form.payout2, form.payout3]).toEqual([
       "70",
       "20",

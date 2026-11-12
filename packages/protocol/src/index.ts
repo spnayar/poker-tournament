@@ -108,16 +108,19 @@ export function formatActorWaitingLabel(opts: {
     return `${opts.actorName} is away…`;
   }
   if (opts.actorSkipped) {
-    return `Waiting for ${opts.actorName} (sitting out)…`;
+    return `Waiting for ${opts.actorName} (away)…`;
   }
   return `Waiting for ${opts.actorName}…`;
 }
 
-/** Host Skip vs Unskip: Unskip any sat-out seat, including disconnect/timeout. */
+/**
+ * Host seat menu: Mark Away (sit-out auto check/fold) or Mark Back.
+ * Works for host/disconnect/timeout sits — host can return anyone.
+ */
 export function hostSeatControl(
   seat: { skipped: boolean }
-): "skip" | "unskip" {
-  return seat.skipped ? "unskip" : "skip";
+): "away" | "back" {
+  return seat.skipped ? "back" : "away";
 }
 
 export const ActionLogEntrySchema = z.object({
@@ -170,6 +173,12 @@ export const TableStateSchema = z.object({
   actionLog: z.array(ActionLogEntrySchema),
   /** Epoch ms when the current actor's turn times out (server-owned). */
   actionDeadlineAt: z.number().int().nullable().optional(),
+  /** Configured action timer length in seconds; 0 = off for this session. */
+  actionTimerSeconds: z.number().int().nonnegative().optional(),
+  /** Host paused the action timer; countdown frozen. */
+  actionTimerPaused: z.boolean().optional(),
+  /** Remaining ms while paused (null when not paused). */
+  actionTimerPausedRemainingMs: z.number().int().nonnegative().nullable().optional(),
 });
 export type TableState = z.infer<typeof TableStateSchema>;
 
@@ -215,6 +224,10 @@ export const ClientEvents = {
   PAUSE_BLIND_TIMER: "blind:pause",
   RESUME_BLIND_TIMER: "blind:resume",
   ADVANCE_BLIND_LEVEL: "blind:advance",
+  PAUSE_ACTION_TIMER: "action:pause",
+  RESUME_ACTION_TIMER: "action:resume",
+  RESET_ACTION_TIMER: "action:reset",
+  DISABLE_ACTION_TIMER: "action:disable",
   SKIP_PLAYER: "player:skip",
   UNSKIP_PLAYER: "player:unskip",
   CHOP_TOURNAMENT: "tournament:chop",
@@ -622,5 +635,6 @@ export function parseGameFunStats(raw: unknown): GameFunStats {
 
 export * from "./blinds";
 export * from "./chop";
+export * from "./actionTimer";
 // Secrets stay on "@poker/protocol/server". Re-exporting them here puts
 // Node-only code in the Next.js client bundle and fails the production build.

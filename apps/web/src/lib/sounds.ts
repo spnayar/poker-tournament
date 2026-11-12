@@ -93,3 +93,35 @@ export function playNewHandSounds(activePlayerCount: number): void {
 export function playHandEndCheer(): void {
   playTableSound("cheer", { volume: 0.75 });
 }
+
+/** Soft personal beep for the acting player's 15s nudge (local only). */
+export function playActionNudgeSound(): void {
+  if (typeof window === "undefined") return;
+  if (!getSoundEnabled()) return;
+
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 660;
+    gain.gain.value = 0.0001;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+    osc.start(now);
+    osc.stop(now + 0.3);
+    osc.onended = () => {
+      void ctx.close().catch(() => undefined);
+    };
+  } catch {
+    // Audio unavailable — toast still shows.
+  }
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import {
   PlayingCard,
@@ -70,13 +71,19 @@ export function PlayerSeat({
 }: PlayerSeatProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuPortalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
     function onDoc(e: MouseEvent) {
-      if (!menuRef.current?.contains(e.target as Node)) {
-        setMenuOpen(false);
+      const target = e.target as Node;
+      if (
+        menuRef.current?.contains(target) ||
+        menuPortalRef.current?.contains(target)
+      ) {
+        return;
       }
+      setMenuOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setMenuOpen(false);
@@ -97,17 +104,32 @@ export function PlayerSeat({
         ? holeCards
         : [undefined, undefined];
 
-  const statusBadge =
-    seat.skipReason === "host" || seat.skipReason === "timeout"
-      ? "sit-out"
-      : seat.away
-        ? "away"
-        : seat.skipped
-          ? "sit-out"
-          : null;
+  // Host sit-out and disconnect both surface as Away; sticky host sits stay Away.
+  const statusBadge = seat.skipped || seat.away ? "away" : null;
 
   const actionTone = seat.lastAction ? lastActionTone(seat.lastAction) : null;
   const hostControl = isHost && !isMe ? hostSeatControl(seat) : null;
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    left: number;
+    openUp: boolean;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!menuOpen || !hostControl) {
+      setMenuPos(null);
+      return;
+    }
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const openUp = rect.top > window.innerHeight * 0.55;
+    setMenuPos({
+      top: openUp ? rect.top - 4 : rect.bottom + 4,
+      left: Math.min(rect.left, window.innerWidth - 160),
+      openUp,
+    });
+  }, [menuOpen, hostControl]);
 
   // Top-half seats: cards hang below the pod (toward center).
   // Bottom/hero: cards sit above the pod (toward center / above action bar).
@@ -160,24 +182,18 @@ export function PlayerSeat({
             src={getAvatarUrl(seat.displayName, seat.avatarUrl)}
             alt=""
             className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 bg-slate-800 object-cover ${
-              statusBadge === "away"
+              statusBadge
                 ? "border-slate-400 grayscale"
-                : statusBadge === "sit-out"
-                  ? "border-orange-500 grayscale"
-                  : isSpeaking
-                    ? "border-emerald-400"
-                    : isActive
-                      ? "border-amber-300"
-                      : "border-slate-500"
+                : isSpeaking
+                  ? "border-emerald-400"
+                  : isActive
+                    ? "border-amber-300"
+                    : "border-slate-500"
             }`}
           />
           {statusBadge ? (
-            <span
-              className={`absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1 py-px rounded text-[8px] font-bold text-white whitespace-nowrap ${
-                statusBadge === "away" ? "bg-slate-600" : "bg-orange-600"
-              }`}
-            >
-              {statusBadge === "away" ? "Away" : "Sit-out"}
+            <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 z-20 px-1 py-px rounded text-[8px] font-bold text-white whitespace-nowrap bg-slate-600">
+              Away
             </span>
           ) : null}
           {seat.isDealer ? (
@@ -222,25 +238,36 @@ export function PlayerSeat({
               </span>
             ) : null}
           </p>
-          {menuOpen && hostControl ? (
-            <div
-              role="menu"
-              className="absolute left-0 top-full mt-1 z-40 min-w-[7.5rem] rounded-md border border-slate-600 bg-slate-950/95 shadow-xl py-1"
-            >
-              <button
-                type="button"
-                role="menuitem"
-                className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                onClick={() => {
-                  if (hostControl === "unskip") onUnskip?.(seat.seatId);
-                  else onSkip?.(seat.seatId);
-                  setMenuOpen(false);
-                }}
-              >
-                {hostControl === "unskip" ? "Unskip player" : "Skip player"}
-              </button>
-            </div>
-          ) : null}
+          {menuOpen && hostControl && menuPos
+            ? createPortal(
+                <div
+                  ref={menuPortalRef}
+                  role="menu"
+                  className="fixed z-[200] min-w-[9.5rem] rounded-md border border-slate-600 bg-slate-950 py-1 shadow-2xl"
+                  style={{
+                    top: menuPos.openUp ? undefined : menuPos.top,
+                    bottom: menuPos.openUp
+                      ? window.innerHeight - menuPos.top
+                      : undefined,
+                    left: Math.max(8, menuPos.left),
+                  }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-800 whitespace-nowrap"
+                    onClick={() => {
+                      if (hostControl === "back") onUnskip?.(seat.seatId);
+                      else onSkip?.(seat.seatId);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    {hostControl === "back" ? "Mark Back" : "Mark Away"}
+                  </button>
+                </div>,
+                document.body
+              )
+            : null}
         </div>
 
         {isActive && actionSecondsLeft !== null ? (
@@ -331,6 +358,8 @@ interface PokerTableProps {
   onVisibleBoardChange?: (board: (string | undefined)[]) => void;
   isHost?: boolean;
   actionDeadlineAt?: number | null;
+  actionTimerPaused?: boolean;
+  actionTimerPausedRemainingMs?: number | null;
   speakingUserIds?: string[];
   onSkipPlayer?: (seatId: number) => void;
   onUnskipPlayer?: (seatId: number) => void;
@@ -354,6 +383,8 @@ export function PokerTable({
   onVisibleBoardChange,
   isHost = false,
   actionDeadlineAt = null,
+  actionTimerPaused = false,
+  actionTimerPausedRemainingMs = null,
   speakingUserIds = [],
   onSkipPlayer,
   onUnskipPlayer,
@@ -440,16 +471,20 @@ export function PokerTable({
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    if (!actionDeadlineAt) return;
+    if (!actionDeadlineAt || actionTimerPaused) return;
     setNowMs(Date.now());
     const id = setInterval(() => setNowMs(Date.now()), 250);
     return () => clearInterval(id);
-  }, [actionDeadlineAt, currentActorSeat]);
+  }, [actionDeadlineAt, actionTimerPaused, currentActorSeat]);
 
   const actionSecondsLeft =
-    actionDeadlineAt && currentActorSeat !== null
-      ? Math.max(0, Math.ceil((actionDeadlineAt - nowMs) / 1000))
-      : null;
+    currentActorSeat === null
+      ? null
+      : actionTimerPaused && actionTimerPausedRemainingMs != null
+        ? Math.max(0, Math.ceil(actionTimerPausedRemainingMs / 1000))
+        : actionDeadlineAt
+          ? Math.max(0, Math.ceil((actionDeadlineAt - nowMs) / 1000))
+          : null;
 
   return (
     <div className="relative w-full h-full max-h-full mx-auto aspect-[4/3] max-sm:aspect-auto overflow-visible">

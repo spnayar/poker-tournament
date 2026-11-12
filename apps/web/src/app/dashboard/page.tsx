@@ -20,9 +20,11 @@ import {
   resolveZoomCreateAttach,
 } from "@/lib/zoomJoinUrl";
 import {
+  ACTION_TIMER_SECONDS_OPTIONS,
   BLIND_LEVEL_MINUTE_OPTIONS,
   BLIND_PACE_LABELS,
   buildBlindLevels,
+  formatActionTimerLabel,
   type BlindPace,
   type PaidPlaceCount,
 } from "@poker/protocol";
@@ -162,6 +164,7 @@ export default function DashboardPage() {
         maxPlayers: parseInt(form.maxPlayers, 10),
         blindPace: form.blindPace,
         blindLevelMinutes: form.blindLevelMinutes,
+        actionTimerSeconds: form.actionTimerSeconds,
         payoutPercents: parsePayoutPercents(payoutValues) ?? [],
         zoomJoinUrl: form.zoomJoinUrl.trim() || undefined,
         zoomPasscodePlain: form.zoomPasscodePlain.trim() || undefined,
@@ -512,6 +515,32 @@ export default function DashboardPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">
+                Action timer
+              </label>
+              <select
+                value={form.actionTimerSeconds}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    actionTimerSeconds: parseInt(e.target.value, 10),
+                  }))
+                }
+                className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 focus:outline-none"
+              >
+                {ACTION_TIMER_SECONDS_OPTIONS.map((secs) => (
+                  <option key={secs} value={secs}>
+                    {secs === 0
+                      ? "Off — no pressure"
+                      : `${formatActionTimerLabel(secs)} per action`}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500 mt-1">
+                Default 60s. Host can pause, reset, or turn off at the table.
+              </p>
             </div>
           </div>
           <div className="mb-4 rounded-lg border border-slate-800 bg-slate-950/50 p-3">

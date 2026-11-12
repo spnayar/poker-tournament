@@ -743,6 +743,48 @@ describe("TableEngine", () => {
     );
   });
 
+  it("action timeout folds facing a bet without sitting out", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const actor = table.getPublicState().currentActorSeat!;
+    expect(table.applyActionTimeout(actor)).toBe(true);
+
+    const state = table.getPublicState();
+    const seat = state.seats.find((s) => s.seatId === actor)!;
+    expect(seat.folded).toBe(true);
+    expect(seat.skipped).toBe(false);
+    expect(seat.skipReason).toBeNull();
+    expect(state.actionLog.some((e) => e.action === "Fold (timeout)")).toBe(
+      true
+    );
+  });
+
+  it("action timeout checks when free without sitting out", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.startHand();
+
+    // HU: SB acts first preflop; after SB calls, BB can check for free.
+    const sb = table.getPublicState().seats.find((s) => s.isSmallBlind)!;
+    expect(table.applyAction(sb.seatId, { type: "call" })).toBe(true);
+    const bb = table.getPublicState().seats.find((s) => s.isBigBlind)!;
+    expect(table.getPublicState().currentActorSeat).toBe(bb.seatId);
+    expect(table.applyActionTimeout(bb.seatId)).toBe(true);
+
+    const state = table.getPublicState();
+    const seat = state.seats.find((s) => s.seatId === bb.seatId)!;
+    expect(seat.folded).toBe(false);
+    expect(seat.skipped).toBe(false);
+    expect(state.actionLog.some((e) => e.action === "Check (timeout)")).toBe(
+      true
+    );
+  });
+
   it("skipped BB checks when action is free", () => {
     const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);

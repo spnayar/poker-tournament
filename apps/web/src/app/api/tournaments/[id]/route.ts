@@ -8,6 +8,7 @@ import {
   computeSettleTransfers,
   normalizeGamePayouts,
   parseSettleUpMethods,
+  resolveActionTimerSeconds,
 } from "@poker/protocol";
 import { sendNightRecapEmail } from "@/lib/nightRecap";
 import { gameServerControlHeaders } from "@/lib/gameServerControl";
@@ -300,6 +301,38 @@ export async function POST(
       gameId: game.id,
       gameNumber,
       seatingReady: randomizeSeats && tournament.players.length >= 2,
+    });
+  }
+
+  if (action === "updateSettings") {
+    if (tournament.hostUserId !== session.user.id) {
+      return NextResponse.json(
+        { error: "Only the host can update settings" },
+        { status: 403 }
+      );
+    }
+    if (tournament.status !== "LOBBY") {
+      return NextResponse.json(
+        { error: "Settings can only be edited in the lobby" },
+        { status: 400 }
+      );
+    }
+    if (!("actionTimerSeconds" in body)) {
+      return NextResponse.json(
+        { error: "No settings to update" },
+        { status: 400 }
+      );
+    }
+    const actionTimerSeconds = resolveActionTimerSeconds(
+      body.actionTimerSeconds
+    );
+    const updated = await prisma.tournament.update({
+      where: { id },
+      data: { actionTimerSeconds },
+    });
+    return NextResponse.json({
+      ok: true,
+      actionTimerSeconds: updated.actionTimerSeconds,
     });
   }
 

@@ -3,6 +3,7 @@ import {
   defaultPayoutPercents,
   paidPlaceCount,
   payoutPercentsToFormFields,
+  resolveActionTimerSeconds,
   resolveBlindPace,
   resolveHostPayoutPercents,
   type BlindPace,
@@ -66,6 +67,7 @@ export interface LastHostedDefaults {
   blindPace: string;
   blindPreset: string;
   blindLevelMinutes: number;
+  actionTimerSeconds?: number;
   payoutPercents: number[];
   /** Prior night Zoom join URL for create-form reuse (host-only). */
   zoomJoinUrl?: string | null;
@@ -80,6 +82,8 @@ export type CreateGameNightForm = {
   maxPlayers: string;
   blindPace: BlindPace;
   blindLevelMinutes: number;
+  /** Seconds per action; 0 = off. Default 60. */
+  actionTimerSeconds: number;
   paidPlaces: PaidPlaceCount;
   payout1: string;
   payout2: string;
@@ -135,6 +139,9 @@ export function createGameNightFormDefaults(
     )
       ? lastHosted.blindLevelMinutes
       : 12;
+  const actionTimerSeconds = resolveActionTimerSeconds(
+    lastHosted?.actionTimerSeconds
+  );
 
   const [payout1, payout2, payout3] = payoutPercentsToFormFields(payouts);
 
@@ -145,6 +152,7 @@ export function createGameNightFormDefaults(
     maxPlayers: String(lastHosted?.maxPlayers ?? 9),
     blindPace,
     blindLevelMinutes,
+    actionTimerSeconds,
     paidPlaces,
     payout1,
     payout2,
