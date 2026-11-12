@@ -206,6 +206,10 @@ describe("night recap email", () => {
       "A♠ A♥ A♦ A♣ K♥"
     );
   });
+
+  it("renders tens as 10 in email card glyphs", () => {
+    expect(formatCardsPlain(["Ts", "Td", "9h"])).toBe("10♠ 10♦ 9♥");
+  });
 });
 
 describe("aggregateNightFunFacts", () => {
