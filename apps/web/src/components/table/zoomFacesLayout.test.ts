@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  ZOOM_FACES_CELL_HEIGHT,
   ZOOM_FACES_MAX,
+  ZOOM_FACES_TILE_HEIGHT,
+  ZOOM_FACES_TILE_WIDTH,
   ZOOM_SDK_TILE_HEIGHT,
-  ZOOM_SDK_TILE_WIDTH,
   computeZoomFacesLayout,
   countVideoOnAttendees,
+  listVideoOnFaces,
+  stackHeightForTiles,
 } from "./zoomFacesLayout";
 
 describe("countVideoOnAttendees", () => {
@@ -23,41 +25,59 @@ describe("countVideoOnAttendees", () => {
   });
 });
 
+describe("listVideoOnFaces", () => {
+  it("skips the club mirror participant and caps at max", () => {
+    const faces = listVideoOnFaces(
+      [
+        { userId: 1, userName: "The Poker Table Club", video: true },
+        { userId: 2, displayName: "Sanjay Nayar", bVideoOn: true },
+        { userId: 3, userName: "Alex", video: true },
+        { userId: 4, userName: "Off", video: false },
+      ],
+      "The Poker Table Club",
+      9
+    );
+    expect(faces.map((f) => f.displayName)).toEqual([
+      "Sanjay Nayar",
+      "Alex",
+    ]);
+  });
+});
+
+describe("stackHeightForTiles", () => {
+  it("sizes stack to landscape thumbs + gaps only", () => {
+    expect(stackHeightForTiles(0)).toBe(0);
+    expect(stackHeightForTiles(1)).toBe(ZOOM_FACES_TILE_HEIGHT);
+    expect(stackHeightForTiles(2)).toBe(
+      ZOOM_FACES_TILE_HEIGHT * 2 + 6
+    );
+  });
+});
+
 describe("computeZoomFacesLayout", () => {
   it("returns zero frame height when nobody has video on", () => {
-    const layout = computeZoomFacesLayout(0, 120, 400);
+    const layout = computeZoomFacesLayout(0, ZOOM_FACES_TILE_WIDTH, 400);
     expect(layout.tileCount).toBe(0);
     expect(layout.frameHeight).toBe(0);
   });
 
-  it("sizes frame height to active thumbs only (no empty slots)", () => {
-    const one = computeZoomFacesLayout(1, 120, 900);
-    const three = computeZoomFacesLayout(3, 120, 900);
-    expect(one.frameHeight).toBe(ZOOM_FACES_CELL_HEIGHT);
-    expect(three.frameHeight).toBe(ZOOM_FACES_CELL_HEIGHT * 3);
-    expect(three.frameHeight).toBeLessThan(ZOOM_FACES_CELL_HEIGHT * 9);
-  });
-
-  it("caps at 9 tiles and uses cover scale (no letterbox)", () => {
-    const layout = computeZoomFacesLayout(12, 120, 900);
-    expect(layout.tileCount).toBe(ZOOM_FACES_MAX);
-    expect(layout.sdkHeight).toBe(ZOOM_SDK_TILE_HEIGHT * ZOOM_FACES_MAX);
-    expect(layout.scaleX).toBe(layout.scaleY);
-    expect(layout.scaleX).toBeGreaterThanOrEqual(
-      layout.frameWidth / ZOOM_SDK_TILE_WIDTH
+  it("uses landscape tile geometry (wider than tall)", () => {
+    expect(ZOOM_FACES_TILE_WIDTH).toBeGreaterThan(ZOOM_FACES_TILE_HEIGHT);
+    expect(ZOOM_FACES_TILE_WIDTH / ZOOM_FACES_TILE_HEIGHT).toBeCloseTo(
+      16 / 9,
+      1
     );
   });
 
-  it("never prefers letterbox contain scale over cover", () => {
-    const layout = computeZoomFacesLayout(1, 120, 900);
-    // Cover uses max(scaleX, scaleY); contain would use min.
-    expect(layout.scaleX).toBe(Math.max(120 / ZOOM_SDK_TILE_WIDTH, layout.frameHeight / ZOOM_SDK_TILE_HEIGHT));
-  });
-
-  it("shrinks to fit a short column", () => {
-    const layout = computeZoomFacesLayout(2, 120, 80);
-    expect(layout.tileCount).toBe(2);
-    expect(layout.frameHeight).toBe(80);
-    expect(layout.frameWidth).toBeLessThanOrEqual(120);
+  it("caps at 9 and sizes SDK engine for gallery blit source", () => {
+    const needed = stackHeightForTiles(ZOOM_FACES_MAX);
+    const layout = computeZoomFacesLayout(
+      12,
+      ZOOM_FACES_TILE_WIDTH,
+      needed + 40
+    );
+    expect(layout.tileCount).toBe(ZOOM_FACES_MAX);
+    expect(layout.sdkHeight).toBe(ZOOM_SDK_TILE_HEIGHT * ZOOM_FACES_MAX);
+    expect(layout.frameHeight).toBe(needed);
   });
 });

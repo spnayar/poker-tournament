@@ -22,6 +22,7 @@ export type ZoomEmbeddedClient = {
   getAttendeeslist?: () => {
     userId: number;
     displayName?: string;
+    userName?: string;
     video?: boolean;
     bVideoOn?: boolean;
   }[];

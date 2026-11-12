@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
   useCallback,
-  type CSSProperties,
+  type MutableRefObject,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -19,16 +19,20 @@ import {
   loadZoomMtgEmbedded,
   type ZoomEmbeddedClient,
 } from "@/lib/zoomMeetingSdkLoader";
+import { startFaceBlit, stripZoomChrome } from "./zoomFaceMedia";
 import {
-  ZOOM_FACES_COLUMN_WIDTH,
   ZOOM_FACES_MAX,
   ZOOM_FACES_PHONE_STRIP_HEIGHT,
+  ZOOM_FACES_TILE_GAP,
+  ZOOM_FACES_TILE_HEIGHT,
+  ZOOM_FACES_TILE_WIDTH,
   ZOOM_SDK_TILE_HEIGHT,
   ZOOM_SDK_TILE_WIDTH,
   ZOOM_SDK_VIEW_HEIGHT,
   ZOOM_SDK_VIEW_WIDTH,
-  computeZoomFacesLayout,
-  countVideoOnAttendees,
+  listVideoOnFaces,
+  stackHeightForTiles,
+  type ZoomFaceTileModel,
 } from "./zoomFacesLayout";
 
 export {
@@ -57,6 +61,7 @@ type ZoomMirrorContextValue = {
   error: string | null;
   canAttemptMirror: boolean;
   videoOnCount: number;
+  faces: ZoomFaceTileModel[];
   rootRef: RefObject<HTMLDivElement | null>;
   startMirror: () => void;
   leaveMirror: () => void;
@@ -80,23 +85,23 @@ type ZoomMirrorProviderProps = {
   children: ReactNode;
 };
 
-function readVideoOnCount(client: ZoomEmbeddedClient): number {
+function readFaces(client: ZoomEmbeddedClient): ZoomFaceTileModel[] {
   try {
     const list = client.getAttendeeslist?.() ?? [];
-    return Math.min(ZOOM_FACES_MAX, countVideoOnAttendees(list));
+    return listVideoOnFaces(list, ZOOM_MIRROR_PARTICIPANT_NAME, ZOOM_FACES_MAX);
   } catch {
-    return 0;
+    return [];
   }
 }
 
 /**
  * Meeting SDK video mirror — table keeps the viewport.
  *
- * Desktop: faces column LEFT of the table (ribbon of up to 9 video-on tiles).
+ * Desktop: custom landscape face stack LEFT of the table (max 9 video-on).
  * Phone: compact strip after Action Log, collapsed until Show faces.
  *
- * Spike: Component View cannot paint per-seat streams. Active speakers get
- * seat rings via name match. In-app audio stays off so Zoom owns the call.
+ * SDK gallery stays offscreen as a high-res media source; we blit into our
+ * own 16:9 tiles so Zoom chrome never appears in the column.
  */
 export function ZoomMirrorProvider({
   tournamentId,
@@ -114,7 +119,7 @@ export function ZoomMirrorProvider({
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [videoOnCount, setVideoOnCount] = useState(0);
+  const [faces, setFaces] = useState<ZoomFaceTileModel[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,14 +161,14 @@ export function ZoomMirrorProvider({
     }
   }, []);
 
-  const pinRibbonForVideoOn = useCallback(
+  const pinGalleryForVideoOn = useCallback(
     async (client: ZoomEmbeddedClient, count: number) => {
-      // Always ribbon — speaker view paints a huge dark stage with a tiny
-      // inset tile (the blank-space bug). Ribbon packs video tiles edge-to-edge.
+      // Gallery (not ribbon/speaker): equal landscape tiles we can blit from.
+      // Speaker = dark stage + tiny inset. Ribbon = portrait suspension chrome.
       const tiles = Math.max(1, Math.min(ZOOM_FACES_MAX, count || 1));
       const height = ZOOM_SDK_TILE_HEIGHT * tiles;
       try {
-        await client.setViewType?.("ribbon");
+        await client.setViewType?.("gallery");
       } catch {
         /* view type may be unavailable mid-join */
       }
@@ -177,19 +182,20 @@ export function ZoomMirrorProvider({
           popper: { disableDraggable: true },
         });
       } catch {
-        /* size pin is best-effort — CSS frame still clamps */
+        /* size pin is best-effort — custom tiles don't depend on SDK chrome */
       }
     },
     []
   );
 
-  const refreshVideoOnCount = useCallback(
+  const refreshFaces = useCallback(
     (client: ZoomEmbeddedClient) => {
-      const next = readVideoOnCount(client);
-      setVideoOnCount(next);
-      void pinRibbonForVideoOn(client, next);
+      const next = readFaces(client);
+      setFaces(next);
+      void pinGalleryForVideoOn(client, next.length);
+      stripZoomChrome(document);
     },
-    [pinRibbonForVideoOn]
+    [pinGalleryForVideoOn]
   );
 
   const leaveMirror = useCallback(async () => {
@@ -197,7 +203,7 @@ export function ZoomMirrorProvider({
     clientRef.current = null;
     setJoined(false);
     setExpanded(false);
-    setVideoOnCount(0);
+    setFaces([]);
     onSpeakingUserIds([]);
     if (!client) return;
     try {
@@ -263,7 +269,7 @@ export function ZoomMirrorProvider({
       };
 
       const onRosterChange = () => {
-        refreshVideoOnCount(client);
+        refreshFaces(client);
         void enforceAudioOff(client);
       };
 
@@ -282,7 +288,7 @@ export function ZoomMirrorProvider({
           meetingInfo: [],
           video: {
             isResizable: false,
-            defaultViewType: "ribbon",
+            defaultViewType: "gallery",
             viewSizes: {
               default: {
                 width: ZOOM_SDK_TILE_WIDTH,
@@ -326,7 +332,8 @@ export function ZoomMirrorProvider({
       });
 
       await enforceAudioOff(client);
-      refreshVideoOnCount(client);
+      refreshFaces(client);
+      stripZoomChrome(document);
       setJoined(true);
     } catch (err) {
       const raw =
@@ -338,7 +345,7 @@ export function ZoomMirrorProvider({
       clientRef.current = null;
       setJoined(false);
       setExpanded(false);
-      setVideoOnCount(0);
+      setFaces([]);
       onSpeakingUserIds([]);
     } finally {
       setJoining(false);
@@ -346,7 +353,7 @@ export function ZoomMirrorProvider({
   }, [
     enforceAudioOff,
     onSpeakingUserIds,
-    refreshVideoOnCount,
+    refreshFaces,
     tournamentId,
   ]);
 
@@ -355,6 +362,19 @@ export function ZoomMirrorProvider({
       void leaveMirror();
     };
   }, [leaveMirror]);
+
+  // Keep stripping Zoom chrome while faces are up (SDK re-injects headers).
+  useEffect(() => {
+    if (!joined || !expanded) return;
+    stripZoomChrome(document);
+    const id = window.setInterval(() => stripZoomChrome(document), 750);
+    const mo = new MutationObserver(() => stripZoomChrome(document));
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      window.clearInterval(id);
+      mo.disconnect();
+    };
+  }, [joined, expanded]);
 
   const canAttemptMirror = Boolean(
     status?.mirrorConfigured && status?.canMirror
@@ -367,7 +387,8 @@ export function ZoomMirrorProvider({
     expanded,
     error,
     canAttemptMirror,
-    videoOnCount,
+    videoOnCount: faces.length,
+    faces,
     rootRef,
     startMirror: () => {
       void startMirror();
@@ -483,103 +504,117 @@ export function ZoomMirrorToolbar() {
   );
 }
 
-/**
- * Meeting SDK root inside our slate/emerald frame.
- * Desktop: content-height column LEFT of the table (active thumbs only).
- * Phone: compact strip after the Action Log (order-last). Always ribbon.
- */
-export function ZoomMirrorFacesFrame() {
-  const { joined, expanded, videoOnCount, rootRef } = useZoomMirror();
-  const show = joined && expanded;
-  const shellRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({
-    w: ZOOM_FACES_COLUMN_WIDTH,
-    // Cap only — frame height comes from video-on count, not column stretch.
-    h: 900,
-  });
+function ZoomFaceTile({
+  face,
+  sdkRoot,
+}: {
+  face: ZoomFaceTileModel;
+  sdkRoot: HTMLElement | null;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const el = shellRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const { width } = entry.contentRect;
-      // Width from the column; height cap from the play-row parent (not the
-      // content-sized shell, which would chicken-egg with frame height).
-      const parent = el.parentElement;
-      const cap = parent
-        ? Math.floor(parent.getBoundingClientRect().height)
-        : 900;
-      setBox({
-        w: Math.max(1, Math.floor(width) || ZOOM_FACES_COLUMN_WIDTH),
-        h: Math.max(ZOOM_FACES_PHONE_STRIP_HEIGHT, cap || 900),
-      });
-    });
-    ro.observe(el);
-    if (el.parentElement) ro.observe(el.parentElement);
-    return () => ro.disconnect();
-  }, []);
+    const canvas = canvasRef.current;
+    if (!canvas || !sdkRoot) return;
+    canvas.width = ZOOM_FACES_TILE_WIDTH * 2;
+    canvas.height = ZOOM_FACES_TILE_HEIGHT * 2;
+    const handle = startFaceBlit(sdkRoot, face.displayName, canvas);
+    return () => handle.stop();
+  }, [face.displayName, face.userId, sdkRoot]);
 
-  // Phone shell is wide — clamp to column width so thumbs stay compact.
-  const layoutW = Math.min(Math.max(box.w, 1), ZOOM_FACES_COLUMN_WIDTH);
-  const layoutH = Math.max(box.h, show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 0);
-  const layout = computeZoomFacesLayout(
-    show ? Math.max(videoOnCount, 0) : 0,
-    layoutW,
-    layoutH
+  return (
+    <div
+      className="zoom-face-tile"
+      style={{
+        width: ZOOM_FACES_TILE_WIDTH,
+        height: ZOOM_FACES_TILE_HEIGHT,
+      }}
+    >
+      <canvas
+        ref={canvasRef}
+        className="zoom-face-tile__canvas"
+        aria-hidden
+      />
+      <span className="zoom-face-tile__name" title={face.displayName}>
+        {face.displayName}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Custom landscape face stack (mock match) + offscreen Meeting SDK gallery.
+ * Desktop: column LEFT of the table. Phone: strip after Action Log.
+ */
+export function ZoomMirrorFacesFrame() {
+  const { joined, expanded, faces, rootRef } = useZoomMirror();
+  const show = joined && expanded;
+  const [sdkEl, setSdkEl] = useState<HTMLElement | null>(null);
+
+  const setRoot = useCallback(
+    (node: HTMLDivElement | null) => {
+      (rootRef as MutableRefObject<HTMLDivElement | null>).current = node;
+      setSdkEl(node);
+    },
+    [rootRef]
   );
 
-  const frameStyle: CSSProperties =
-    show && layout.tileCount > 0
-      ? {
-          width: layout.frameWidth,
-          height: layout.frameHeight,
-          ["--zoom-sdk-w" as string]: `${layout.sdkWidth}px`,
-          ["--zoom-sdk-h" as string]: `${layout.sdkHeight}px`,
-          ["--zoom-scale-x" as string]: String(layout.scaleX),
-          ["--zoom-scale-y" as string]: String(layout.scaleY),
-        }
-      : {
-          // Keep a measurable mount target while joining / cameras off.
-          width: Math.min(
-            box.w || ZOOM_FACES_COLUMN_WIDTH,
-            ZOOM_FACES_COLUMN_WIDTH
-          ),
-          height: show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 1,
-          ["--zoom-sdk-w" as string]: `${ZOOM_SDK_TILE_WIDTH}px`,
-          ["--zoom-sdk-h" as string]: `${ZOOM_SDK_TILE_HEIGHT}px`,
-          ["--zoom-scale-x" as string]: "0.5",
-          ["--zoom-scale-y" as string]: "0.5",
-        };
+  const stackH = stackHeightForTiles(faces.length);
 
   return (
     <aside
-      ref={shellRef}
       className="zoom-faces-column order-last lg:order-first shrink-0 overflow-hidden flex flex-col items-stretch self-start"
       data-expanded={show ? "true" : "false"}
-      data-video-on={layout.tileCount}
+      data-video-on={faces.length}
       aria-label="Table faces"
       aria-hidden={!show}
+      style={
+        show
+          ? {
+              width: ZOOM_FACES_TILE_WIDTH,
+              // Phone CSS max-height clamps; desktop uses content height.
+              minHeight: faces.length > 0 ? stackH : ZOOM_FACES_PHONE_STRIP_HEIGHT,
+            }
+          : undefined
+      }
     >
+      {/* Offscreen SDK engine — high-res gallery source for blits. */}
       <div
-        className={`zoom-faces-thumb mx-auto ${
-          show ? "zoom-faces-thumb--visible" : ""
-        }`}
-        style={frameStyle}
+        className="zoom-faces-sdk-engine"
+        aria-hidden
+        style={{
+          width: ZOOM_SDK_TILE_WIDTH,
+          height: Math.max(
+            ZOOM_SDK_TILE_HEIGHT,
+            ZOOM_SDK_TILE_HEIGHT * Math.max(faces.length, 1)
+          ),
+        }}
       >
-        <div className="zoom-faces-thumb__scale">
-          <div
-            ref={rootRef}
-            id="zoom-meeting-sdk-root"
-            className="zoom-faces-sdk-root"
-          />
-        </div>
+        <div
+          ref={setRoot}
+          id="zoom-meeting-sdk-root"
+          className="zoom-faces-sdk-root"
+        />
       </div>
-      {show && videoOnCount === 0 ? (
-        <p className="text-[10px] text-slate-500 text-center px-1 mt-1 leading-tight">
-          Waiting for cameras…
-        </p>
+
+      {show ? (
+        faces.length > 0 ? (
+          <div
+            className="zoom-faces-stack"
+            style={{
+              width: ZOOM_FACES_TILE_WIDTH,
+              gap: ZOOM_FACES_TILE_GAP,
+            }}
+          >
+            {faces.map((face) => (
+              <ZoomFaceTile key={face.userId} face={face} sdkRoot={sdkEl} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] text-slate-500 text-center px-1 mt-1 leading-tight">
+            Waiting for cameras…
+          </p>
+        )
       ) : null}
     </aside>
   );

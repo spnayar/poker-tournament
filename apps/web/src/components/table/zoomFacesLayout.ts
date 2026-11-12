@@ -1,45 +1,51 @@
 /**
- * Zoom Meeting SDK tile floor (ribbon docs minimum per tile).
- * We size a ribbon of N tiles then CSS-scale/cover into the faces column.
+ * Custom landscape face thumbs (mock: stacked 16:9 tiles left of the table).
+ * Meeting SDK still renders offscreen at its tile floor; we blit into these cells.
  */
-export const ZOOM_SDK_TILE_WIDTH = 240;
-export const ZOOM_SDK_TILE_HEIGHT = 135;
+export const ZOOM_SDK_TILE_WIDTH = 320;
+export const ZOOM_SDK_TILE_HEIGHT = 180;
 
-/** Back-compat aliases used by older imports. */
+/** Back-compat aliases. */
 export const ZOOM_SDK_VIEW_WIDTH = ZOOM_SDK_TILE_WIDTH;
 export const ZOOM_SDK_VIEW_HEIGHT = ZOOM_SDK_TILE_HEIGHT;
 
-/** Max faces we try to show in the table column. */
+/** Max faces in the table column. */
 export const ZOOM_FACES_MAX = 9;
 
-/** Desktop faces column width (px) — left of the table. */
-export const ZOOM_FACES_COLUMN_WIDTH = 120;
+/** Visible landscape thumb width (px) — column is exactly this wide. */
+export const ZOOM_FACES_TILE_WIDTH = 168;
 
-/** Phone strip height when expanded (px) — ≈ one cover cell. */
-export const ZOOM_FACES_PHONE_STRIP_HEIGHT = 90;
+/** Visible landscape thumb height (px) — true 16:9 of TILE_WIDTH. */
+export const ZOOM_FACES_TILE_HEIGHT = 95;
 
-/**
- * Visible face cell height for one video-on thumb (px).
- * Slightly taller than 16:9-of-width so cover-crop fills without letterboxing.
- */
-export const ZOOM_FACES_CELL_HEIGHT = 90;
+/** Gap between stacked thumbs (px). */
+export const ZOOM_FACES_TILE_GAP = 6;
+
+/** Desktop faces column width (px). */
+export const ZOOM_FACES_COLUMN_WIDTH = ZOOM_FACES_TILE_WIDTH;
+
+/** Phone strip height when expanded (px) — one landscape tile + gap. */
+export const ZOOM_FACES_PHONE_STRIP_HEIGHT =
+  ZOOM_FACES_TILE_HEIGHT + ZOOM_FACES_TILE_GAP;
+
+/** @deprecated use ZOOM_FACES_TILE_HEIGHT */
+export const ZOOM_FACES_CELL_HEIGHT = ZOOM_FACES_TILE_HEIGHT;
+
+export type ZoomFaceTileModel = {
+  userId: number;
+  displayName: string;
+};
 
 export type ZoomFacesLayout = {
-  /** Active video-on tiles to request from the SDK (1–9, or 0). */
   tileCount: number;
   sdkWidth: number;
   sdkHeight: number;
-  /** Visible frame size after scale (tight wrap — no empty column padding). */
   frameWidth: number;
   frameHeight: number;
   scaleX: number;
   scaleY: number;
 };
 
-/**
- * Count attendees with camera on. Meeting SDK still has no hide-non-video API;
- * we size the ribbon to this count and CSS-hide avatar-only frames.
- */
 export function countVideoOnAttendees(
   attendees: Array<{ video?: boolean; bVideoOn?: boolean } | null | undefined>
 ): number {
@@ -51,11 +57,55 @@ export function countVideoOnAttendees(
   return n;
 }
 
+function normalizeName(name: string): string {
+  return name
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
- * Tight layout for active video-on thumbs only.
- * Frame height = cellHeight × tileCount (no reserved slots for cameras off).
- * Scale uses cover (max) so the ribbon fills the frame without black bars;
- * overflow clips on the thumb.
+ * Active video-on participants for the custom stack.
+ * Skips the table's own mirror join ("The Poker Table Club").
+ */
+export function listVideoOnFaces(
+  attendees: Array<{
+    userId?: number;
+    displayName?: string;
+    userName?: string;
+    video?: boolean;
+    bVideoOn?: boolean;
+  } | null | undefined>,
+  mirrorParticipantName: string,
+  max: number = ZOOM_FACES_MAX
+): ZoomFaceTileModel[] {
+  const mirrorKey = normalizeName(mirrorParticipantName);
+  const out: ZoomFaceTileModel[] = [];
+  for (const a of attendees) {
+    if (!a || typeof a.userId !== "number") continue;
+    if (!(a.video === true || a.bVideoOn === true)) continue;
+    const displayName = String(a.displayName || a.userName || "").trim();
+    if (!displayName) continue;
+    if (mirrorKey && normalizeName(displayName) === mirrorKey) continue;
+    out.push({ userId: a.userId, displayName });
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** Stack height for N landscape thumbs including gaps. */
+export function stackHeightForTiles(tileCount: number): number {
+  const n = Math.max(0, Math.min(ZOOM_FACES_MAX, Math.floor(tileCount)));
+  if (n <= 0) return 0;
+  return n * ZOOM_FACES_TILE_HEIGHT + (n - 1) * ZOOM_FACES_TILE_GAP;
+}
+
+/**
+ * Layout metadata for the offscreen SDK engine (gallery sized to N tiles).
+ * Visible column uses stackHeightForTiles — not this scale math.
  */
 export function computeZoomFacesLayout(
   videoOnCount: number,
@@ -66,39 +116,33 @@ export function computeZoomFacesLayout(
     0,
     Math.min(ZOOM_FACES_MAX, Math.floor(videoOnCount))
   );
-  const frameWidth = Math.max(0, Math.min(columnWidth, ZOOM_FACES_COLUMN_WIDTH));
+  const frameWidth = Math.max(
+    0,
+    Math.min(columnWidth || ZOOM_FACES_TILE_WIDTH, ZOOM_FACES_TILE_WIDTH)
+  );
+  const sdkWidth = ZOOM_SDK_TILE_WIDTH;
+  const sdkHeight = Math.max(ZOOM_SDK_TILE_HEIGHT, ZOOM_SDK_TILE_HEIGHT * Math.max(tileCount, 1));
 
   if (tileCount === 0 || frameWidth <= 0 || columnHeight <= 0) {
     return {
       tileCount: 0,
-      sdkWidth: ZOOM_SDK_TILE_WIDTH,
+      sdkWidth,
       sdkHeight: ZOOM_SDK_TILE_HEIGHT,
       frameWidth,
       frameHeight: 0,
-      scaleX: frameWidth > 0 ? frameWidth / ZOOM_SDK_TILE_WIDTH : 0,
+      scaleX: frameWidth > 0 ? frameWidth / sdkWidth : 0,
       scaleY: 0,
     };
   }
 
-  const sdkWidth = ZOOM_SDK_TILE_WIDTH;
-  const sdkHeight = ZOOM_SDK_TILE_HEIGHT * tileCount;
-
-  // Prefer packing N cells at ZOOM_FACES_CELL_HEIGHT; shrink if column is short.
-  const idealHeight = ZOOM_FACES_CELL_HEIGHT * tileCount;
-  const frameHeight = Math.min(idealHeight, columnHeight);
-
-  // Cover scale — fill the frame; thumb overflow:hidden crops edges.
-  const scaleX = frameWidth / sdkWidth;
-  const scaleY = frameHeight / sdkHeight;
-  const cover = Math.max(scaleX, scaleY);
-
+  const frameHeight = Math.min(stackHeightForTiles(tileCount), columnHeight);
   return {
     tileCount,
     sdkWidth,
     sdkHeight,
     frameWidth,
     frameHeight,
-    scaleX: cover,
-    scaleY: cover,
+    scaleX: frameWidth / sdkWidth,
+    scaleY: frameHeight / sdkHeight,
   };
 }
