@@ -36,9 +36,10 @@ function mockSeats(count: number): SeatPublic[] {
       folded: i === 5,
       allIn: false,
       eliminated: false,
-      away: false,
-      skipped: false,
-      skipReason: null,
+      // Seat 4 Away-in-hand (still has cards); seat 5 folded (no cards, grey).
+      away: i === 4,
+      skipped: i === 4,
+      skipReason: i === 4 ? "host" : null,
       isDealer: i === 0,
       isSmallBlind: i === 1,
       isBigBlind: i === 2,
