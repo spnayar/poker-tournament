@@ -464,8 +464,9 @@ export default function TablePage() {
       router.push(`/tournament/${tournamentId}/results`);
     };
 
-    const handleError = (err: { message: string }) => {
-      if (err.message.includes("No game in progress")) {
+    const handleError = (err: { message?: string }) => {
+      const message = typeof err?.message === "string" ? err.message : "";
+      if (message.includes("No game in progress")) {
         watchTournament(socket!);
         // Between tournaments / after a chop, restore results so reload
         // is not stuck on "Loading table…".
@@ -519,13 +520,13 @@ export default function TablePage() {
         }
         return;
       }
-      console.error("Game error:", err.message);
+      console.error("Game error:", message || err);
       setActionPending(false);
       setDealNextPending(false);
       setShowCardsPending(false);
       setChopSubmitting(false);
-      if (chopOpenRef.current) setChopError(err.message);
-      if (err.message.includes("deleted")) {
+      if (chopOpenRef.current) setChopError(message || "Something went wrong");
+      if (message.includes("deleted")) {
         router.push("/dashboard");
       }
     };
