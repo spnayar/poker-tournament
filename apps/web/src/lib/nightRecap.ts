@@ -34,6 +34,14 @@ export type NightRecapNamedCount = {
   count: number;
 };
 
+export type NightRecapFlopSeen = {
+  displayName: string;
+  /** Rounded 0–100. */
+  percent: number;
+  seen: number;
+  dealt: number;
+};
+
 export type NightRecapChopShare = {
   displayName: string;
   payoutCents: number;
@@ -54,10 +62,12 @@ export type NightRecapStats = {
     chopShares?: NightRecapChopShare[];
   }[];
   itm: NightRecapNamedCount[];
-  /** Hands won across the night (any pot share counts as a hand won). */
+  /** Primary pot winners (largest chip share per hand). */
   handsWon: NightRecapNamedCount[];
   /** Players eliminated by each person. */
   knockouts: NightRecapNamedCount[];
+  /** % of dealt hands where the player saw the flop. */
+  flopsSeen: NightRecapFlopSeen[];
   largestPot: {
     amountChips: number;
     winnerNames: string[];
@@ -191,6 +201,13 @@ export function buildNightRecapText(payload: NightRecapPayload): string {
     lines.push(
       `Hands won: ${payload.stats.handsWon
         .map((r) => `${r.displayName} ${r.count}`)
+        .join(", ")}`
+    );
+  }
+  if (payload.stats.flopsSeen.length > 0) {
+    lines.push(
+      `Flops seen: ${payload.stats.flopsSeen
+        .map((r) => `${r.displayName} ${r.percent}%`)
         .join(", ")}`
     );
   }
@@ -338,8 +355,23 @@ function renderStatsBlock(stats: NightRecapStats): string {
     );
   }
   if (stats.handsWon.length > 0) {
+    const wonTotal = stats.handsWon.reduce((sum, r) => sum + r.count, 0);
+    const chopNote =
+      stats.totalHands > 0 && wonTotal > stats.totalHands
+        ? `<br/><span style="color:#64748b;font-size:12px;">Primary pot winners; equal chops can exceed hands dealt</span>`
+        : "";
     funFacts.push(
-      `<li><span style="color:#94a3b8;">Hands won</span><br/>${namedCountLine(stats.handsWon)}</li>`
+      `<li><span style="color:#94a3b8;">Hands won</span><br/>${namedCountLine(stats.handsWon)}${chopNote}</li>`
+    );
+  }
+  if (stats.flopsSeen.length > 0) {
+    funFacts.push(
+      `<li><span style="color:#94a3b8;">Flops seen</span><br/>${stats.flopsSeen
+        .map(
+          (r) =>
+            `<strong style="color:#e2e8f0;">${escapeHtml(r.displayName)}</strong> ${r.percent}%`
+        )
+        .join(" · ")}</li>`
     );
   }
   if (stats.knockouts.length > 0) {
@@ -406,16 +438,52 @@ function addCounts(
   }
 }
 
+function mergeUserCounts(
+  target: Map<string, number>,
+  byUserId: Record<string, number> | undefined
+): void {
+  for (const [userId, count] of Object.entries(byUserId ?? {})) {
+    if (count <= 0) continue;
+    target.set(userId, (target.get(userId) ?? 0) + count);
+  }
+}
+
+function buildFlopsSeen(
+  dealtByUserId: Map<string, number>,
+  seenByUserId: Map<string, number>,
+  nameByUserId: Map<string, string>
+): NightRecapFlopSeen[] {
+  const rows: NightRecapFlopSeen[] = [];
+  for (const [userId, dealt] of dealtByUserId) {
+    if (dealt <= 0) continue;
+    const seen = Math.min(seenByUserId.get(userId) ?? 0, dealt);
+    rows.push({
+      displayName: nameByUserId.get(userId) ?? "Player",
+      percent: Math.round((seen / dealt) * 100),
+      seen,
+      dealt,
+    });
+  }
+  return rows.sort(
+    (a, b) =>
+      b.percent - a.percent ||
+      b.dealt - a.dealt ||
+      a.displayName.localeCompare(b.displayName)
+  );
+}
+
 /** Merge per-game funStats into night-level highlight fields. */
 export function aggregateNightFunFacts(
   games: { gameNumber: number; funStats: unknown }[],
   nameByUserId: Map<string, string>
 ): Pick<
   NightRecapStats,
-  "handsWon" | "knockouts" | "largestPot" | "bestHand"
+  "handsWon" | "knockouts" | "flopsSeen" | "largestPot" | "bestHand"
 > {
   const handsWon = new Map<string, NightRecapNamedCount>();
   const knockouts = new Map<string, NightRecapNamedCount>();
+  const handsDealt = new Map<string, number>();
+  const flopsSeenCounts = new Map<string, number>();
   let largestPot: NightRecapStats["largestPot"] = null;
   let bestHand: NightRecapStats["bestHand"] = null;
   let bestCards: Card[] | null = null;
@@ -424,6 +492,8 @@ export function aggregateNightFunFacts(
     const stats: GameFunStats = parseGameFunStats(game.funStats);
     addCounts(handsWon, stats.handsWonByUserId, nameByUserId);
     addCounts(knockouts, stats.knockoutsByUserId, nameByUserId);
+    mergeUserCounts(handsDealt, stats.handsDealtByUserId);
+    mergeUserCounts(flopsSeenCounts, stats.flopsSeenByUserId);
 
     if (
       stats.largestPot &&
@@ -462,6 +532,7 @@ export function aggregateNightFunFacts(
   return {
     handsWon: sortNamedCounts(handsWon),
     knockouts: sortNamedCounts(knockouts),
+    flopsSeen: buildFlopsSeen(handsDealt, flopsSeenCounts, nameByUserId),
     largestPot,
     bestHand,
   };

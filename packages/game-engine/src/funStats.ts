@@ -4,8 +4,13 @@ import { cardToPokersolver } from "./handEval";
 
 /** Per-table fun-fact counters (seat-keyed). Snapshot-safe; no private hole cards. */
 export type TableFunStats = {
+  /** Hands where this seat took the primary (largest) share of the pot. */
   handsWonBySeat: Record<number, number>;
   knockoutsBySeat: Record<number, number>;
+  /** Hands this seat was dealt into. */
+  handsDealtBySeat: Record<number, number>;
+  /** Hands where this seat was still in when the flop was dealt. */
+  flopsSeenBySeat: Record<number, number>;
   largestPot: {
     amountChips: number;
     winnerSeatIds: number[];
@@ -24,6 +29,8 @@ export function emptyTableFunStats(): TableFunStats {
   return {
     handsWonBySeat: {},
     knockoutsBySeat: {},
+    handsDealtBySeat: {},
+    flopsSeenBySeat: {},
     largestPot: null,
     bestHand: null,
   };
@@ -33,6 +40,8 @@ export function cloneTableFunStats(stats: TableFunStats): TableFunStats {
   return {
     handsWonBySeat: { ...stats.handsWonBySeat },
     knockoutsBySeat: { ...stats.knockoutsBySeat },
+    handsDealtBySeat: { ...(stats.handsDealtBySeat ?? {}) },
+    flopsSeenBySeat: { ...(stats.flopsSeenBySeat ?? {}) },
     largestPot: stats.largestPot
       ? {
           amountChips: stats.largestPot.amountChips,

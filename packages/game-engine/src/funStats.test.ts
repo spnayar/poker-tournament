@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildBlindLevels } from "@poker/protocol";
 import { TableEngine } from "./table";
 import { compareFiveCardHands, emptyTableFunStats } from "./funStats";
@@ -142,5 +142,76 @@ describe("TableEngine fun stats", () => {
   it("starts with empty fun stats", () => {
     const table = new TableEngine(testConfig());
     expect(table.getFunStats()).toEqual(emptyTableFunStats());
+  });
+
+  it("counts only the primary chip winner when side pots split winners", () => {
+    const table = new TableEngine(testConfig());
+    table.addPlayer(0, "u1", "Short", null, 200);
+    table.addPlayer(1, "u2", "DeepA", null, 2000);
+    table.addPlayer(2, "u3", "DeepB", null, 2000);
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    table.startHand();
+
+    const snap = table.toSnapshot();
+    // Short wins small main (set); DeepA wins larger side (aces over kings).
+    // Deck: burn, flop 2-K-7, burn, turn, burn, river.
+    snap.players.find((p) => p.seatId === 0)!.holeCards = ["2c", "2d"];
+    snap.players.find((p) => p.seatId === 1)!.holeCards = ["Ad", "Ah"];
+    snap.players.find((p) => p.seatId === 2)!.holeCards = ["Kd", "Qh"];
+    snap.deck = ["3c", "2h", "Kc", "7s", "4c", "8d", "5c", "9s", "6c", "Tc"];
+    snap.funStats = table.getFunStats();
+
+    const rigged = TableEngine.fromSnapshot(snap);
+    rigged.applyAction(0, { type: "all-in" });
+    rigged.applyAction(1, { type: "all-in" });
+    rigged.applyAction(2, { type: "call" });
+
+    const events = rigged.drainEvents();
+    const handResult = events.find((e) => e.type === "handResult");
+    const result = handResult!.payload as import("@poker/protocol").HandResult;
+    expect(new Set(result.winners.map((w) => w.seatId))).toEqual(new Set([0, 1]));
+    expect(result.winners.find((w) => w.seatId === 1)!.amount).toBeGreaterThan(
+      result.winners.find((w) => w.seatId === 0)!.amount
+    );
+
+    const stats = rigged.getFunStats();
+    const wonSum = Object.values(stats.handsWonBySeat).reduce((a, b) => a + b, 0);
+    expect(wonSum).toBe(1);
+    expect(stats.handsWonBySeat[1]).toBe(1);
+    expect(stats.handsWonBySeat[0] ?? 0).toBe(0);
+  });
+
+  it("tracks hands dealt and flops seen for VPIP-style flop %", () => {
+    const table = new TableEngine(testConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.startHand();
+
+    const sb = table.getPublicState().seats.find((s) => s.isSmallBlind)!.seatId;
+    const bb = table.getPublicState().seats.find((s) => s.isBigBlind)!.seatId;
+
+    // Fold preflop — neither sees a flop, both were dealt.
+    expect(table.applyAction(sb, { type: "fold" })).toBe(true);
+    let stats = table.getFunStats();
+    expect(stats.handsDealtBySeat[sb]).toBe(1);
+    expect(stats.handsDealtBySeat[bb]).toBe(1);
+    expect(stats.flopsSeenBySeat[sb] ?? 0).toBe(0);
+    expect(stats.flopsSeenBySeat[bb] ?? 0).toBe(0);
+
+    table.startHand();
+    // Call / check to flop.
+    const actor = table.getPublicState().currentActorSeat!;
+    table.applyAction(actor, { type: "call" });
+    const next = table.getPublicState().currentActorSeat!;
+    table.applyAction(next, { type: "check" });
+    expect(table.getPublicState().phase).toBe("flop");
+
+    stats = table.getFunStats();
+    expect(stats.handsDealtBySeat[0] + stats.handsDealtBySeat[1]).toBe(4);
+    expect(stats.flopsSeenBySeat[0]).toBe(1);
+    expect(stats.flopsSeenBySeat[1]).toBe(1);
   });
 });

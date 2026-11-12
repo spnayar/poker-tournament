@@ -599,8 +599,15 @@ export function parseSettleUpMethods(raw: unknown): SettleUpMethod[] {
 
 /** Persisted per-game fun facts for night recap (user-keyed; showdown cards only). */
 export const GameFunStatsSchema = z.object({
+  /** Primary pot winners only (largest chip share per hand). */
   handsWonByUserId: z.record(z.string(), z.number().int().nonnegative()),
   knockoutsByUserId: z.record(z.string(), z.number().int().nonnegative()),
+  handsDealtByUserId: z
+    .record(z.string(), z.number().int().nonnegative())
+    .default({}),
+  flopsSeenByUserId: z
+    .record(z.string(), z.number().int().nonnegative())
+    .default({}),
   largestPot: z
     .object({
       amountChips: z.number().int().nonnegative(),
@@ -624,6 +631,8 @@ export function emptyGameFunStats(): GameFunStats {
   return {
     handsWonByUserId: {},
     knockoutsByUserId: {},
+    handsDealtByUserId: {},
+    flopsSeenByUserId: {},
     largestPot: null,
     bestHand: null,
   };
