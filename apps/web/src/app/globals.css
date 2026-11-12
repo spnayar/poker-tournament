@@ -194,15 +194,13 @@ body {
 }
 
 /*
-  Zoom Meeting SDK table faces — content-sized column LEFT of the table (lg+),
-  compact strip after Action Log on phone. Ribbon sized to video-on count
-  (max 9); Zoom chrome (shield / grid / menu) forced off. Cover-fill thumbs
-  (no letterbox bars inside the tile).
+  Zoom table faces — custom landscape 16:9 stack (mock match).
+  Meeting SDK gallery renders offscreen; we blit into .zoom-face-tile.
+  lg+: column LEFT of table. Phone: compact strip after Action Log.
 */
 .zoom-faces-column {
   width: 100%;
   max-width: 100%;
-  /* collapsed until Show faces — still mounts SDK root for init */
   max-height: 0;
   opacity: 0;
   pointer-events: none;
@@ -217,72 +215,102 @@ body {
 }
 
 .zoom-faces-column[data-expanded="true"] {
-  max-height: 6.5rem; /* phone strip ≈ one cover cell */
+  /* phone: one landscape tile (+ waiting copy) */
+  max-height: 7.5rem;
   opacity: 1;
   pointer-events: auto;
+  overflow-y: auto;
 }
 
-/* Match the table play row breakpoint (lg:flex-row). */
 @media (min-width: 1024px) {
   .zoom-faces-column {
     width: 0;
     max-height: none;
-    /* Size to active thumbs — do not stretch empty column height. */
     align-self: flex-start;
     height: auto;
   }
 
   .zoom-faces-column[data-expanded="true"] {
-    /* keep in sync with ZOOM_FACES_COLUMN_WIDTH (120) */
-    width: 7.5rem;
+    /* keep in sync with ZOOM_FACES_TILE_WIDTH (168) */
+    width: 10.5rem;
     max-height: none;
     height: auto;
     align-self: flex-start;
     min-height: 0;
+    overflow: visible;
   }
 }
 
-.zoom-faces-thumb {
-  --zoom-sdk-w: 240px;
-  --zoom-sdk-h: 135px;
-  --zoom-scale-x: 0.5;
-  --zoom-scale-y: 0.5;
+.zoom-faces-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin: 0 auto;
+}
+
+.zoom-face-tile {
   position: relative;
-  border-radius: 0.375rem;
-  border: 1px solid color-mix(in srgb, var(--accent-emerald) 45%, var(--hairline));
-  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
-  overflow: hidden;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
   flex-shrink: 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent-emerald) 40%, var(--hairline));
+  background: #0f172a;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
 }
 
-.zoom-faces-thumb:not(.zoom-faces-thumb--visible) {
-  border-color: transparent;
-  background: transparent;
+.zoom-face-tile__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.zoom-faces-thumb__scale {
+.zoom-face-tile__name {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: var(--zoom-sdk-w);
-  height: var(--zoom-sdk-h);
-  transform-origin: top left;
-  transform: scale(var(--zoom-scale-x), var(--zoom-scale-y));
+  left: 0.35rem;
+  bottom: 0.3rem;
+  z-index: 2;
+  max-width: calc(100% - 0.7rem);
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.72);
+  color: #f8fafc;
+  font-size: 9px;
+  line-height: 1.25;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/*
+  Offscreen high-res Meeting SDK gallery — media source for blits.
+  Keep opacity/position offscreen but NOT visibility:hidden (some browsers
+  pause video decode when visibility is hidden).
+*/
+.zoom-faces-sdk-engine {
+  position: fixed !important;
+  left: -10000px !important;
+  top: 0 !important;
+  opacity: 0.01 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  z-index: 0 !important;
+  /* Do not use visibility:hidden — WebKit may stall canvas/video. */
 }
 
 .zoom-faces-sdk-root {
   position: relative;
-  width: var(--zoom-sdk-w);
-  height: var(--zoom-sdk-h);
+  width: 100%;
+  height: 100%;
   overflow: hidden !important;
   background: #0f172a;
-  /* Keep Meeting SDK suspension/popper from escaping the left column. */
-  contain: strict;
   isolation: isolate;
 }
 
-/* Zoom chrome — root-scoped + html.zoom-faces-active for portaled UI. */
+/* Nuke Zoom chrome everywhere while faces are active (portaled + in-engine). */
 html.zoom-faces-active .suspension-header,
 html.zoom-faces-active .meeting-info-container,
 html.zoom-faces-active .meeting-info-container__inner-icons,
@@ -305,10 +333,6 @@ html.zoom-faces-active .avatar-more,
 html.zoom-faces-active .avatar-more-xs-btn,
 #zoom-meeting-sdk-root .suspension-header,
 #zoom-meeting-sdk-root .meeting-info-container,
-#zoom-meeting-sdk-root .meeting-info-container__inner-icons,
-#zoom-meeting-sdk-root .meeting-info-container__wrapper,
-#zoom-meeting-sdk-root .meeting-info-encryption-icon__icon-wrap,
-#zoom-meeting-sdk-root .meeting-info-encryption-icon__button-wrap,
 #zoom-meeting-sdk-root [class*="meeting-info"],
 #zoom-meeting-sdk-root [class*="encryption-icon"],
 #zoom-meeting-sdk-root [class*="suspension-header"],
@@ -338,68 +362,4 @@ html.zoom-faces-active .avatar-more-xs-btn,
   pointer-events: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
-}
-
-/* No empty placeholders for cameras off — hide avatar-only tiles. */
-#zoom-meeting-sdk-root .gallery-video-container__video-frame:has(.video-avatar__avatar-img):not(:has(video)):not(:has(canvas)),
-#zoom-meeting-sdk-root .mobile-gallery-video-container__video-frame:has(.video-avatar__avatar-img):not(:has(video)):not(:has(canvas)),
-#zoom-meeting-sdk-root .video-avatar__avatar:has(.video-avatar__avatar-img):not(:has(video)):not(:has(canvas)) {
-  display: none !important;
-}
-
-#zoom-meeting-sdk-root .suspension-window,
-#zoom-meeting-sdk-root .suspension-content,
-#zoom-meeting-sdk-root .suspension-content2,
-#zoom-meeting-sdk-root .suspension-content3,
-#zoom-meeting-sdk-root .react-draggable,
-#zoom-meeting-sdk-root .gallery-video-container__main-view,
-#zoom-meeting-sdk-root .speaker-active-container__main-view,
-#zoom-meeting-sdk-root [class*="react-draggable"] {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: auto !important;
-  bottom: auto !important;
-  inset: 0 auto auto 0 !important;
-  transform: none !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  height: 100% !important;
-  max-height: 100% !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  cursor: default !important;
-  margin: 0 !important;
-  overflow: hidden !important;
-  background: transparent !important;
-}
-
-/* Cover-fill face thumbs — crop edges rather than letterbox black bars. */
-#zoom-meeting-sdk-root video,
-#zoom-meeting-sdk-root canvas,
-#zoom-meeting-sdk-root .suspension-canvas,
-#zoom-meeting-sdk-root .suspension-img-wrapper img,
-#zoom-meeting-sdk-root .gallery-video-container__video-stream,
-#zoom-meeting-sdk-root .gallery-video-container__video-frame,
-#zoom-meeting-sdk-root .speaker-active-container__video-frame,
-#zoom-meeting-sdk-root .speaker-active-container__video-frame video,
-#zoom-meeting-sdk-root .speaker-active-container__video-frame canvas,
-#zoom-meeting-sdk-root .video-avatar__avatar-video,
-#zoom-meeting-sdk-root .video-avatar__avatar-video video,
-#zoom-meeting-sdk-root .video-avatar__avatar-video canvas {
-  object-fit: cover !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none !important;
-  max-height: none !important;
-}
-
-/* Tiny optional name tags — don't compete with the table. */
-#zoom-meeting-sdk-root .suspension-user-name,
-#zoom-meeting-sdk-root .video-avatar__avatar-name,
-#zoom-meeting-sdk-root .video-avatar__name-tag {
-  font-size: 9px !important;
-  line-height: 1.1 !important;
-  max-width: 90% !important;
-  padding: 1px 4px !important;
 }
