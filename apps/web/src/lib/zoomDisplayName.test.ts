@@ -1,5 +1,37 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { matchSpeakerUserIds, normalizeZoomDisplayName } from "./zoomDisplayName";
+import {
+  matchSpeakerUserIds,
+  normalizeZoomDisplayName,
+  ZOOM_MIRROR_PARTICIPANT_NAME,
+} from "./zoomDisplayName";
+
+const webSrc = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+describe("ZOOM_MIRROR_PARTICIPANT_NAME", () => {
+  it("is the Poker Table Club brand for in-table Meeting SDK joins", () => {
+    expect(ZOOM_MIRROR_PARTICIPANT_NAME).toBe("The Poker Table Club");
+  });
+
+  it("is what signature API and ZoomMirrorStrip join with (not session name)", () => {
+    const signatureRoute = readFileSync(
+      join(webSrc, "app/api/tournaments/[id]/zoom/signature/route.ts"),
+      "utf8"
+    );
+    const strip = readFileSync(
+      join(webSrc, "components/table/ZoomMirrorStrip.tsx"),
+      "utf8"
+    );
+    expect(signatureRoute).toContain("ZOOM_MIRROR_PARTICIPANT_NAME");
+    expect(signatureRoute).not.toMatch(/session\.user\.name/);
+    expect(strip).toContain("ZOOM_MIRROR_PARTICIPANT_NAME");
+    expect(strip).toMatch(
+      /const userName = ZOOM_MIRROR_PARTICIPANT_NAME/
+    );
+  });
+});
 
 describe("normalizeZoomDisplayName", () => {
   it("collapses punctuation and case", () => {

@@ -11,7 +11,10 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { matchSpeakerUserIds } from "@/lib/zoomDisplayName";
+import {
+  matchSpeakerUserIds,
+  ZOOM_MIRROR_PARTICIPANT_NAME,
+} from "@/lib/zoomDisplayName";
 import {
   loadZoomMtgEmbedded,
   type ZoomEmbeddedClient,
@@ -298,10 +301,9 @@ export function ZoomMirrorProvider({
       client.on?.("user-removed", onRosterChange);
       client.on?.("user-updated", onRosterChange);
 
-      const userName =
-        typeof data.userName === "string" && data.userName.trim()
-          ? data.userName.trim()
-          : "Player";
+      // Always brand — never the signed-in seat name. Meeting SDK join has no
+      // avatar/userPhoto option for this anonymous mirror participant.
+      const userName = ZOOM_MIRROR_PARTICIPANT_NAME;
       const meetingNumber = String(data.meetingNumber ?? "").trim();
       const password =
         typeof data.password === "string" ? data.password : "";

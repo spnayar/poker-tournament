@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@poker/db";
+import { ZOOM_MIRROR_PARTICIPANT_NAME } from "@/lib/zoomDisplayName";
 import {
   readZoomMeetingSdkCredentials,
   signZoomMeetingSdkJwt,
@@ -40,7 +41,6 @@ export async function POST(
         where: { userId: session.user.id },
         select: { userId: true },
       },
-      host: { select: { id: true, displayName: true } },
     },
   });
 
@@ -73,11 +73,6 @@ export async function POST(
     );
   }
 
-  const userName =
-    session.user.name?.trim() ||
-    (isHost ? tournament.host.displayName?.trim() : "") ||
-    "Player";
-
   const signature = signZoomMeetingSdkJwt({
     clientId: creds.clientId,
     clientSecret: creds.clientSecret,
@@ -89,7 +84,8 @@ export async function POST(
     signature,
     meetingNumber: String(tournament.zoomMeetingNumber),
     password,
-    userName,
+    /** In-table faces session — brand name, not the signed-in user. */
+    userName: ZOOM_MIRROR_PARTICIPANT_NAME,
     /** Client must keep SDK audio off — Zoom app owns the call. */
     audioPolicy: "mirror_video_only",
   });
