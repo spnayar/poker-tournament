@@ -197,7 +197,7 @@ export function ActionLogPanel({
   }, [actionLog.length, scrollToLatest]);
 
   return (
-    <aside className="table-chrome w-full flex-1 min-h-0 rounded-md p-2 sm:p-2.5 flex flex-col overflow-hidden relative z-0">
+    <aside className="table-chrome w-full sm:w-64 xl:w-72 flex-1 min-h-0 rounded-md p-2 sm:p-2.5 flex flex-col overflow-hidden relative z-0">
       <div className="mb-1.5 shrink-0 flex items-baseline justify-between gap-2">
         <h2 className="text-xs font-semibold text-slate-200 tracking-tight">
           Action Log
