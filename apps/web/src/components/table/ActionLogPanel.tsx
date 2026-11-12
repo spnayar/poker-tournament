@@ -10,6 +10,7 @@ import {
 } from "react";
 import { formatRankDisplay } from "@/lib/cardDisplay";
 import { getAvatarUrl } from "@/lib/utils";
+import { InstagramFollowLink } from "@/components/InstagramFollowLink";
 import type { ActionLogEntry } from "@poker/protocol";
 import { ZoomActionLogBanner } from "./ZoomActionLogBanner";
 import { groupActionLogNewestFirst } from "./actionLogView";
@@ -309,6 +310,10 @@ export function ActionLogPanel({
           })}
         </ul>
       )}
+
+      <div className="mt-1.5 pt-1.5 border-t border-slate-800/80 shrink-0 flex justify-center">
+        <InstagramFollowLink variant="chrome" />
+      </div>
     </aside>
   );
 }

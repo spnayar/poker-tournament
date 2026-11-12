@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { CLUB_CONTACT_EMAIL } from "@/lib/clubContact";
+import { CLUB_CONTACT_EMAIL, CLUB_INSTAGRAM_URL } from "@/lib/clubContact";
 import { EmailLoginForm } from "@/components/EmailLoginForm";
 import RegisterPage from "../register/page";
 import LoginPage from "./page";
@@ -32,21 +32,22 @@ function text(html: string): string {
 }
 
 describe("login access paths", () => {
-  it("lists a magic link, an invite signup, and the admin inbox", () => {
+  it("leads with email magic link and a light contact path", () => {
     const html = renderToStaticMarkup(<LoginPage />);
     const visible = text(html);
 
-    expect(visible).toContain("1. Already signed up");
-    expect(visible).toContain("magic link");
+    expect(visible).toContain("Poker Night");
+    expect(visible).toContain("No password");
     expect(html).toContain("Email me a login link");
-    expect(visible).toContain("2. You were invited");
+    expect(visible).not.toContain("1. Already signed up");
+    expect(visible).not.toContain("2. You were invited");
+    expect(visible).not.toContain("3. Neither of those");
+    expect(html).not.toContain('href="/register"');
     expect(visible).toContain("club invite code");
-    expect(visible).toContain("game night code");
-    expect(html).toContain('href="/register"');
-    expect(visible).toContain("3. Neither of those");
-    expect(visible).toContain("can't access the site yet");
     expect(html).toContain(`href="mailto:${CLUB_CONTACT_EMAIL}"`);
     expect(html).toContain(CLUB_CONTACT_EMAIL);
+    expect(html).toContain(CLUB_INSTAGRAM_URL);
+    expect(visible).toContain("@pokertableclub");
   });
 
   it("tells an unknown email they need an invite code or the admin", () => {
@@ -55,11 +56,9 @@ describe("login access paths", () => {
     );
     const visible = text(html);
 
-    expect(visible).toContain("isn't signed up");
+    expect(visible).toContain("No account for this email yet");
     expect(visible).toContain("club invite code");
-    expect(visible).toContain("game night code does not create an account");
-    expect(visible).toContain("login link won't get you in");
-    expect(visible).toContain("can't access the site yet");
+    expect(visible).toContain("not a game night code");
     expect(html).toContain(`href="mailto:${CLUB_CONTACT_EMAIL}"`);
     expect(html).toContain("Create account and send link");
   });
