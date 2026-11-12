@@ -26,7 +26,8 @@ export function inviteFromPastPlayer(player: PastPlayer): InviteDraft {
 
 export function inviteFromTypedEmail(
   raw: string,
-  suggestions: PastPlayer[] = []
+  suggestions: PastPlayer[] = [],
+  displayName?: string | null
 ): InviteDraft | null {
   const email = normalizeInviteEmail(raw);
   if (!isValidInviteEmail(email)) return null;
@@ -34,7 +35,11 @@ export function inviteFromTypedEmail(
     (p) => normalizeInviteEmail(p.email) === email
   );
   if (known) return inviteFromPastPlayer(known);
-  return { email, displayName: null, avatarUrl: null };
+  const name =
+    typeof displayName === "string" && displayName.trim().length >= 2
+      ? displayName.trim().slice(0, 32)
+      : null;
+  return { email, displayName: name, avatarUrl: null };
 }
 
 /** Adds a person to the pending-send list. No-op (same list) if already present. */
@@ -48,11 +53,21 @@ export function addInvite(list: InviteDraft[], invite: InviteDraft): InviteDraft
 export function addInviteFromEmail(
   list: InviteDraft[],
   raw: string,
-  suggestions: PastPlayer[] = []
+  suggestions: PastPlayer[] = [],
+  displayName?: string | null
 ): { list: InviteDraft[]; ok: boolean } {
-  const invite = inviteFromTypedEmail(raw, suggestions);
+  const invite = inviteFromTypedEmail(raw, suggestions, displayName);
   if (!invite) return { list, ok: false };
   return { list: addInvite(list, invite), ok: true };
+}
+
+export function invitePeoplePayload(
+  list: InviteDraft[]
+): { email: string; displayName: string | null }[] {
+  return list.map((row) => ({
+    email: row.email,
+    displayName: row.displayName,
+  }));
 }
 
 export function removeInvite(list: InviteDraft[], email: string): InviteDraft[] {

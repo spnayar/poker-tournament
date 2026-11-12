@@ -161,6 +161,8 @@ export const TableStateSchema = z.object({
   currentActorSeat: z.number().nullable(),
   /** Seat that may start the next hand (set when phase is hand-complete / showdown). */
   nextDealerSeat: z.number().nullable().optional(),
+  /** Host confirmed roster: seats + dealer randomized; waiting for dealer to deal. */
+  seatingReady: z.boolean().optional(),
   smallBlind: z.number(),
   bigBlind: z.number(),
   blindLevel: z.number(),
@@ -208,6 +210,8 @@ export const ClientEvents = {
   ACTION: "player:action",
   RECONNECT: "player:reconnect",
   START_NEXT_HAND: "hand:start-next",
+  /** Host: randomize seats + dealer before first deal (no auto-deal). */
+  READY_SEATING: "seating:ready",
   PAUSE_BLIND_TIMER: "blind:pause",
   RESUME_BLIND_TIMER: "blind:resume",
   ADVANCE_BLIND_LEVEL: "blind:advance",

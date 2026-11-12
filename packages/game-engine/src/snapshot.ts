@@ -9,6 +9,8 @@ export interface TableSnapshot {
   board: Card[];
   phase: TablePhase;
   dealerSeat: number;
+  skipNextDealerMove?: boolean;
+  seatingReady?: boolean;
   currentActorSeat: number | null;
   smallBlind: number;
   bigBlind: number;

@@ -1,5 +1,5 @@
 import { prisma } from "@poker/db";
-import { EMAIL_RE } from "./register";
+import { EMAIL_RE, invitedUserCreateData } from "./register";
 import { sendAppEmail } from "./mailer";
 import { sendLinkLimiter } from "./rateLimit";
 import { formatCents, LEDGER_DISCLAIMER } from "./utils";
@@ -13,8 +13,11 @@ import {
 } from "./emailLayout";
 import { isProduction } from "./emailLayout";
 import { joinPath } from "./joinNight";
+import { createEmailCallbackUrl } from "./magicLinkToken";
+import { emailMaxAgeSec } from "./sendMagicLink";
 
 export const MAX_INVITE_EMAILS = 20;
+export const DISPLAY_NAME_MAX = 32;
 
 export type PastPlayer = {
   userId: string;
@@ -23,49 +26,95 @@ export type PastPlayer = {
   avatarUrl: string | null;
 };
 
+export type InvitePerson = {
+  email: string;
+  displayName?: string | null;
+};
+
 export type InviteEmailResult = {
   email: string;
   status: "sent" | "skipped" | "rate_limited" | "self";
   id?: string | null;
+  accountCreated?: boolean;
 };
 
 export function parseInviteEmails(
   input: unknown
 ): { ok: true; emails: string[] } | { ok: false; error: string } {
-  let raw: string[] = [];
+  const people = parseInvitePeople(input);
+  if (!people.ok) return people;
+  return { ok: true, emails: people.people.map((p) => p.email) };
+}
+
+export function normalizeOptionalDisplayName(
+  raw: unknown
+): string | null {
+  if (typeof raw !== "string") return null;
+  const name = raw.trim().replace(/\s+/g, " ");
+  if (name.length < 2) return null;
+  return name.slice(0, DISPLAY_NAME_MAX);
+}
+
+/**
+ * Accepts string / string[] of emails, or `{ email, displayName? }[]`.
+ */
+export function parseInvitePeople(
+  input: unknown
+): { ok: true; people: InvitePerson[] } | { ok: false; error: string } {
+  let raw: InvitePerson[] = [];
+
   if (typeof input === "string") {
-    raw = input.split(/[,;\s]+/);
+    raw = input
+      .split(/[,;\s]+/)
+      .filter(Boolean)
+      .map((email) => ({ email }));
   } else if (Array.isArray(input)) {
-    raw = input.flatMap((value) =>
-      typeof value === "string" ? value.split(/[,;\s]+/) : []
-    );
+    for (const value of input) {
+      if (typeof value === "string") {
+        for (const part of value.split(/[,;\s]+/)) {
+          if (part.trim()) raw.push({ email: part });
+        }
+      } else if (value && typeof value === "object" && "email" in value) {
+        const email =
+          typeof (value as { email: unknown }).email === "string"
+            ? (value as { email: string }).email
+            : "";
+        const displayName = normalizeOptionalDisplayName(
+          (value as { displayName?: unknown }).displayName
+        );
+        raw.push({ email, displayName });
+      }
+    }
   } else {
     return { ok: false, error: "Add at least one email" };
   }
 
-  const emails: string[] = [];
+  const people: InvitePerson[] = [];
   const seen = new Set<string>();
-  for (const part of raw) {
-    const email = part.trim().toLowerCase();
+  for (const row of raw) {
+    const email = row.email.trim().toLowerCase();
     if (!email) continue;
     if (!EMAIL_RE.test(email)) {
-      return { ok: false, error: `Invalid email: ${part.trim()}` };
+      return { ok: false, error: `Invalid email: ${row.email.trim()}` };
     }
     if (seen.has(email)) continue;
     seen.add(email);
-    emails.push(email);
+    people.push({
+      email,
+      displayName: normalizeOptionalDisplayName(row.displayName ?? null),
+    });
   }
 
-  if (emails.length === 0) {
+  if (people.length === 0) {
     return { ok: false, error: "Add at least one email" };
   }
-  if (emails.length > MAX_INVITE_EMAILS) {
+  if (people.length > MAX_INVITE_EMAILS) {
     return {
       ok: false,
       error: `At most ${MAX_INVITE_EMAILS} emails at a time`,
     };
   }
-  return { ok: true, emails };
+  return { ok: true, people };
 }
 
 export function inviteJoinUrl(joinCode: string): string {
@@ -78,6 +127,8 @@ export function gameNightInviteHtml(opts: {
   joinCode: string;
   buyInCents: number;
   joinUrl: string;
+  magicUrl?: string | null;
+  isNewAccount?: boolean;
   zoomJoinUrl?: string | null;
 }): string {
   const host = escapeHtml(opts.hostDisplayName);
@@ -85,6 +136,8 @@ export function gameNightInviteHtml(opts: {
   const code = escapeHtml(opts.joinCode);
   const buyIn = escapeHtml(formatCents(opts.buyInCents));
   const zoomJoinUrl = opts.zoomJoinUrl?.trim() || null;
+  const magicUrl = opts.magicUrl?.trim() || null;
+  const minutes = Math.round(emailMaxAgeSec() / 60);
 
   return clubEmailHtml({
     heading: "Poker Night",
@@ -92,6 +145,19 @@ export function gameNightInviteHtml(opts: {
       emailBody(
         `${host} invited you to <strong style="color:#e2e8f0;">${night}</strong>.`
       ),
+      magicUrl
+        ? [
+            emailBody(
+              opts.isNewAccount
+                ? "Use this one-time link to create your account and sign in — no password or club invite code needed."
+                : "Use this one-time link to sign in on this device, then you will land in the game night."
+            ),
+            emailCta(magicUrl, opts.isNewAccount ? "Create account & join" : "Sign in & join"),
+            emailFinePrint(
+              `This login link expires in ${minutes} minutes.`
+            ),
+          ].join("\n    ")
+        : "",
       `<p style="margin:20px 0 8px;color:#94a3b8;font-size:13px;">Join code</p>
     <p style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:0.28em;font-weight:700;color:#34d399;">${code}</p>`,
       emailBody(`Buy-in (ledger): ${buyIn}`),
@@ -105,7 +171,7 @@ export function gameNightInviteHtml(opts: {
           ].join("\n    ")
         : "",
       emailFinePrint(
-        "If you are not signed in, this link opens a login page and we email a magic link. New players still need the club invite code to create an account. After you sign in you land in this game night."
+        "Already signed in? The join link takes you straight to the lobby. New players get an account from this invite — no separate club code."
       ),
       emailFinePrint(LEDGER_DISCLAIMER),
     ]
@@ -120,21 +186,35 @@ export function gameNightInviteText(opts: {
   joinCode: string;
   buyInCents: number;
   joinUrl: string;
+  magicUrl?: string | null;
+  isNewAccount?: boolean;
   zoomJoinUrl?: string | null;
 }): string {
   const lines = [
     `Poker Night`,
     `${opts.hostDisplayName} invited you to ${opts.nightName}.`,
+  ];
+  const magicUrl = opts.magicUrl?.trim();
+  if (magicUrl) {
+    const minutes = Math.round(emailMaxAgeSec() / 60);
+    lines.push(
+      opts.isNewAccount
+        ? `Create your account and sign in (expires in ${minutes} minutes):`
+        : `Sign in (expires in ${minutes} minutes):`,
+      magicUrl
+    );
+  }
+  lines.push(
     `Join code: ${opts.joinCode}`,
     `Buy-in (ledger): ${formatCents(opts.buyInCents)}`,
-    `Join: ${opts.joinUrl}`,
-  ];
+    `Join: ${opts.joinUrl}`
+  );
   const zoomJoinUrl = opts.zoomJoinUrl?.trim();
   if (zoomJoinUrl) {
     lines.push(`Join Zoom: ${zoomJoinUrl}`);
   }
   lines.push(
-    `If you are not signed in, we will email a login link. New players still need the club invite code to create an account.`,
+    `New players get an account from this invite — no separate club code.`,
     LEDGER_DISCLAIMER
   );
   return lines.join("\n");
@@ -186,8 +266,39 @@ export async function listPastPlayers(opts: {
   return out;
 }
 
+async function ensureInvitedUser(opts: {
+  email: string;
+  displayName?: string | null;
+}): Promise<{ userId: string; created: boolean }> {
+  const email = opts.email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, displayNameSet: true },
+  });
+  if (existing) {
+    const name = normalizeOptionalDisplayName(opts.displayName ?? null);
+    if (name && existing.displayNameSet === false) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { displayName: name, displayNameSet: true },
+      });
+    }
+    return { userId: existing.id, created: false };
+  }
+
+  const name = normalizeOptionalDisplayName(opts.displayName ?? null);
+  const data = invitedUserCreateData(email);
+  if (name) {
+    data.displayName = name;
+    data.displayNameSet = true;
+  }
+  const row = await prisma.user.create({ data });
+  return { userId: row.id, created: true };
+}
+
 export async function sendGameNightInvites(opts: {
-  emails: string[];
+  emails?: string[];
+  people?: InvitePerson[];
   hostEmail: string;
   hostDisplayName: string;
   nightName: string;
@@ -196,29 +307,26 @@ export async function sendGameNightInvites(opts: {
   ip: string;
   zoomJoinUrl?: string | null;
 }): Promise<{ results: InviteEmailResult[]; previewHtml: string; joinUrl: string }> {
+  const people: InvitePerson[] =
+    opts.people ??
+    (opts.emails ?? []).map((email) => ({ email: email.trim().toLowerCase() }));
   const joinUrl = inviteJoinUrl(opts.joinCode);
+  const joinCallbackPath = joinPath(opts.joinCode);
   const zoomJoinUrl = opts.zoomJoinUrl?.trim() || null;
-  const html = gameNightInviteHtml({
-    hostDisplayName: opts.hostDisplayName,
-    nightName: opts.nightName,
-    joinCode: opts.joinCode,
-    buyInCents: opts.buyInCents,
-    joinUrl,
-    zoomJoinUrl,
-  });
-  const text = gameNightInviteText({
-    hostDisplayName: opts.hostDisplayName,
-    nightName: opts.nightName,
-    joinCode: opts.joinCode,
-    buyInCents: opts.buyInCents,
-    joinUrl,
-    zoomJoinUrl,
-  });
   const subject = `You're invited to ${opts.nightName}`;
   const hostEmail = opts.hostEmail.trim().toLowerCase();
   const results: InviteEmailResult[] = [];
+  let previewHtml = gameNightInviteHtml({
+    hostDisplayName: opts.hostDisplayName,
+    nightName: opts.nightName,
+    joinCode: opts.joinCode,
+    buyInCents: opts.buyInCents,
+    joinUrl,
+    zoomJoinUrl,
+  });
 
-  for (const email of opts.emails) {
+  for (const person of people) {
+    const email = person.email.trim().toLowerCase();
     if (email === hostEmail) {
       results.push({ email, status: "self" });
       continue;
@@ -230,11 +338,45 @@ export async function sendGameNightInvites(opts: {
       continue;
     }
 
+    const account = await ensureInvitedUser({
+      email,
+      displayName: person.displayName,
+    });
+
+    const magicUrl = await createEmailCallbackUrl({
+      email,
+      callbackPath: joinCallbackPath,
+    });
+
+    const html = gameNightInviteHtml({
+      hostDisplayName: opts.hostDisplayName,
+      nightName: opts.nightName,
+      joinCode: opts.joinCode,
+      buyInCents: opts.buyInCents,
+      joinUrl,
+      magicUrl,
+      isNewAccount: account.created,
+      zoomJoinUrl,
+    });
+    const text = gameNightInviteText({
+      hostDisplayName: opts.hostDisplayName,
+      nightName: opts.nightName,
+      joinCode: opts.joinCode,
+      buyInCents: opts.buyInCents,
+      joinUrl,
+      magicUrl,
+      isNewAccount: account.created,
+      zoomJoinUrl,
+    });
+    previewHtml = html;
+
     if (!isProduction()) {
-      console.log("[invite] Game night join URL (non-prod):", {
+      console.log("[invite] Game night magic + join (non-prod):", {
         to: email,
         joinUrl,
         joinCode: opts.joinCode,
+        magicUrl,
+        accountCreated: account.created,
         hasZoom: Boolean(zoomJoinUrl),
       });
     }
@@ -247,11 +389,21 @@ export async function sendGameNightInvites(opts: {
     });
 
     if (sent.skipped) {
-      results.push({ email, status: "skipped", id: null });
+      results.push({
+        email,
+        status: "skipped",
+        id: null,
+        accountCreated: account.created,
+      });
       continue;
     }
-    results.push({ email, status: "sent", id: sent.id });
+    results.push({
+      email,
+      status: "sent",
+      id: sent.id,
+      accountCreated: account.created,
+    });
   }
 
-  return { results, previewHtml: html, joinUrl };
+  return { results, previewHtml, joinUrl };
 }

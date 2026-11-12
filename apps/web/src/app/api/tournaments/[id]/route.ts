@@ -164,26 +164,80 @@ export async function POST(
     );
   }
 
-  if (action === "start") {
+  if (action === "open" || action === "start") {
     if (tournament.hostUserId !== session.user.id) {
       return NextResponse.json({ error: "Only host can start" }, { status: 403 });
     }
     if (tournament.status === "FINISHED") {
       return NextResponse.json({ error: "Game night is closed" }, { status: 400 });
     }
-    if (tournament.players.length < 2) {
+
+    const running = tournament.games.find((g) => g.status === "RUNNING");
+    const randomizeSeats = action === "start";
+
+    if (randomizeSeats && tournament.players.length < 2 && !running) {
       return NextResponse.json(
-        { error: "Need at least 2 players" },
+        { error: "Need at least 2 players to randomize seats" },
         { status: 400 }
       );
     }
-    if (tournament.games.some((g) => g.status === "RUNNING")) {
-      return NextResponse.json({ error: "A tournament is already running" }, { status: 400 });
+    if (!randomizeSeats && tournament.players.length < 1) {
+      return NextResponse.json(
+        { error: "Need at least one player" },
+        { status: 400 }
+      );
     }
 
     const control = gameServerControlHeaders();
     if (!control.ok) {
       return NextResponse.json({ error: control.error }, { status: 500 });
+    }
+
+    const gameServerUrl =
+      process.env.GAME_SERVER_URL ?? "http://localhost:3001";
+
+    // Table already open: host Start only randomizes seats + dealer (no deal).
+    if (running) {
+      if (!randomizeSeats) {
+        return NextResponse.json({
+          ok: true,
+          gameId: running.id,
+          gameNumber: running.gameNumber,
+          alreadyOpen: true,
+        });
+      }
+      if (tournament.players.length < 2) {
+        return NextResponse.json(
+          { error: "Need at least 2 players to randomize seats" },
+          { status: 400 }
+        );
+      }
+      try {
+        const readyRes = await fetch(
+          `${gameServerUrl}/tournaments/${id}/ready`,
+          { method: "POST", headers: control.headers }
+        );
+        if (!readyRes.ok) {
+          const text = await readyRes.text();
+          console.error("Game server failed to ready seating:", text);
+          return NextResponse.json(
+            { error: "Could not randomize seats on server" },
+            { status: 500 }
+          );
+        }
+      } catch (err) {
+        console.error("Could not reach game server:", err);
+        return NextResponse.json(
+          { error: "Game server unreachable" },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        gameId: running.id,
+        gameNumber: running.gameNumber,
+        seatingReady: true,
+      });
     }
 
     const lastGame = await prisma.game.findFirst({
@@ -205,10 +259,10 @@ export async function POST(
       data: { status: "RUNNING" },
     });
 
-    const gameServerUrl =
-      process.env.GAME_SERVER_URL ?? "http://localhost:3001";
     try {
-      const beginRes = await fetch(`${gameServerUrl}/tournaments/${id}/begin`, {
+      // open = sit (even alone). start = open + randomize when 2+.
+      const path = randomizeSeats ? "begin" : "open";
+      const beginRes = await fetch(`${gameServerUrl}/tournaments/${id}/${path}`, {
         method: "POST",
         headers: control.headers,
       });
@@ -220,7 +274,7 @@ export async function POST(
             data: { status: "LOBBY" },
           });
         }
-        console.error("Game server failed to begin game:", await beginRes.text());
+        console.error("Game server failed to open/start:", await beginRes.text());
         return NextResponse.json(
           { error: "Could not start tournament on server" },
           { status: 500 }
@@ -241,7 +295,12 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ ok: true, gameId: game.id, gameNumber });
+    return NextResponse.json({
+      ok: true,
+      gameId: game.id,
+      gameNumber,
+      seatingReady: randomizeSeats && tournament.players.length >= 2,
+    });
   }
 
   if (action === "close") {

@@ -137,17 +137,22 @@ export default function TournamentLobbyPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  async function startGame() {
+  async function openOrStart(action: "open" | "start") {
     setActionLoading(true);
     const res = await fetch(`/api/tournaments/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "start" }),
+      body: JSON.stringify({ action }),
     });
     if (res.ok) router.push(`/tournament/${id}/table`);
     else {
       const data = await res.json();
-      alert(data.error || "Could not start tournament");
+      alert(
+        data.error ||
+          (action === "open"
+            ? "Could not open table"
+            : "Could not start tournament")
+      );
     }
     setActionLoading(false);
   }
@@ -426,15 +431,19 @@ export default function TournamentLobbyPage() {
       )}
 
       <div className="flex flex-wrap gap-3">
-        {isHost && tournament.players.length >= 2 && !runningGame && (
+        {isHost && !runningGame && tournament.players.length >= 1 && (
           <button
-            onClick={startGame}
+            onClick={() =>
+              openOrStart(tournament.players.length >= 2 ? "start" : "open")
+            }
             disabled={actionLoading}
             className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 rounded-lg font-semibold disabled:opacity-50 min-w-[140px]"
           >
-            {gamesPlayed === 0
-              ? "Start Tournament 1"
-              : `Start Tournament ${gamesPlayed + 1}`}
+            {tournament.players.length < 2
+              ? "Sit at table"
+              : gamesPlayed === 0
+                ? "Start Tournament 1"
+                : `Start Tournament ${gamesPlayed + 1}`}
           </button>
         )}
         {isHost && gamesPlayed > 0 && !runningGame && (
@@ -459,7 +468,8 @@ export default function TournamentLobbyPage() {
 
       {tournament.players.length < 2 && isHost && gamesPlayed === 0 && (
         <p className="text-slate-400 text-sm text-center mt-4">
-          Share the join code above — waiting for at least one more player.
+          You can sit at the table alone and wait. Invite friends or share the
+          join code — Start randomizes seats once two or more are in.
         </p>
       )}
 

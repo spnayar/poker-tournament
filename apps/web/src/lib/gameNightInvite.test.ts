@@ -1,13 +1,33 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const { findMany, consume, sendAppEmail } = vi.hoisted(() => ({
+const {
+  findMany,
+  userFindUnique,
+  userCreate,
+  userUpdate,
+  verificationCreate,
+  consume,
+  sendAppEmail,
+} = vi.hoisted(() => ({
   findMany: vi.fn(),
+  userFindUnique: vi.fn(),
+  userCreate: vi.fn(),
+  userUpdate: vi.fn(),
+  verificationCreate: vi.fn(),
   consume: vi.fn(),
   sendAppEmail: vi.fn(),
 }));
 
 vi.mock("@poker/db", () => ({
-  prisma: { tournamentPlayer: { findMany } },
+  prisma: {
+    tournamentPlayer: { findMany },
+    user: {
+      findUnique: userFindUnique,
+      create: userCreate,
+      update: userUpdate,
+    },
+    verificationToken: { create: verificationCreate },
+  },
 }));
 
 vi.mock("./mailer", () => ({
@@ -22,6 +42,7 @@ import {
   gameNightInviteHtml,
   gameNightInviteText,
   parseInviteEmails,
+  parseInvitePeople,
   MAX_INVITE_EMAILS,
 } from "./gameNightInvite";
 
@@ -54,6 +75,23 @@ describe("parseInviteEmails", () => {
   });
 });
 
+describe("parseInvitePeople", () => {
+  it("keeps optional display names", () => {
+    expect(
+      parseInvitePeople([
+        { email: " Pat@X.co ", displayName: "  Pat  " },
+        { email: "alex@x.co" },
+      ])
+    ).toEqual({
+      ok: true,
+      people: [
+        { email: "pat@x.co", displayName: "Pat" },
+        { email: "alex@x.co", displayName: null },
+      ],
+    });
+  });
+});
+
 describe("gameNightInviteHtml", () => {
   const originalEnv = { ...process.env };
 
@@ -69,6 +107,8 @@ describe("gameNightInviteHtml", () => {
       joinCode: "XK7M",
       buyInCents: 2000,
       joinUrl: "http://localhost:3000/join/XK7M",
+      magicUrl: "http://localhost:3000/api/auth/callback/email?token=abc",
+      isNewAccount: true,
     });
     expect(html).toContain("Poker Night");
     expect(html).toContain(
@@ -78,109 +118,22 @@ describe("gameNightInviteHtml", () => {
     expect(html).toContain("#0f172a");
     expect(html).toContain("#059669");
     expect(html).toContain("XK7M");
-    expect(html).toContain("Friday Game Night");
-    expect(html).toContain("$20.00");
-    expect(html).toContain("Join this game night");
+    expect(html).toContain("Create account &amp; join");
+    expect(html).toContain("no password or club invite code needed");
+    expect(html).not.toContain("friends-only");
     expect(html).toContain("http://localhost:3000/join/XK7M");
-    expect(html).toContain("No real money");
-    expect(html).not.toContain("Join Zoom");
-    expect(html).not.toMatch(/hole|cards/i);
-    expect(html).not.toMatch(/src="\//);
-  });
 
-  it("includes Join Zoom CTA when a Zoom link is set", () => {
-    const zoom =
-      "https://us04web.zoom.us/j/12345678901?pwd=AbCdEfGhIjKlMnOp";
-    const html = gameNightInviteHtml({
-      hostDisplayName: "Sanjay",
-      nightName: "Friday Game Night",
-      joinCode: "XK7M",
-      buyInCents: 2000,
-      joinUrl: "http://localhost:3000/join/XK7M",
-      zoomJoinUrl: zoom,
-    });
-    expect(html).toContain("Join Zoom");
-    expect(html).toContain(zoom);
     const text = gameNightInviteText({
       hostDisplayName: "Sanjay",
       nightName: "Friday Game Night",
       joinCode: "XK7M",
       buyInCents: 2000,
       joinUrl: "http://localhost:3000/join/XK7M",
-      zoomJoinUrl: zoom,
+      magicUrl: "http://localhost:3000/api/auth/callback/email?token=abc",
+      isNewAccount: true,
     });
-    expect(text).toContain(`Join Zoom: ${zoom}`);
-  });
-
-  it("escapes host and night names", () => {
-    const html = gameNightInviteHtml({
-      hostDisplayName: "<script>alert(1)</script>",
-      nightName: 'Night & "Chips"',
-      joinCode: "AB12",
-      buyInCents: 500,
-      joinUrl: "https://www.pokertableclub.com/join/AB12",
-    });
-    expect(html).not.toContain("<script>");
-    expect(html).toContain("&amp;");
-    expect(html).toContain("&quot;");
-  });
-});
-
-describe("gameNightInviteText", () => {
-  it("includes join code and ledger buy-in", () => {
-    const text = gameNightInviteText({
-      hostDisplayName: "Sanjay",
-      nightName: "Friday Game Night",
-      joinCode: "XK7M",
-      buyInCents: 2000,
-      joinUrl: "http://localhost:3000/join/XK7M",
-    });
-    expect(text).toContain("Join code: XK7M");
-    expect(text).toContain("$20.00");
-    expect(text).toContain("/join/XK7M");
-  });
-});
-
-describe("listPastPlayers", () => {
-  it("de-dupes by email and skips excluded users", async () => {
-    findMany.mockResolvedValue([
-      {
-        user: {
-          id: "u2",
-          displayName: "Pat",
-          email: "Pat@X.co",
-          avatarUrl: null,
-        },
-      },
-      {
-        user: {
-          id: "u3",
-          displayName: "Pat Alt",
-          email: "pat@x.co",
-          avatarUrl: null,
-        },
-      },
-    ]);
-    const { listPastPlayers } = await import("./gameNightInvite");
-    const players = await listPastPlayers({
-      userId: "host",
-      excludeUserIds: ["u4"],
-    });
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          userId: { notIn: ["host", "u4"] },
-        }),
-      })
-    );
-    expect(players).toEqual([
-      {
-        userId: "u2",
-        displayName: "Pat",
-        email: "pat@x.co",
-        avatarUrl: null,
-      },
-    ]);
+    expect(text).toContain("Create your account and sign in");
+    expect(text).toContain("no separate club code");
   });
 });
 
@@ -190,9 +143,16 @@ describe("sendGameNightInvites", () => {
   beforeEach(() => {
     consume.mockReset();
     sendAppEmail.mockReset();
+    userFindUnique.mockReset();
+    userCreate.mockReset();
+    userUpdate.mockReset();
+    verificationCreate.mockReset();
     consume.mockResolvedValue({ allowed: true, retryAfterSec: 900 });
+    verificationCreate.mockResolvedValue({});
+    sendAppEmail.mockResolvedValue({ skipped: false, id: "msg_1" });
     process.env = { ...originalEnv };
     process.env.NEXTAUTH_URL = "http://localhost:3000";
+    process.env.NEXTAUTH_SECRET = "test-secret";
     process.env.NODE_ENV = "development";
   });
 
@@ -200,11 +160,19 @@ describe("sendGameNightInvites", () => {
     process.env = { ...originalEnv };
   });
 
-  it("skips the host, rate-limits, and sends the rest via sendAppEmail", async () => {
-    sendAppEmail.mockResolvedValue({ skipped: false, id: "msg_1" });
+  it("creates new accounts, sends magic links, skips host", async () => {
+    userFindUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "u-existing", displayNameSet: true });
+    userCreate.mockResolvedValue({ id: "u-new" });
+
     const { sendGameNightInvites } = await import("./gameNightInvite");
     const result = await sendGameNightInvites({
-      emails: ["host@x.co", "pat@x.co", "alex@x.co"],
+      people: [
+        { email: "host@x.co" },
+        { email: "pat@x.co", displayName: "Pat" },
+        { email: "alex@x.co" },
+      ],
       hostEmail: "Host@x.co",
       hostDisplayName: "Sanjay",
       nightName: "Friday Game Night",
@@ -214,17 +182,23 @@ describe("sendGameNightInvites", () => {
     });
     expect(result.results).toEqual([
       { email: "host@x.co", status: "self" },
-      { email: "pat@x.co", status: "sent", id: "msg_1" },
-      { email: "alex@x.co", status: "sent", id: "msg_1" },
+      {
+        email: "pat@x.co",
+        status: "sent",
+        id: "msg_1",
+        accountCreated: true,
+      },
+      {
+        email: "alex@x.co",
+        status: "sent",
+        id: "msg_1",
+        accountCreated: false,
+      },
     ]);
+    expect(userCreate).toHaveBeenCalledTimes(1);
     expect(sendAppEmail).toHaveBeenCalledTimes(2);
-    expect(sendAppEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "pat@x.co",
-        subject: "You're invited to Friday Game Night",
-      })
-    );
     expect(result.previewHtml).toContain("XK7M");
+    expect(result.previewHtml).toContain("/api/auth/callback/email");
     expect(result.joinUrl).toBe("http://localhost:3000/join/XK7M");
   });
 

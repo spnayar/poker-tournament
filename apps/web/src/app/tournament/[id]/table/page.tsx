@@ -112,6 +112,7 @@ export default function TablePage() {
   const [zoomMeetingNumber, setZoomMeetingNumber] = useState<string | null>(
     null
   );
+  const [hostUserId, setHostUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -127,22 +128,34 @@ export default function TablePage() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/tournaments/${tournamentId}/zoom`);
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
+        const [zoomRes, tournamentRes] = await Promise.all([
+          fetch(`/api/tournaments/${tournamentId}/zoom`),
+          fetch(`/api/tournaments/${tournamentId}`),
+        ]);
         if (cancelled) return;
-        const url =
-          typeof data?.zoom?.zoomJoinUrl === "string"
-            ? data.zoom.zoomJoinUrl
-            : null;
-        setZoomJoinUrl(url);
-        setZoomMeetingNumber(
-          typeof data?.zoom?.zoomMeetingNumber === "string"
-            ? data.zoom.zoomMeetingNumber
-            : null
-        );
+        if (zoomRes.ok) {
+          const data = await zoomRes.json();
+          if (cancelled) return;
+          const url =
+            typeof data?.zoom?.zoomJoinUrl === "string"
+              ? data.zoom.zoomJoinUrl
+              : null;
+          setZoomJoinUrl(url);
+          setZoomMeetingNumber(
+            typeof data?.zoom?.zoomMeetingNumber === "string"
+              ? data.zoom.zoomMeetingNumber
+              : null
+          );
+        }
+        if (tournamentRes.ok) {
+          const data = await tournamentRes.json();
+          if (cancelled) return;
+          if (typeof data?.tournament?.hostUserId === "string") {
+            setHostUserId(data.tournament.hostUserId);
+          }
+        }
       } catch {
-        // Zoom banner is optional; table still works without it.
+        // Zoom banner / host hint are optional; table still works without them.
       }
     })();
     return () => {
@@ -527,6 +540,13 @@ export default function TablePage() {
     socketRef.current.emit(ClientEvents.ACTION, action);
   }
 
+  function readySeating() {
+    if (!socketRef.current || hostActionLoading || gameFinished) return;
+    setHostActionLoading(true);
+    socketRef.current.emit(ClientEvents.READY_SEATING);
+    window.setTimeout(() => setHostActionLoading(false), 800);
+  }
+
   function dealNextHand() {
     if (!socketRef.current || dealNextPending || gameFinished) return;
     setDealNextPending(true);
@@ -638,10 +658,27 @@ export default function TablePage() {
   const mySeat = tableState.seats.find((s) => s.userId === session?.user?.id);
   const isHost =
     session?.user?.id ===
-    (gameFinished?.hostUserId ?? blindTimer?.hostUserId ?? undefined);
+    (gameFinished?.hostUserId ??
+      blindTimer?.hostUserId ??
+      hostUserId ??
+      undefined);
   // Phase may reach hand-complete during an all-in runout — wait for board + result.
   const handCompletePhase =
     tableState.phase === "hand-complete" && !gameFinished;
+  const seatingReady = tableState.seatingReady === true;
+  const seatedWithChips = tableState.seats.filter(
+    (seat) => seat.userId && seat.chipCount > 0
+  ).length;
+  const awaitingFirstDeal =
+    !gameFinished &&
+    tableState.phase === "waiting" &&
+    tableState.handNumber === 0 &&
+    seatingReady;
+  const awaitingHostReady =
+    !gameFinished &&
+    tableState.phase === "waiting" &&
+    tableState.handNumber === 0 &&
+    !seatingReady;
   const awaitingNextHand =
     handCompletePhase && !boardRevealing && handResult !== null;
   const nextDealerSeat = tableState.nextDealerSeat ?? null;
@@ -652,7 +689,7 @@ export default function TablePage() {
   const nextDealerAway = nextDealer?.away === true;
   const nextDealerUnavailable = nextDealerSkipped || nextDealerAway;
   const canDealNext =
-    awaitingNextHand &&
+    (awaitingNextHand || awaitingFirstDeal) &&
     mySeat !== undefined &&
     (nextDealerSeat === mySeat.seatId ||
       (Boolean(isHost) && nextDealerUnavailable));
@@ -678,6 +715,8 @@ export default function TablePage() {
   const showFooter =
     isBetting ||
     (awaitingNextHand && Boolean(nextDealer)) ||
+    awaitingFirstDeal ||
+    awaitingHostReady ||
     iAmSatOut;
   const footerPad = showFooter ? Math.max(footerH, 52) + 8 : 0;
 
@@ -824,7 +863,32 @@ export default function TablePage() {
                 {awayBanner}
               </p>
             ) : null}
-            {awaitingNextHand && nextDealer && (
+            {awaitingHostReady && (
+              <div className="w-full max-w-2xl mx-auto flex flex-nowrap items-center justify-center gap-2 px-1 py-0.5">
+                {isHost && seatedWithChips >= 2 ? (
+                  <>
+                    <p className="text-xs text-slate-300 text-center min-w-0 truncate">
+                      Everyone seated? Start randomizes seats and the button.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={readySeating}
+                      disabled={hostActionLoading}
+                      className="px-3 py-1 bg-amber-600 hover:bg-amber-500 rounded-md font-semibold text-xs whitespace-nowrap disabled:opacity-50 shrink-0"
+                    >
+                      {hostActionLoading ? "Starting…" : "Start"}
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-400 text-center truncate">
+                    {seatedWithChips < 2
+                      ? "Waiting for more players — you can sit alone until friends join."
+                      : "Waiting for the host to Start (randomize seats + dealer)…"}
+                  </p>
+                )}
+              </div>
+            )}
+            {(awaitingNextHand || awaitingFirstDeal) && nextDealer && (
               <DealNextHandBar
                 dealerName={nextDealer.displayName}
                 canDeal={canDealNext}
