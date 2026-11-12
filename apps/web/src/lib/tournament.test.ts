@@ -1,10 +1,48 @@
 import { describe, it, expect } from "vitest";
 import {
   createGameNightFormDefaults,
+  nightSettingsEditability,
+  normalizeNightName,
   payoutFormForPaidPlaces,
   payoutValuesForPaidPlaces,
   validatePayoutPercents,
 } from "./tournament";
+
+describe("nightSettingsEditability", () => {
+  it("allows name, timer, and zoom in lobby and while running", () => {
+    for (const status of ["LOBBY", "RUNNING"] as const) {
+      expect(nightSettingsEditability(status)).toEqual({
+        canOpen: true,
+        canEditName: true,
+        canEditActionTimer: true,
+        canEditZoom: true,
+      });
+    }
+  });
+
+  it("keeps completed nights open for rename but locks timer and zoom", () => {
+    expect(nightSettingsEditability("FINISHED")).toEqual({
+      canOpen: true,
+      canEditName: true,
+      canEditActionTimer: false,
+      canEditZoom: false,
+    });
+  });
+});
+
+describe("normalizeNightName", () => {
+  it("trims and collapses whitespace", () => {
+    expect(normalizeNightName("  Friday   Night  ")).toEqual({
+      ok: true,
+      name: "Friday Night",
+    });
+  });
+
+  it("rejects blank or oversized names", () => {
+    expect(normalizeNightName("   ").ok).toBe(false);
+    expect(normalizeNightName("x".repeat(81)).ok).toBe(false);
+  });
+});
 
 describe("payoutFormForPaidPlaces", () => {
   it("uses 80/20 with a blank 3rd when two places are paid", () => {

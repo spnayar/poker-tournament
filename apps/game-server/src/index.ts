@@ -1192,6 +1192,43 @@ app.delete("/tournaments/:id", requireGameServerSecret, async (req, res) => {
   res.json({ ok: true });
 });
 
+/** Host mid-night settings sync (action timer). No-op when no live room. */
+app.post("/tournaments/:id/settings", requireGameServerSecret, (req, res) => {
+  const id = req.params.id;
+  if (typeof id !== "string") {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const room = rooms.get(id);
+  if (!room) {
+    res.json({ ok: true, applied: false });
+    return;
+  }
+
+  let applied = false;
+  if ("actionTimerSeconds" in (req.body ?? {})) {
+    const next = resolveActionTimerSeconds(req.body.actionTimerSeconds);
+    room.actionTimerConfiguredSeconds = next > 0 ? next : 60;
+    if (next <= 0) {
+      room.actionTimerSeconds = 0;
+      clearActionTimer(room);
+    } else if (room.actionTimerSeconds > 0) {
+      room.actionTimerSeconds = next;
+      armActionTimer(id, room);
+    } else {
+      // Timer currently off at the table — keep off; "Turn on" uses configured.
+      room.actionTimerConfiguredSeconds = next;
+    }
+    applied = true;
+    io.to(`tournament:${id}`).emit(
+      ServerEvents.TABLE_STATE,
+      publicTableState(room)
+    );
+  }
+
+  res.json({ ok: true, applied });
+});
+
 io.use((socket, next) => {
   const token = socket.handshake.auth.token as string;
   if (!token) return next(new Error("Authentication required"));

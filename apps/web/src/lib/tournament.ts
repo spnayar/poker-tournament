@@ -121,6 +121,87 @@ function formatBuyInDollars(cents: number): string {
   return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
 }
 
+/** Fields that stay fixed once a night exists (create-time ledger / join identity). */
+export const NIGHT_SETTINGS_IMMUTABLE_KEYS = [
+  "buyInCents",
+  "startingChips",
+  "inviteCode",
+  "maxPlayers",
+  "blindPace",
+  "blindPreset",
+  "blindLevelMinutes",
+  "blindLevels",
+  "payoutPercents",
+] as const;
+
+export type NightSettingsStatus = "LOBBY" | "RUNNING" | "FINISHED" | string;
+
+export type NightSettingsEditability = {
+  /** Host may open the settings surface for this status. */
+  canOpen: boolean;
+  canEditName: boolean;
+  canEditActionTimer: boolean;
+  canEditZoom: boolean;
+};
+
+/** What a host may still change after create / after the night starts. */
+export function nightSettingsEditability(
+  status: NightSettingsStatus
+): NightSettingsEditability {
+  if (status === "LOBBY") {
+    return {
+      canOpen: true,
+      canEditName: true,
+      canEditActionTimer: true,
+      canEditZoom: true,
+    };
+  }
+  if (status === "RUNNING") {
+    return {
+      canOpen: true,
+      canEditName: true,
+      canEditActionTimer: true,
+      canEditZoom: true,
+    };
+  }
+  if (status === "FINISHED") {
+    return {
+      canOpen: true,
+      canEditName: true,
+      canEditActionTimer: false,
+      canEditZoom: false,
+    };
+  }
+  return {
+    canOpen: false,
+    canEditName: false,
+    canEditActionTimer: false,
+    canEditZoom: false,
+  };
+}
+
+const NIGHT_NAME_MAX = 80;
+
+/** Trim + validate a night display name for create/update. */
+export function normalizeNightName(raw: unknown):
+  | { ok: true; name: string }
+  | { ok: false; error: string } {
+  if (typeof raw !== "string") {
+    return { ok: false, error: "Name is required" };
+  }
+  const name = raw.trim().replace(/\s+/g, " ");
+  if (!name) {
+    return { ok: false, error: "Name is required" };
+  }
+  if (name.length > NIGHT_NAME_MAX) {
+    return {
+      ok: false,
+      error: `Name must be ${NIGHT_NAME_MAX} characters or fewer`,
+    };
+  }
+  return { ok: true, name };
+}
+
 /** Defaults for the create form — reuses last hosted settings when available. */
 export function createGameNightFormDefaults(
   lastHosted?: LastHostedDefaults | null

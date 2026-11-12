@@ -12,6 +12,11 @@ import {
 } from "@poker/protocol";
 import { sendNightRecapEmail } from "@/lib/nightRecap";
 import { gameServerControlHeaders } from "@/lib/gameServerControl";
+import {
+  NIGHT_SETTINGS_IMMUTABLE_KEYS,
+  nightSettingsEditability,
+  normalizeNightName,
+} from "@/lib/tournament";
 
 export async function GET(
   _req: Request,
@@ -311,27 +316,97 @@ export async function POST(
         { status: 403 }
       );
     }
-    if (tournament.status !== "LOBBY") {
+
+    const editability = nightSettingsEditability(tournament.status);
+    if (!editability.canOpen) {
       return NextResponse.json(
-        { error: "Settings can only be edited in the lobby" },
+        { error: "Settings are not available for this game night" },
         { status: 400 }
       );
     }
-    if (!("actionTimerSeconds" in body)) {
+
+    for (const key of NIGHT_SETTINGS_IMMUTABLE_KEYS) {
+      if (key in body) {
+        return NextResponse.json(
+          {
+            error: `${key} is locked after the night is created`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const data: {
+      name?: string;
+      actionTimerSeconds?: number;
+    } = {};
+
+    if ("name" in body) {
+      if (!editability.canEditName) {
+        return NextResponse.json(
+          { error: "Name cannot be edited for this game night" },
+          { status: 400 }
+        );
+      }
+      const normalized = normalizeNightName(body.name);
+      if (!normalized.ok) {
+        return NextResponse.json({ error: normalized.error }, { status: 400 });
+      }
+      data.name = normalized.name;
+    }
+
+    if ("actionTimerSeconds" in body) {
+      if (!editability.canEditActionTimer) {
+        return NextResponse.json(
+          { error: "Action timer is locked after the night ends" },
+          { status: 400 }
+        );
+      }
+      data.actionTimerSeconds = resolveActionTimerSeconds(
+        body.actionTimerSeconds
+      );
+    }
+
+    if (Object.keys(data).length === 0) {
       return NextResponse.json(
         { error: "No settings to update" },
         { status: 400 }
       );
     }
-    const actionTimerSeconds = resolveActionTimerSeconds(
-      body.actionTimerSeconds
-    );
+
     const updated = await prisma.tournament.update({
       where: { id },
-      data: { actionTimerSeconds },
+      data,
     });
+
+    if (data.actionTimerSeconds !== undefined) {
+      const control = gameServerControlHeaders();
+      if (control.ok) {
+        const gameServerUrl =
+          process.env.GAME_SERVER_URL ?? "http://localhost:3001";
+        try {
+          await fetch(`${gameServerUrl}/tournaments/${id}/settings`, {
+            method: "POST",
+            headers: {
+              ...control.headers,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              actionTimerSeconds: data.actionTimerSeconds,
+            }),
+          });
+        } catch (err) {
+          console.error(
+            "Could not sync action timer to game server (DB updated):",
+            err
+          );
+        }
+      }
+    }
+
     return NextResponse.json({
       ok: true,
+      name: updated.name,
       actionTimerSeconds: updated.actionTimerSeconds,
     });
   }
