@@ -194,9 +194,10 @@ body {
 }
 
 /*
-  Zoom Meeting SDK table faces — full-height column LEFT of the table (lg+),
+  Zoom Meeting SDK table faces — content-sized column LEFT of the table (lg+),
   compact strip after Action Log on phone. Ribbon sized to video-on count
-  (max 9); Zoom chrome (shield / grid / menu) forced off.
+  (max 9); Zoom chrome (shield / grid / menu) forced off. Cover-fill thumbs
+  (no letterbox bars inside the tile).
 */
 .zoom-faces-column {
   width: 100%;
@@ -216,7 +217,7 @@ body {
 }
 
 .zoom-faces-column[data-expanded="true"] {
-  max-height: 4.75rem; /* phone strip under log */
+  max-height: 6.5rem; /* phone strip ≈ one cover cell */
   opacity: 1;
   pointer-events: auto;
 }
@@ -226,7 +227,9 @@ body {
   .zoom-faces-column {
     width: 0;
     max-height: none;
-    align-self: stretch;
+    /* Size to active thumbs — do not stretch empty column height. */
+    align-self: flex-start;
+    height: auto;
   }
 
   .zoom-faces-column[data-expanded="true"] {
@@ -234,21 +237,16 @@ body {
     width: 7.5rem;
     max-height: none;
     height: auto;
-    align-self: stretch;
+    align-self: flex-start;
     min-height: 0;
-  }
-
-  .zoom-faces-column[data-expanded="true"] .zoom-faces-thumb {
-    /* Fill column height so thumbs pack the left panel */
-    max-height: 100%;
   }
 }
 
 .zoom-faces-thumb {
   --zoom-sdk-w: 240px;
   --zoom-sdk-h: 135px;
-  --zoom-scale-x: 0.4;
-  --zoom-scale-y: 0.4;
+  --zoom-scale-x: 0.5;
+  --zoom-scale-y: 0.5;
   position: relative;
   border-radius: 0.375rem;
   border: 1px solid color-mix(in srgb, var(--accent-emerald) 45%, var(--hairline));
@@ -291,27 +289,47 @@ html.zoom-faces-active .meeting-info-container__inner-icons,
 html.zoom-faces-active .meeting-info-container__wrapper,
 html.zoom-faces-active .meeting-info-encryption-icon__icon-wrap,
 html.zoom-faces-active .meeting-info-encryption-icon__button-wrap,
+html.zoom-faces-active [class*="meeting-info"],
+html.zoom-faces-active [class*="encryption-icon"],
+html.zoom-faces-active [class*="suspension-header"],
 html.zoom-faces-active .footer,
 html.zoom-faces-active .footer__inner,
 html.zoom-faces-active .sharee-container-box,
 html.zoom-faces-active .gallery-video-container__switch-button,
 html.zoom-faces-active .gallery-video-container__pagination,
+html.zoom-faces-active .speaker-active-container__switch-button,
+html.zoom-faces-active .speaker-view-button,
 html.zoom-faces-active .more-button,
+html.zoom-faces-active .video-avatar__group-btn,
+html.zoom-faces-active .avatar-more,
+html.zoom-faces-active .avatar-more-xs-btn,
 #zoom-meeting-sdk-root .suspension-header,
 #zoom-meeting-sdk-root .meeting-info-container,
 #zoom-meeting-sdk-root .meeting-info-container__inner-icons,
 #zoom-meeting-sdk-root .meeting-info-container__wrapper,
 #zoom-meeting-sdk-root .meeting-info-encryption-icon__icon-wrap,
 #zoom-meeting-sdk-root .meeting-info-encryption-icon__button-wrap,
+#zoom-meeting-sdk-root [class*="meeting-info"],
+#zoom-meeting-sdk-root [class*="encryption-icon"],
+#zoom-meeting-sdk-root [class*="suspension-header"],
 #zoom-meeting-sdk-root .footer,
 #zoom-meeting-sdk-root .footer__inner,
 #zoom-meeting-sdk-root .sharee-container-box,
 #zoom-meeting-sdk-root .gallery-video-container__switch-button,
 #zoom-meeting-sdk-root .gallery-video-container__pagination,
+#zoom-meeting-sdk-root .speaker-active-container__switch-button,
+#zoom-meeting-sdk-root .speaker-view-button,
 #zoom-meeting-sdk-root .more-button,
 #zoom-meeting-sdk-root .video-avatar__group-btn,
 #zoom-meeting-sdk-root .avatar-more,
-#zoom-meeting-sdk-root .avatar-more-xs-btn {
+#zoom-meeting-sdk-root .avatar-more-xs-btn,
+#zoom-meeting-sdk-root button[aria-label*="Security"],
+#zoom-meeting-sdk-root button[aria-label*="security"],
+#zoom-meeting-sdk-root button[aria-label*="View"],
+#zoom-meeting-sdk-root button[aria-label*="Gallery"],
+#zoom-meeting-sdk-root button[aria-label*="Speaker"],
+#zoom-meeting-sdk-root button[title*="Security"],
+#zoom-meeting-sdk-root button[title*="View"] {
   display: none !important;
   height: 0 !important;
   min-height: 0 !important;
@@ -319,6 +337,7 @@ html.zoom-faces-active .more-button,
   overflow: hidden !important;
   pointer-events: none !important;
   opacity: 0 !important;
+  visibility: hidden !important;
 }
 
 /* No empty placeholders for cameras off — hide avatar-only tiles. */
@@ -351,17 +370,28 @@ html.zoom-faces-active .more-button,
   box-shadow: none !important;
   cursor: default !important;
   margin: 0 !important;
+  overflow: hidden !important;
+  background: transparent !important;
 }
 
+/* Cover-fill face thumbs — crop edges rather than letterbox black bars. */
 #zoom-meeting-sdk-root video,
 #zoom-meeting-sdk-root canvas,
 #zoom-meeting-sdk-root .suspension-canvas,
 #zoom-meeting-sdk-root .suspension-img-wrapper img,
 #zoom-meeting-sdk-root .gallery-video-container__video-stream,
-#zoom-meeting-sdk-root .gallery-video-container__video-frame {
-  object-fit: contain !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
+#zoom-meeting-sdk-root .gallery-video-container__video-frame,
+#zoom-meeting-sdk-root .speaker-active-container__video-frame,
+#zoom-meeting-sdk-root .speaker-active-container__video-frame video,
+#zoom-meeting-sdk-root .speaker-active-container__video-frame canvas,
+#zoom-meeting-sdk-root .video-avatar__avatar-video,
+#zoom-meeting-sdk-root .video-avatar__avatar-video video,
+#zoom-meeting-sdk-root .video-avatar__avatar-video canvas {
+  object-fit: cover !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
 }
 
 /* Tiny optional name tags — don't compete with the table. */
