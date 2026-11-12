@@ -1,11 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { matchSpeakerUserIds } from "@/lib/zoomDisplayName";
 import {
   loadZoomMtgEmbedded,
   type ZoomEmbeddedClient,
 } from "@/lib/zoomMeetingSdkLoader";
+import {
+  ZOOM_SDK_VIEW_HEIGHT,
+  ZOOM_SDK_VIEW_WIDTH,
+} from "./zoomFacesLayout";
+
+export {
+  ZOOM_SDK_VIEW_HEIGHT,
+  ZOOM_SDK_VIEW_WIDTH,
+} from "./zoomFacesLayout";
 
 type ZoomStatus = {
   videoMode: string;
@@ -19,25 +37,49 @@ type ZoomStatus = {
 
 type SeatLike = { userId: string; displayName: string };
 
-type ZoomMirrorStripProps = {
+type ZoomMirrorContextValue = {
+  status: ZoomStatus | null;
+  joining: boolean;
+  joined: boolean;
+  expanded: boolean;
+  error: string | null;
+  canAttemptMirror: boolean;
+  rootRef: RefObject<HTMLDivElement | null>;
+  startMirror: () => void;
+  leaveMirror: () => void;
+  setExpanded: (next: boolean) => void;
+};
+
+const ZoomMirrorContext = createContext<ZoomMirrorContextValue | null>(null);
+
+function useZoomMirror(): ZoomMirrorContextValue {
+  const ctx = useContext(ZoomMirrorContext);
+  if (!ctx) {
+    throw new Error("Zoom mirror components require ZoomMirrorProvider");
+  }
+  return ctx;
+}
+
+type ZoomMirrorProviderProps = {
   tournamentId: string;
   seats: SeatLike[];
   onSpeakingUserIds: (userIds: string[]) => void;
+  children: ReactNode;
 };
 
 /**
- * Meeting SDK video mirror — viewport-neutral fallback.
+ * Meeting SDK video mirror — table keeps the viewport; faces live in a side
+ * thumbnail (sm+) or a tiny strip under the Action Log (phone).
  *
- * Spike result: Web Component View cannot paint per-participant streams into
- * seat avatar DOM (gallery/ribbon/container only). Faces live in a strip that
- * collapses to ~0 height when hidden; active speakers get seat rings via name match.
- * In-app audio is forced off so Zoom app remains the call.
+ * Spike: Component View cannot paint per-seat streams. Active speakers get
+ * seat rings via name match. In-app audio stays off so Zoom owns the call.
  */
-export function ZoomMirrorStrip({
+export function ZoomMirrorProvider({
   tournamentId,
   seats,
   onSpeakingUserIds,
-}: ZoomMirrorStripProps) {
+  children,
+}: ZoomMirrorProviderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<ZoomEmbeddedClient | null>(null);
   const seatsRef = useRef(seats);
@@ -93,13 +135,43 @@ export function ZoomMirrorStrip({
     }
   }, [onSpeakingUserIds]);
 
+  const pinCompactSpeakerView = useCallback(
+    async (client: ZoomEmbeddedClient) => {
+      try {
+        await client.setViewType?.("speaker");
+      } catch {
+        /* view type may be unavailable mid-join */
+      }
+      try {
+        client.updateVideoOptions?.({
+          isResizable: false,
+          viewSizes: {
+            default: {
+              width: ZOOM_SDK_VIEW_WIDTH,
+              height: ZOOM_SDK_VIEW_HEIGHT,
+            },
+            ribbon: {
+              width: ZOOM_SDK_VIEW_WIDTH,
+              height: ZOOM_SDK_VIEW_HEIGHT,
+            },
+          },
+          popper: { disableDraggable: true },
+        });
+      } catch {
+        /* size pin is best-effort — CSS frame still clamps */
+      }
+    },
+    []
+  );
+
   const startMirror = useCallback(async () => {
     setError(null);
     setJoining(true);
     try {
-      const res = await fetch(`/api/tournaments/${tournamentId}/zoom/signature`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `/api/tournaments/${tournamentId}/zoom/signature`,
+        { method: "POST" }
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(
@@ -121,6 +193,10 @@ export function ZoomMirrorStrip({
         return;
       }
 
+      // Expand the thumbnail slot before Zoom measures zoomAppRoot —
+      // a max-height:0 ancestor makes Component View paint a huge floating panel.
+      setExpanded(true);
+
       // CDN UMD + Zoom React 18 vendors — never webpack-import the ESM SDK
       // (that resolves to app React 19 and crashes on ReactCurrentOwner).
       const ZoomMtgEmbedded = await loadZoomMtgEmbedded();
@@ -130,7 +206,10 @@ export function ZoomMirrorStrip({
       const onActiveSpeaker = (payload: unknown) => {
         try {
           const speakers = Array.isArray(payload)
-            ? (payload as { displayName?: string | null; userName?: string | null }[])
+            ? (payload as {
+                displayName?: string | null;
+                userName?: string | null;
+              }[])
             : [];
           onSpeakingUserIds(
             matchSpeakerUserIds(seatsRef.current ?? [], speakers)
@@ -159,10 +238,16 @@ export function ZoomMirrorStrip({
           meetingInfo: [],
           video: {
             isResizable: false,
-            defaultViewType: "ribbon",
+            defaultViewType: "speaker",
             viewSizes: {
-              default: { width: 280, height: 72 },
-              ribbon: { width: 280, height: 72 },
+              default: {
+                width: ZOOM_SDK_VIEW_WIDTH,
+                height: ZOOM_SDK_VIEW_HEIGHT,
+              },
+              ribbon: {
+                width: ZOOM_SDK_VIEW_WIDTH,
+                height: ZOOM_SDK_VIEW_HEIGHT,
+              },
             },
             popper: { disableDraggable: true },
           },
@@ -195,23 +280,29 @@ export function ZoomMirrorStrip({
       });
 
       await enforceAudioOff(client);
+      await pinCompactSpeakerView(client);
       setJoined(true);
-      setExpanded(true);
     } catch (err) {
-      const raw = err instanceof Error ? err.message : "Meeting SDK join failed";
+      const raw =
+        err instanceof Error ? err.message : "Meeting SDK join failed";
       // Keep the banner useful without dumping opaque SDK TypeErrors as the only clue.
-      const message =
-        /reading 'includes'/i.test(raw)
-          ? "Could not start table faces (Zoom listener ran before init). Try again."
-          : raw;
+      const message = /reading 'includes'/i.test(raw)
+        ? "Could not start table faces (Zoom listener ran before init). Try again."
+        : raw;
       setError(message);
       clientRef.current = null;
       setJoined(false);
+      setExpanded(false);
       onSpeakingUserIds([]);
     } finally {
       setJoining(false);
     }
-  }, [enforceAudioOff, onSpeakingUserIds, tournamentId]);
+  }, [
+    enforceAudioOff,
+    onSpeakingUserIds,
+    pinCompactSpeakerView,
+    tournamentId,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -219,11 +310,51 @@ export function ZoomMirrorStrip({
     };
   }, [leaveMirror]);
 
+  const canAttemptMirror = Boolean(
+    status?.mirrorConfigured && status?.canMirror
+  );
+
+  const value: ZoomMirrorContextValue = {
+    status,
+    joining,
+    joined,
+    expanded,
+    error,
+    canAttemptMirror,
+    rootRef,
+    startMirror: () => {
+      void startMirror();
+    },
+    leaveMirror: () => {
+      void leaveMirror();
+    },
+    setExpanded,
+  };
+
+  return (
+    <ZoomMirrorContext.Provider value={value}>
+      {children}
+    </ZoomMirrorContext.Provider>
+  );
+}
+
+/** Slim Join / Show / Hide controls — no video height. */
+export function ZoomMirrorToolbar() {
+  const {
+    status,
+    joining,
+    joined,
+    expanded,
+    error,
+    canAttemptMirror,
+    startMirror,
+    leaveMirror,
+    setExpanded,
+  } = useZoomMirror();
+
   if (!status?.zoomJoinUrl && !status?.zoomMeetingNumber) {
     return null;
   }
-
-  const canAttemptMirror = status.mirrorConfigured && status.canMirror;
 
   return (
     <div className="shrink-0 w-full max-w-7xl mx-auto">
@@ -260,13 +391,7 @@ export function ZoomMirrorStrip({
             <button
               type="button"
               className="text-amber-300 hover:text-amber-200 underline-offset-2 hover:underline"
-              onClick={() => {
-                if (expanded) {
-                  setExpanded(false);
-                } else {
-                  setExpanded(true);
-                }
-              }}
+              onClick={() => setExpanded(!expanded)}
             >
               {expanded ? "Hide faces" : "Show faces"}
             </button>
@@ -275,7 +400,7 @@ export function ZoomMirrorStrip({
               type="button"
               disabled={joining}
               className="text-amber-300 hover:text-amber-200 underline-offset-2 hover:underline disabled:opacity-50"
-              onClick={() => void startMirror()}
+              onClick={startMirror}
             >
               {joining ? "Starting faces…" : "Show table faces"}
             </button>
@@ -293,32 +418,72 @@ export function ZoomMirrorStrip({
           <button
             type="button"
             className="text-slate-500 hover:text-slate-300 underline-offset-2 hover:underline"
-            onClick={() => void leaveMirror()}
+            onClick={leaveMirror}
           >
             Leave faces
           </button>
         ) : null}
       </div>
       {error ? (
-        <p className="text-[11px] text-amber-300/90 mb-0.5 truncate" title={error}>
+        <p
+          className="text-[11px] text-amber-300/90 mb-0.5 truncate"
+          title={error}
+        >
           {error}
         </p>
       ) : null}
-      {/* Collapse-to-zero when hidden — never a permanent gallery band. */}
-      <div
-        className="overflow-hidden transition-[max-height,opacity] duration-200 ease-out"
-        style={{
-          maxHeight: expanded && joined ? 96 : 0,
-          opacity: expanded && joined ? 1 : 0,
-        }}
-        aria-hidden={!expanded || !joined}
-      >
-        <div
-          ref={rootRef}
-          id="zoom-meeting-sdk-root"
-          className="h-20 w-full max-w-md mx-auto rounded-md bg-slate-900/80 border border-slate-700/50 overflow-hidden [&_*]:max-h-20"
-        />
+    </div>
+  );
+}
+
+/**
+ * Single Meeting SDK root inside our slate/emerald thumbnail frame.
+ * Responsive CSS: side-sized above Action Log on sm+, tiny strip under it on phone.
+ */
+export function ZoomMirrorFacesFrame() {
+  const { joined, expanded, rootRef } = useZoomMirror();
+  const show = joined && expanded;
+
+  return (
+    <div
+      className="zoom-faces-frame-slot shrink-0 w-full"
+      data-expanded={show ? "true" : "false"}
+      aria-hidden={!show}
+    >
+      <div className="zoom-faces-thumb mx-auto">
+        <div className="zoom-faces-thumb__scale">
+          <div
+            ref={rootRef}
+            id="zoom-meeting-sdk-root"
+            className="zoom-faces-sdk-root"
+          />
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Back-compat wrapper: toolbar + faces stacked.
+ * Table page uses Provider + Toolbar + FacesFrame in the sidebar instead.
+ */
+export function ZoomMirrorStrip({
+  tournamentId,
+  seats,
+  onSpeakingUserIds,
+}: {
+  tournamentId: string;
+  seats: SeatLike[];
+  onSpeakingUserIds: (userIds: string[]) => void;
+}) {
+  return (
+    <ZoomMirrorProvider
+      tournamentId={tournamentId}
+      seats={seats}
+      onSpeakingUserIds={onSpeakingUserIds}
+    >
+      <ZoomMirrorToolbar />
+      <ZoomMirrorFacesFrame />
+    </ZoomMirrorProvider>
   );
 }
