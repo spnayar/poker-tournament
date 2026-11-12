@@ -160,6 +160,7 @@ Mostly tonal layering on dark surfaces: panels are slate-900 on slate-950 with 1
 ### Live table
 - Felt gradient oval; amber pot/chip mono; seat rings; **single horizontal ActionPanel bar** pinned in the play chrome
 - Away / status badges stay compact; do not push cards or actions below the fold
+- **Folded vs waiting:** Folded seats are greyscale/muted slate with hole-card backs hidden. Waiting-to-act seats stay full-color with live card backs. Away is a compact badge (+ avatar greyscale) and must not be confused with fold — Away players still in the hand keep their cards.
 
 ### Emails
 - Helvetica/Arial stack on slate-900 body; emerald join codes; amber settle amounts — match product chrome, not marketing templates

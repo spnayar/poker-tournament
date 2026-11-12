@@ -20,6 +20,7 @@ import {
 } from "./tableLayout";
 import type { SeatPublic, ShownHand } from "@poker/protocol";
 import { hostSeatControl } from "@poker/protocol";
+import { seatVisualKind, showSeatHoleCards } from "./seatVisualState";
 
 function emptyBoard(): (string | undefined)[] {
   return [undefined, undefined, undefined, undefined, undefined];
@@ -98,25 +99,30 @@ export function PlayerSeat({
     };
   }, [menuOpen]);
 
-  const isOut = seat.eliminated === true;
+  const visualKind = seatVisualKind(seat);
+  const isOut = visualKind === "out";
+  const isFolded = visualKind === "folded";
   const holeCards = myCards ?? [];
-  // Busted seats watch with no cards — never show face-down backs.
-  const cardsToShow = isOut
-    ? []
-    : isMe && holeCards.length > 0
-      ? holeCards
-      : showCards && holeCards.length > 0
+  // Busted / folded seats watch with no cards — never show face-down backs.
+  const cardsToShow =
+    !showSeatHoleCards(seat)
+      ? []
+      : isMe && holeCards.length > 0
         ? holeCards
-        : [undefined, undefined];
+        : showCards && holeCards.length > 0
+          ? holeCards
+          : [undefined, undefined];
 
-  // Out beats Away. Host sit-out and disconnect both surface as Away.
-  const statusBadge = isOut
-    ? "out"
-    : seat.skipped || seat.away
-      ? "away"
-      : null;
+  // Out beats Away. Folded is a separate hand-state (not Away).
+  // Host sit-out and disconnect both surface as Away.
+  const statusBadge =
+    visualKind === "out" ? "out" : visualKind === "away" ? "away" : null;
 
-  const actionTone = seat.lastAction ? lastActionTone(seat.lastAction) : null;
+  const actionTone = seat.lastAction
+    ? isFolded
+      ? { text: "text-slate-400", ring: "bg-slate-900/55 border-slate-600/35" }
+      : lastActionTone(seat.lastAction)
+    : null;
   const hostControl = isHost && !isMe ? hostSeatControl(seat) : null;
   const [menuPos, setMenuPos] = useState<{
     top: number;
@@ -152,12 +158,15 @@ export function PlayerSeat({
       ? `scale-[0.55] ${cardsBelowPod ? "origin-top" : "origin-bottom"}`
       : `scale-[0.68] ${cardsBelowPod ? "origin-top" : "origin-bottom"}`;
 
+  // Folded seats drop hole-card backs (fan + tucked) so they don't look still-in.
+  // Waiting-to-act seats keep live backs; Away-in-hand keeps cards too.
   const holeCardRow =
     cardsToShow.length === 0 ? null : (
       <div
         className={`flex gap-0.5 sm:gap-1 relative z-20 ${cardScale} ${
           isMe ? "-mt-0.5 mb-0" : cardsBelowPod ? "mt-[-0.35rem]" : "mb-[-0.35rem]"
         }`}
+        data-seat-cards="live"
       >
         {cardsToShow.map((card, i) => (
           <PlayingCard
@@ -176,6 +185,7 @@ export function PlayerSeat({
       <div
         className="pointer-events-none absolute -bottom-0.5 left-1/2 z-[5] flex -translate-x-1/2 gap-px scale-[0.38] origin-bottom"
         aria-hidden
+        data-seat-cards="live"
       >
         {cardsToShow.map((card, i) => (
           <PlayingCard
@@ -189,17 +199,22 @@ export function PlayerSeat({
       </div>
     ) : null;
 
+  const nameClass = isFolded || isOut ? "text-slate-500" : "text-slate-100";
+  const chipClass = isFolded ? "text-slate-500" : "text-amber-400";
+
   const seatPod = (
       <div
         className={`relative z-10 flex items-center gap-1.5 rounded-full pl-0.5 pr-2.5 py-0.5 border shadow-[0_4px_14px_rgba(0,0,0,0.45)] ${
-          isActive
+          isActive && !isFolded && !isOut
             ? "bg-slate-950/95 border-amber-400 ring-2 ring-amber-400/55"
-            : isSpeaking
-              ? "bg-slate-950/92 border-emerald-400/80 ring-1 ring-emerald-400/40"
-              : "bg-slate-950/88 border-slate-600/90"
+            : isFolded || isOut
+              ? "bg-slate-950/55 border-slate-700/70 shadow-none"
+              : isSpeaking
+                ? "bg-slate-950/92 border-emerald-400/80 ring-1 ring-emerald-400/40"
+                : "bg-slate-950/88 border-slate-600/90"
         }`}
       >
-        {isActive ? (
+        {isActive && !isFolded && !isOut ? (
           <motion.span
             className="pointer-events-none absolute inset-0 rounded-full border border-amber-300/70"
             animate={{ opacity: [0.95, 0.35, 0.95] }}
@@ -213,13 +228,15 @@ export function PlayerSeat({
             src={getAvatarUrl(seat.displayName, seat.avatarUrl)}
             alt=""
             className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 bg-slate-800 object-cover ${
-              statusBadge
-                ? "border-slate-400 grayscale"
-                : isSpeaking
-                  ? "border-emerald-400"
-                  : isActive
-                    ? "border-amber-300"
-                    : "border-slate-500"
+              isFolded || isOut
+                ? "border-slate-600 grayscale"
+                : statusBadge
+                  ? "border-slate-400 grayscale"
+                  : isSpeaking
+                    ? "border-emerald-400"
+                    : isActive
+                      ? "border-amber-300"
+                      : "border-slate-500"
             }`}
           />
           {tuckedOpponentCards}
@@ -254,7 +271,9 @@ export function PlayerSeat({
             <button
               type="button"
               onClick={() => setMenuOpen((o) => !o)}
-              className="block text-[11px] sm:text-xs font-semibold max-w-[5.5rem] sm:max-w-[6.5rem] truncate text-slate-100 hover:text-amber-200 underline-offset-2 hover:underline"
+              className={`block text-[11px] sm:text-xs font-semibold max-w-[5.5rem] sm:max-w-[6.5rem] truncate underline-offset-2 hover:underline ${nameClass} ${
+                isFolded || isOut ? "" : "hover:text-amber-200"
+              }`}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               title="Seat options"
@@ -262,7 +281,9 @@ export function PlayerSeat({
               {seat.displayName}
             </button>
           ) : (
-            <p className="text-[11px] sm:text-xs font-semibold max-w-[5.5rem] sm:max-w-[6.5rem] truncate text-slate-100">
+            <p
+              className={`text-[11px] sm:text-xs font-semibold max-w-[5.5rem] sm:max-w-[6.5rem] truncate ${nameClass}`}
+            >
               {seat.displayName}
             </p>
           )}
@@ -271,10 +292,16 @@ export function PlayerSeat({
               Out
             </p>
           ) : (
-            <p className="text-[11px] sm:text-xs text-amber-400 font-mono tabular-nums font-semibold">
+            <p
+              className={`text-[11px] sm:text-xs font-mono tabular-nums font-semibold ${chipClass}`}
+            >
               {seat.chipCount.toLocaleString()}
               {seat.allIn ? (
-                <span className="text-amber-300/90 font-sans text-[9px] ml-0.5">
+                <span
+                  className={`font-sans text-[9px] ml-0.5 ${
+                    isFolded ? "text-slate-500" : "text-amber-300/90"
+                  }`}
+                >
                   all-in
                 </span>
               ) : null}
@@ -347,17 +374,29 @@ export function PlayerSeat({
 
   return (
     <motion.div
+      key={`${seat.seatId}-${visualKind}`}
       className={`absolute flex flex-col items-center${
         revealHoleCards || isMe ? " z-20" : " z-10"
-      }`}
+      }${isFolded || isOut ? " grayscale" : ""}`}
       style={{
         left: `${position.x}%`,
         top: `${position.y}%`,
         transform: seatAnchorTransformFromY(position.y, isMe, compact),
       }}
       animate={{
-        opacity: isOut ? 0.5 : seat.folded ? 0.38 : statusBadge ? 0.55 : 1,
+        // Folded = out of hand (grey + no cards). Away = still in hand, badge only.
+        opacity: isOut ? 0.5 : isFolded ? 0.32 : statusBadge ? 0.55 : 1,
       }}
+      data-seat-visual={visualKind}
+      aria-label={
+        isOut
+          ? `${seat.displayName}, out`
+          : isFolded
+            ? `${seat.displayName}, folded`
+            : statusBadge
+              ? `${seat.displayName}, away`
+              : undefined
+      }
     >
       {isMe || showOpponentFan ? (
         cardsBelowPod ? (
