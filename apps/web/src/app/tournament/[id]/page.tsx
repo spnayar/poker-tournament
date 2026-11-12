@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
@@ -20,6 +20,7 @@ import { useTournamentGameWatch } from "@/hooks/useTournamentGameWatch";
 import { formatSessionLabelShort } from "@/lib/labels";
 import { InvitePlayersPanel } from "@/components/InvitePlayersPanel";
 import { ZoomNightPanel } from "@/components/ZoomNightPanel";
+import { nightSettingsEditability } from "@/lib/tournament";
 
 interface Player {
   userId: string;
@@ -65,7 +66,9 @@ export default function TournamentLobbyPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  const settingsMode = searchParams.get("settings") === "1";
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [runningGame, setRunningGame] = useState<{ gameNumber: number } | null>(
     null
@@ -78,6 +81,8 @@ export default function TournamentLobbyPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const waitingForNextGame =
     status === "authenticated" &&
@@ -97,6 +102,11 @@ export default function TournamentLobbyPage() {
     }
     if (res.ok) {
       setTournament(data.tournament);
+      setNameDraft((prev) =>
+        prev === "" || prev === data.tournament.name
+          ? data.tournament.name
+          : prev
+      );
       setRunningGame(data.runningGame);
       setPayoutPercents(data.payoutPercents ?? defaultPayoutPercents());
       setLedger(data.ledger ?? []);
@@ -109,21 +119,28 @@ export default function TournamentLobbyPage() {
           )
       );
 
-      if (data.runningGame) {
-        router.push(`/tournament/${id}/table`);
-        return;
-      }
-      if (data.tournament.status === "FINISHED") {
-        router.push(`/tournament/${id}/results`);
-        return;
+      // Settings mode stays on this page so hosts can edit mid-night / closed.
+      if (!settingsMode) {
+        if (data.runningGame) {
+          router.push(`/tournament/${id}/table`);
+          return;
+        }
+        if (data.tournament.status === "FINISHED") {
+          router.push(`/tournament/${id}/results`);
+          return;
+        }
       }
     }
     setLoading(false);
-  }, [id, router]);
+  }, [id, router, settingsMode]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
+
+  useEffect(() => {
+    setNameDraft("");
+  }, [id]);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -209,6 +226,39 @@ export default function TournamentLobbyPage() {
     }
   }
 
+  async function saveSettings(patch: {
+    name?: string;
+    actionTimerSeconds?: number;
+  }) {
+    setSavingSettings(true);
+    const res = await fetch(`/api/tournaments/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "updateSettings", ...patch }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSavingSettings(false);
+    if (!res.ok) {
+      alert(
+        typeof data.error === "string" ? data.error : "Could not update settings"
+      );
+      return false;
+    }
+    setTournament((t) =>
+      t
+        ? {
+            ...t,
+            ...(typeof data.name === "string" ? { name: data.name } : {}),
+            ...(typeof data.actionTimerSeconds === "number"
+              ? { actionTimerSeconds: data.actionTimerSeconds }
+              : {}),
+          }
+        : t
+    );
+    if (typeof data.name === "string") setNameDraft(data.name);
+    return true;
+  }
+
   if (loading || !tournament) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -218,6 +268,7 @@ export default function TournamentLobbyPage() {
   }
 
   const isHost = session?.user?.id === tournament.hostUserId;
+  const editability = nightSettingsEditability(tournament.status);
   const prizePool = tournament.buyInCents * tournament.players.length;
   const finishedGames = tournament.games.filter((g) => g.status === "FINISHED");
   const gamesPlayed = finishedGames.length;
@@ -229,17 +280,49 @@ export default function TournamentLobbyPage() {
     blindPreset: tournament.blindPreset,
   });
   const blindPreview = blindLevels.slice(0, 5);
+  const startedOrClosed = tournament.status !== "LOBBY";
+  const showZoom =
+    editability.canEditZoom ||
+    (settingsMode && tournament.status !== "FINISHED");
 
   return (
     <div className="min-h-screen p-6 max-w-2xl mx-auto">
       <div className="flex items-center justify-between gap-3">
         <BrandLockup />
-        <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline shrink-0">
-          ← Back to dashboard
-        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-3 shrink-0">
+          {settingsMode && runningGame && (
+            <Link
+              href={`/tournament/${id}/table`}
+              className="text-amber-400 text-sm hover:underline"
+            >
+              Back to table
+            </Link>
+          )}
+          {settingsMode && tournament.status === "FINISHED" && (
+            <Link
+              href={`/tournament/${id}/results`}
+              className="text-amber-400 text-sm hover:underline"
+            >
+              View results
+            </Link>
+          )}
+          <Link href="/dashboard" className="text-emerald-400 text-sm hover:underline">
+            ← Back to dashboard
+          </Link>
+        </div>
       </div>
 
       <h1 className="text-3xl font-bold mt-4 mb-2">{tournament.name}</h1>
+      {settingsMode && (
+        <p className="text-emerald-400/90 text-sm mb-2">
+          Settings
+          {tournament.status === "RUNNING"
+            ? " · mid-night edits"
+            : tournament.status === "FINISHED"
+              ? " · closed night"
+              : ""}
+        </p>
+      )}
       <p className="text-amber-400/80 text-xs mb-6">{LEDGER_DISCLAIMER}</p>
 
       {canJoin && (
@@ -258,6 +341,31 @@ export default function TournamentLobbyPage() {
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
+          {startedOrClosed && (
+            <p className="text-[11px] text-slate-500 mt-2">
+              Join code is fixed for this night.
+            </p>
+          )}
+        </div>
+      )}
+
+      {settingsMode && !canJoin && (
+        <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800 mb-6">
+          <p className="text-sm text-slate-400 mb-1">Join code</p>
+          <div className="flex items-center gap-3">
+            <span className="text-xl font-mono font-bold tracking-[0.25em] text-slate-300">
+              {tournament.inviteCode}
+            </span>
+            <button
+              onClick={copyJoinCode}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm"
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-2">
+            Locked — join code cannot change after create.
+          </p>
         </div>
       )}
 
@@ -265,23 +373,74 @@ export default function TournamentLobbyPage() {
         <InvitePlayersPanel tournamentId={tournament.id} />
       )}
 
-      {tournament.status !== "FINISHED" && (
+      {showZoom && (
         <div className="mb-6">
-          <ZoomNightPanel tournamentId={tournament.id} isHost={isHost} />
+          <ZoomNightPanel
+            tournamentId={tournament.id}
+            isHost={isHost && editability.canEditZoom}
+          />
         </div>
       )}
 
       <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 mb-6">
+        <div className="flex items-baseline justify-between gap-2 mb-4">
+          <h2 className="text-sm font-semibold text-slate-200">Night settings</h2>
+          {startedOrClosed && (
+            <span className="text-[11px] text-slate-500">
+              Buy-in, chips, and structure stay locked after start
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-4 text-sm">
+          {isHost && editability.canEditName ? (
+            <div className="col-span-2">
+              <label className="text-slate-400 block mb-1">Display name</label>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  type="text"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  maxLength={80}
+                  disabled={savingSettings}
+                  className="flex-1 min-w-[12rem] px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-sm font-semibold focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  disabled={
+                    savingSettings ||
+                    nameDraft.trim() === "" ||
+                    nameDraft.trim() === tournament.name
+                  }
+                  onClick={() => void saveSettings({ name: nameDraft })}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-sm font-medium disabled:opacity-40"
+                >
+                  Save name
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="col-span-2">
+              <p className="text-slate-400">Display name</p>
+              <p className="font-semibold">{tournament.name}</p>
+            </div>
+          )}
           <div>
             <p className="text-slate-400">Buy-in (ledger)</p>
-            <p className="font-semibold">{formatCents(tournament.buyInCents)}</p>
+            <p className="font-semibold text-slate-300">
+              {formatCents(tournament.buyInCents)}
+            </p>
+            {startedOrClosed && (
+              <p className="text-[11px] text-slate-500 mt-0.5">Locked</p>
+            )}
           </div>
           <div>
             <p className="text-slate-400">Starting chips</p>
-            <p className="font-semibold">
+            <p className="font-semibold text-slate-300">
               {tournament.startingChips.toLocaleString()}
             </p>
+            {startedOrClosed && (
+              <p className="text-[11px] text-slate-500 mt-0.5">Locked</p>
+            )}
           </div>
           <div>
             <p className="text-slate-400">Prize pool per game</p>
@@ -293,41 +452,35 @@ export default function TournamentLobbyPage() {
           </div>
           <div>
             <p className="text-slate-400">Blind pace</p>
-            <p className="font-semibold">
+            <p className="font-semibold text-slate-300">
               {BLIND_PACE_LABELS[blindPace]?.label ?? blindPace}
             </p>
+            {startedOrClosed && (
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Locked — change next level at the table
+              </p>
+            )}
           </div>
           <div>
             <p className="text-slate-400">Level length</p>
-            <p className="font-semibold">
+            <p className="font-semibold text-slate-300">
               {tournament.blindLevelMinutes ?? 12} min
             </p>
+            {startedOrClosed && (
+              <p className="text-[11px] text-slate-500 mt-0.5">Locked</p>
+            )}
           </div>
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <p className="text-slate-400">Action timer</p>
-            {isHost && tournament.status === "LOBBY" ? (
+            {isHost && editability.canEditActionTimer ? (
               <select
                 value={tournament.actionTimerSeconds ?? 60}
-                onChange={async (e) => {
+                disabled={savingSettings}
+                onChange={(e) => {
                   const next = parseInt(e.target.value, 10);
-                  const res = await fetch(`/api/tournaments/${tournament.id}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "updateSettings",
-                      actionTimerSeconds: next,
-                    }),
-                  });
-                  if (res.ok) {
-                    setTournament((t) =>
-                      t ? { ...t, actionTimerSeconds: next } : t
-                    );
-                  } else {
-                    const data = await res.json().catch(() => ({}));
-                    alert(data.error || "Could not update action timer");
-                  }
+                  void saveSettings({ actionTimerSeconds: next });
                 }}
-                className="mt-1 w-full max-w-[12rem] px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-sm font-semibold focus:border-emerald-500 focus:outline-none"
+                className="mt-1 w-full max-w-[12rem] px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-sm font-semibold focus:border-emerald-500 focus:outline-none disabled:opacity-50"
               >
                 {ACTION_TIMER_SECONDS_OPTIONS.map((secs) => (
                   <option key={secs} value={secs}>

@@ -768,15 +768,24 @@ export default function DashboardPage() {
                 </div>
               </Link>
               {isHost && (
-                <button
-                  type="button"
-                  onClick={() => deleteTournament(t.id, t.name)}
-                  disabled={deletingId === t.id}
-                  className="px-4 text-sm text-red-400 hover:bg-red-950/40 border-l border-slate-800 disabled:opacity-50 shrink-0"
-                  title="Delete game night"
-                >
-                  {deletingId === t.id ? "…" : "Delete"}
-                </button>
+                <div className="flex flex-col border-l border-slate-800 shrink-0">
+                  <Link
+                    href={`/tournament/${t.id}?settings=1`}
+                    className="px-4 py-3 text-sm text-emerald-400 hover:bg-slate-800/70 text-center"
+                    title="Open game night settings"
+                  >
+                    Settings
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => deleteTournament(t.id, t.name)}
+                    disabled={deletingId === t.id}
+                    className="px-4 py-3 text-sm text-red-400 hover:bg-red-950/40 border-t border-slate-800 disabled:opacity-50"
+                    title="Delete game night"
+                  >
+                    {deletingId === t.id ? "…" : "Delete"}
+                  </button>
+                </div>
               )}
             </div>
           );
