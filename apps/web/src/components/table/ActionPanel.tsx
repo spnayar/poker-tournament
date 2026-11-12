@@ -4,7 +4,11 @@ import { useState, useEffect, useMemo } from "react";
 import type { LegalActions } from "@poker/protocol";
 import {
   clamp,
+  nudgeWagerAmount,
   potWagerTarget,
+  resolveBigBlind,
+  snapWagerAmount,
+  wagerChipStep,
   wagerTargetForMultiplier,
 } from "./actionPanelMath";
 
@@ -18,6 +22,8 @@ interface ActionPanelProps {
   actionDeadlineAt?: number | null;
   /** Live pot for Pot preset sizing. */
   totalPot?: number;
+  /** Current big blind — used for BB-aligned +/- / slider steps. */
+  bigBlind?: number;
 }
 
 const primaryBtn =
@@ -99,6 +105,7 @@ export function ActionPanel({
   awayBanner = null,
   actionDeadlineAt = null,
   totalPot = 0,
+  bigBlind,
 }: ActionPanelProps) {
   const canWager = legal?.canBet || legal?.canRaise;
   const wagerMin = legal?.canBet ? legal.minBet : (legal?.minRaiseTo ?? 0);
@@ -106,6 +113,14 @@ export function ActionPanel({
     ? legal.allInAmount
     : (legal?.maxRaise ?? 0);
   const wagerLabel = legal?.canBet ? "Bet" : "Raise";
+  const bb = legal ? resolveBigBlind(legal, bigBlind) : Math.max(1, bigBlind ?? 1);
+  // Prefer a coarser BB denomination on the slider when min sits on that grid;
+  // otherwise fall back to 1BB so HTML range ticks stay BB-aligned (not 100,300,500…).
+  const chipStep = (() => {
+    if (!canWager || wagerMax <= wagerMin) return bb;
+    const stepped = wagerChipStep(bb, wagerMin, wagerMax);
+    return wagerMin % stepped === 0 ? stepped : bb;
+  })();
 
   const raise2x = legal ? wagerTargetForMultiplier(legal, 2) : null;
   const raise3x = legal ? wagerTargetForMultiplier(legal, 3) : null;
@@ -163,10 +178,15 @@ export function ActionPanel({
     setAmountInput(String(clamp(amount, wagerMin, wagerMax)));
   }
 
-  function nudgeWager(delta: number) {
+  function nudgeWager(delta: 1 | -1) {
     const base = clampedAmount ?? wagerMin;
-    const step = Math.max(1, Math.round((wagerMax - wagerMin) / 40));
-    setWagerAmount(base + delta * step);
+    setWagerAmount(nudgeWagerAmount(base, delta, wagerMin, wagerMax, bb));
+  }
+
+  function onSliderChange(raw: string) {
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n)) return;
+    setWagerAmount(snapWagerAmount(n, wagerMin, wagerMax, bb));
   }
 
   function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -282,8 +302,9 @@ export function ActionPanel({
                 aria-label={`${wagerLabel} slider`}
                 min={wagerMin}
                 max={wagerMax}
+                step={chipStep}
                 value={clampedAmount ?? wagerMin}
-                onChange={(e) => setAmountInput(e.target.value)}
+                onChange={(e) => onSliderChange(e.target.value)}
                 disabled={disabled}
                 className="action-bet-slider w-14 sm:w-28 h-8 accent-amber-400 shrink min-w-[3rem] max-w-[7rem]"
               />
