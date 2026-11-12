@@ -109,6 +109,7 @@ describe("gameNightInviteHtml", () => {
       joinUrl: "http://localhost:3000/join/XK7M",
       magicUrl: "http://localhost:3000/api/auth/callback/email?token=abc",
       isNewAccount: true,
+      zoomJoinUrl: "https://zoom.us/j/123?pwd=abc",
     });
     expect(html).toContain("Poker Night");
     expect(html).toContain(
@@ -118,9 +119,17 @@ describe("gameNightInviteHtml", () => {
     expect(html).toContain("#0f172a");
     expect(html).toContain("#059669");
     expect(html).toContain("XK7M");
-    expect(html).toContain("Create account &amp; join");
+    expect(html).toContain("Create account &amp; join the table");
     expect(html).toContain("no password or club invite code needed");
+    expect(html).toContain("This login link expires in");
     expect(html).not.toContain("friends-only");
+    expect(html).not.toContain("Join this game night");
+    expect(html).toContain("Buy-in (ledger): $20.00");
+    expect(html).toContain('href="https://zoom.us/j/123?pwd=abc"');
+    expect(html).toContain("Join Zoom");
+    expect(html).not.toMatch(
+      /background:#059669[^>]*>Join Zoom</
+    );
     expect(html).toContain("http://localhost:3000/join/XK7M");
 
     const text = gameNightInviteText({
@@ -131,9 +140,31 @@ describe("gameNightInviteHtml", () => {
       joinUrl: "http://localhost:3000/join/XK7M",
       magicUrl: "http://localhost:3000/api/auth/callback/email?token=abc",
       isNewAccount: true,
+      zoomJoinUrl: "https://zoom.us/j/123?pwd=abc",
     });
-    expect(text).toContain("Create your account and sign in");
+    expect(text).toContain("Create your account and join the table");
+    expect(text).toContain("Join Zoom: https://zoom.us/j/123?pwd=abc");
     expect(text).toContain("no separate club code");
+  });
+
+  it("uses a single sign-in CTA for existing accounts and keeps Zoom as a text link", () => {
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+    const html = gameNightInviteHtml({
+      hostDisplayName: "Sanjay",
+      nightName: "Friday Game Night",
+      joinCode: "XK7M",
+      buyInCents: 2000,
+      joinUrl: "http://localhost:3000/join/XK7M",
+      magicUrl: "http://localhost:3000/api/auth/callback/email?token=abc",
+      isNewAccount: false,
+      zoomJoinUrl: "https://zoom.us/j/123",
+    });
+    expect(html).toContain("Sign in &amp; join the table");
+    expect(html).not.toContain("Create account &amp; join the table");
+    expect(html).not.toContain("Join this game night");
+    expect(html.match(/background:#059669/g)?.length).toBe(1);
+    expect(html).toContain('color:#34d399;text-decoration:underline');
+    expect(html).toContain(">Join Zoom<");
   });
 });
 

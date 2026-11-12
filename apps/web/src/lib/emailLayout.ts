@@ -68,6 +68,11 @@ export function emailCta(href: string, label: string): string {
   return `<p style="margin:28px 0;"><a href="${escapeHtml(href)}" style="background:#059669;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block;">${escapeHtml(label)}</a></p>`;
 }
 
+/** Inline text link for secondary actions (e.g. Zoom) — not a green button. */
+export function emailTextLink(href: string, label: string): string {
+  return `<a href="${escapeHtml(href)}" style="color:#34d399;text-decoration:underline;font-weight:600;">${escapeHtml(label)}</a>`;
+}
+
 export function emailBody(text: string): string {
   return `<p style="color:#94a3b8;font-size:14px;line-height:1.5;">${text}</p>`;
 }
