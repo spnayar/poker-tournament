@@ -853,8 +853,10 @@ export default function TablePage() {
           {LEDGER_DISCLAIMER}
           <span className="text-slate-500">
             {" "}
-            · H#{tableState.handNumber} · {tableState.smallBlind}/
-            {tableState.bigBlind}
+            {tableState.handNumber > 0
+              ? `· Hand #${tableState.handNumber} · `
+              : "· "}
+            {tableState.smallBlind}/{tableState.bigBlind}
           </span>
           {gameFinished ? (
             <span className="text-amber-400"> · Tournament over</span>
