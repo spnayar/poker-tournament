@@ -48,6 +48,16 @@ describe("invite list (compose, then send)", () => {
     expect(list[0]?.displayName).toBe("Pat");
   });
 
+  it("keeps an optional typed display name for new emails", () => {
+    const { list, ok } = addInviteFromEmail([], "new@friend.co", [], "Sam");
+    expect(ok).toBe(true);
+    expect(list[0]).toEqual({
+      email: "new@friend.co",
+      displayName: "Sam",
+      avatarUrl: null,
+    });
+  });
+
   it("rejects invalid email and keeps the list unchanged", () => {
     const start = addInvite([], inviteFromPastPlayer(pat));
     const { list, ok } = addInviteFromEmail(start, "not-an-email");

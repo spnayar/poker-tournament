@@ -9,6 +9,12 @@ import {
   parsePayoutPercents,
   validatePayoutPercents,
 } from "@/lib/tournament";
+import {
+  listPastPlayers,
+  parseInvitePeople,
+  sendGameNightInvites,
+} from "@/lib/gameNightInvite";
+import { requestIp } from "@/lib/requestIp";
 import { resolveZoomCreateAttach } from "@/lib/zoomJoinUrl";
 import {
   BlindPaceSchema,
@@ -73,7 +79,15 @@ export async function GET() {
         }
       : null;
 
-    return NextResponse.json({ user, stats, tournaments, lastHostedDefaults });
+    const pastPlayers = await listPastPlayers({ userId: session.user.id });
+
+    return NextResponse.json({
+      user,
+      stats,
+      tournaments,
+      lastHostedDefaults,
+      pastPlayers,
+    });
   } catch (err) {
     console.error("GET /api/tournaments failed:", err);
     return NextResponse.json(
@@ -100,7 +114,17 @@ export async function POST(req: Request) {
     payoutPercents: rawPayouts,
     zoomJoinUrl,
     zoomPasscodePlain,
+    invites: rawInvites,
   } = body;
+
+  let invitePeople: { email: string; displayName?: string | null }[] = [];
+  if (rawInvites != null) {
+    const parsed = parseInvitePeople(rawInvites);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    invitePeople = parsed.people;
+  }
 
   const paceResult = BlindPaceSchema.safeParse(blindPace);
   const resolvedPace = paceResult.success ? paceResult.data : "gradual";
@@ -169,10 +193,30 @@ export async function POST(req: Request) {
       },
       include: {
         players: { include: { user: true } },
+        host: { select: { displayName: true, email: true } },
       },
     });
 
-    return NextResponse.json(tournament);
+    let inviteResults = null;
+    if (invitePeople.length > 0) {
+      const sent = await sendGameNightInvites({
+        people: invitePeople,
+        hostEmail: tournament.host.email,
+        hostDisplayName: tournament.host.displayName,
+        nightName: tournament.name,
+        joinCode: tournament.inviteCode,
+        buyInCents: tournament.buyInCents,
+        ip: requestIp(req),
+        zoomJoinUrl: tournament.zoomJoinUrl,
+      });
+      inviteResults = {
+        results: sent.results,
+        previewHtml: sent.previewHtml,
+        joinUrl: sent.joinUrl,
+      };
+    }
+
+    return NextResponse.json({ ...tournament, inviteResults });
   } catch (err) {
     console.error("POST /api/tournaments failed:", err);
     return NextResponse.json(

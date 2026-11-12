@@ -8,8 +8,29 @@ import {
   normalizeJoinCode,
   publicJoinPreview,
 } from "@/lib/joinNight";
+import { gameServerControlHeaders } from "@/lib/gameServerControl";
 import { joinCodeLimiter } from "@/lib/rateLimit";
 import { requestIp } from "@/lib/requestIp";
+
+async function fetchPreDealJoinOpen(tournamentId: string): Promise<boolean> {
+  const control = gameServerControlHeaders();
+  if (!control.ok) return false;
+  const gameServerUrl =
+    process.env.GAME_SERVER_URL ?? "http://localhost:3001";
+  try {
+    const res = await fetch(
+      `${gameServerUrl}/tournaments/${tournamentId}/join-window`,
+      { headers: control.headers, cache: "no-store" }
+    );
+    if (!res.ok) return false;
+    const data = (await res.json().catch(() => null)) as {
+      canJoin?: unknown;
+    } | null;
+    return data?.canJoin === true;
+  } catch {
+    return false;
+  }
+}
 
 async function limitJoinAttempt(req: Request): Promise<NextResponse | null> {
   const limit = await joinCodeLimiter.consume(requestIp(req));
@@ -97,11 +118,17 @@ export async function POST(req: Request) {
     (p) => p.userId === session.user!.id
   );
 
+  const preDealJoinOpen =
+    Boolean(runningGame) && !alreadyJoined
+      ? await fetchPreDealJoinOpen(tournament.id)
+      : false;
+
   const decision = decideJoinNight({
     status: tournament.status,
     hasRunningGame: Boolean(runningGame),
     alreadyJoined,
     isFull: tournament.players.length >= tournament.maxPlayers,
+    preDealJoinOpen,
   });
 
   if (!decision.ok) {

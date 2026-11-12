@@ -31,6 +31,12 @@ import {
   PROFILE_PROMPT_DISMISS_KEY,
 } from "@/lib/profileSetup";
 import { JOIN_CODE_MAX_LENGTH, JOIN_CODE_MIN_LENGTH } from "@/lib/joinNight";
+import type { PastPlayer } from "@/lib/gameNightInvite";
+import {
+  invitePeoplePayload,
+  type InviteDraft,
+} from "@/lib/inviteList";
+import { InviteComposeBox } from "@/components/InviteComposeBox";
 
 interface Tournament {
   id: string;
@@ -79,6 +85,11 @@ export default function DashboardPage() {
   );
   const [profilePromptDismissed, setProfilePromptDismissed] = useState(false);
   const [nightsReady, setNightsReady] = useState(false);
+  const [pastPlayers, setPastPlayers] = useState<PastPlayer[]>([]);
+  const [createInvites, setCreateInvites] = useState<InviteDraft[]>([]);
+  const [inviteDraftEmail, setInviteDraftEmail] = useState("");
+  const [inviteDraftName, setInviteDraftName] = useState("");
+  const [inviteError, setInviteError] = useState("");
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -107,6 +118,7 @@ export default function DashboardPage() {
           }
           setTournaments(data.tournaments ?? []);
           setStats(data.stats);
+          setPastPlayers(data.pastPlayers ?? []);
           const defaults = data.lastHostedDefaults ?? null;
           setLastHostedDefaults(defaults);
           setForm(createGameNightFormDefaults(defaults));
@@ -153,12 +165,17 @@ export default function DashboardPage() {
         payoutPercents: parsePayoutPercents(payoutValues) ?? [],
         zoomJoinUrl: form.zoomJoinUrl.trim() || undefined,
         zoomPasscodePlain: form.zoomPasscodePlain.trim() || undefined,
+        invites: invitePeoplePayload(createInvites),
       }),
     });
     const tournament = await res.json().catch(() => ({}));
     setCreating(false);
-    if (res.ok && tournament.id) router.push(`/tournament/${tournament.id}`);
-    else alert(tournament.error || "Could not create game night");
+    if (res.ok && tournament.id) {
+      setCreateInvites([]);
+      setInviteDraftEmail("");
+      setInviteDraftName("");
+      router.push(`/tournament/${tournament.id}`);
+    } else alert(tournament.error || "Could not create game night");
   }
 
   async function joinTournament() {
@@ -581,6 +598,26 @@ export default function DashboardPage() {
             >
               {payoutError ?? `Total: ${payoutTotal}%`}
             </p>
+          </div>
+          <div className="mb-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+            <InviteComposeBox
+              compact
+              invites={createInvites}
+              onChange={(next) => {
+                setInviteError("");
+                setCreateInvites(next);
+              }}
+              suggestions={pastPlayers}
+              loaded={nightsReady}
+              draftEmail={inviteDraftEmail}
+              draftName={inviteDraftName}
+              onDraftEmailChange={(value) => {
+                setInviteDraftEmail(value);
+                setInviteError("");
+              }}
+              onDraftNameChange={setInviteDraftName}
+              error={inviteError}
+            />
           </div>
           <div className="mb-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
             <div>

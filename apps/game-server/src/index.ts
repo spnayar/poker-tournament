@@ -379,8 +379,7 @@ async function createRoomFromDb(tournamentId: string): Promise<TournamentRoom | 
     );
   });
 
-  table.randomizeDealerButton();
-
+  // Dealer + seat order are randomized when the host confirms ready — not on open.
   const room = buildRoom(table, tournament, runningGame);
   rooms.set(tournamentId, room);
   return room;
@@ -575,7 +574,11 @@ async function startNextHand(
   room: TournamentRoom
 ): Promise<boolean> {
   const state = room.table.getPublicState();
-  if (state.phase !== "hand-complete") return false;
+  const firstDeal =
+    state.phase === "waiting" &&
+    state.handNumber === 0 &&
+    room.table.isSeatingReady();
+  if (state.phase !== "hand-complete" && !firstDeal) return false;
   if (room.table.isTournamentComplete()) return false;
 
   await applyPendingBlindIncrease(room);
@@ -587,10 +590,94 @@ async function startNextHand(
     console.error("Could not record hand count:", err);
   }
 
+  if (room.table.getPublicState().handNumber === 1) {
+    room.blindTimer.startLevelTimer();
+    await redis.set(
+      begunKey(tournamentId, room.gameNumber),
+      "1",
+      "EX",
+      SNAPSHOT_TTL_SEC
+    );
+  }
+
   await afterAction(tournamentId, room);
   broadcastBlindTimer(tournamentId, room);
 
   return true;
+}
+
+/**
+ * Open the live table for the current RUNNING game without dealing.
+ * Host may sit alone and wait; seating/dealer randomize happens on ready.
+ */
+async function openTable(tournamentId: string): Promise<boolean> {
+  let room = await loadOrCreateRoom(tournamentId);
+  if (!room) {
+    room = await createRoomFromDb(tournamentId);
+  }
+  if (!room) return false;
+
+  await persistRoom(tournamentId, room);
+  broadcastGameStarted(tournamentId, room);
+  broadcastBlindTimer(tournamentId, room);
+  syncPlayerState(room, tournamentId);
+  return true;
+}
+
+/** Host ready: randomize seats + dealer. Does not deal. */
+async function readySeating(tournamentId: string): Promise<boolean> {
+  const room = await loadOrCreateRoom(tournamentId);
+  if (!room) return false;
+  const ok = room.table.prepareTournamentStart();
+  if (!ok) return false;
+  room.seatByUserId = buildSeatMap(room.table);
+  await persistRoom(tournamentId, room);
+  syncPlayerState(room, tournamentId);
+  return true;
+}
+
+function preDealJoinOpen(room: TournamentRoom): boolean {
+  const state = room.table.getPublicState();
+  return (
+    state.phase === "waiting" &&
+    state.handNumber === 0 &&
+    !room.table.isSeatingReady()
+  );
+}
+
+async function seatLateJoiner(opts: {
+  tournamentId: string;
+  room: TournamentRoom;
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+}): Promise<number | null> {
+  const { tournamentId, room, userId, displayName, avatarUrl } = opts;
+  if (room.seatByUserId.has(userId) || room.table.hasPlayer(userId)) {
+    return room.seatByUserId.get(userId) ?? null;
+  }
+  if (!preDealJoinOpen(room)) return null;
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { maxPlayers: true, startingChips: true },
+  });
+  if (!tournament) return null;
+
+  const seatId = room.table.findOpenSeat(tournament.maxPlayers);
+  if (seatId === null) return null;
+
+  room.table.addPlayer(
+    seatId,
+    userId,
+    displayName,
+    avatarUrl,
+    tournament.startingChips
+  );
+  room.seatByUserId.set(userId, seatId);
+  await persistRoom(tournamentId, room);
+  syncPlayerState(room, tournamentId);
+  return seatId;
 }
 
 async function clearGameRedis(tournamentId: string, gameNumber: number): Promise<void> {
@@ -808,62 +895,19 @@ function broadcastGameStarted(
   );
 }
 
-/** Start the first hand of the current running game. */
+/**
+ * Legacy `/begin` path: open the table and, when 2+ are seated, randomize
+ * seats + dealer. Never auto-deals — the button dealer starts hand 1.
+ */
 async function beginGame(tournamentId: string): Promise<boolean> {
-  let room = await loadOrCreateRoom(tournamentId);
-  if (!room) {
-    room = await createRoomFromDb(tournamentId);
-  }
+  const opened = await openTable(tournamentId);
+  if (!opened) return false;
+  const room = rooms.get(tournamentId);
   if (!room) return false;
-
-  const state = room.table.getPublicState();
-  if (state.handNumber > 0 || state.phase !== "waiting") {
-    return true;
+  if (room.table.getActivePlayerCount() >= 2 && !room.table.isSeatingReady()) {
+    await readySeating(tournamentId);
   }
-
-  const acquired = await redis.set(
-    beginLockKey(tournamentId, room.gameNumber),
-    "1",
-    "EX",
-    30,
-    "NX"
-  );
-  if (!acquired) {
-    rooms.delete(tournamentId);
-    const reloaded = await loadOrCreateRoom(tournamentId);
-    if (!reloaded) return false;
-    const reloadedState = reloaded.table.getPublicState();
-    return reloadedState.handNumber > 0 || reloadedState.phase !== "waiting";
-  }
-
-  try {
-    await applyPendingBlindIncrease(room);
-    const started = room.table.startHand();
-    if (!started) return false;
-    try {
-      await incrementHandsPlayed(room.gameId);
-    } catch (err) {
-      console.error("Could not record hand count:", err);
-    }
-
-    if (room.table.getPublicState().handNumber === 1) {
-      room.blindTimer.startLevelTimer();
-    }
-
-    await persistRoom(tournamentId, room);
-    await redis.set(
-      begunKey(tournamentId, room.gameNumber),
-      "1",
-      "EX",
-      SNAPSHOT_TTL_SEC
-    );
-    await afterAction(tournamentId, room);
-    broadcastGameStarted(tournamentId, room);
-    broadcastBlindTimer(tournamentId, room);
-    return true;
-  } finally {
-    await redis.del(beginLockKey(tournamentId, room.gameNumber));
-  }
+  return true;
 }
 
 /** Replay the latest finished game so a table reload after end is not stuck loading. */
@@ -984,6 +1028,51 @@ app.post("/tournaments/:id/begin", requireGameServerSecret, async (req, res) => 
   res.json({ ok: true });
 });
 
+app.post("/tournaments/:id/open", requireGameServerSecret, async (req, res) => {
+  const id = req.params.id;
+  if (typeof id !== "string") {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const ok = await openTable(id);
+  if (!ok) {
+    res.status(400).json({ error: "Could not open table" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+app.post("/tournaments/:id/ready", requireGameServerSecret, async (req, res) => {
+  const id = req.params.id;
+  if (typeof id !== "string") {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const ok = await readySeating(id);
+  if (!ok) {
+    res.status(400).json({ error: "Need at least 2 seated players to start" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+app.get("/tournaments/:id/join-window", requireGameServerSecret, async (req, res) => {
+  const id = req.params.id;
+  if (typeof id !== "string") {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const room = await loadOrCreateRoom(id);
+  if (!room) {
+    res.json({ canJoin: false, seatingReady: false });
+    return;
+  }
+  res.json({
+    canJoin: preDealJoinOpen(room),
+    seatingReady: room.table.isSeatingReady(),
+  });
+});
+
 app.delete("/tournaments/:id", requireGameServerSecret, async (req, res) => {
   const id = req.params.id;
   if (typeof id !== "string") {
@@ -1042,8 +1131,34 @@ io.on("connection", (socket) => {
     }
 
     if (!room.seatByUserId.has(user.userId)) {
-      socket.emit(ServerEvents.ERROR, { message: "Not registered for this tournament" });
-      return;
+      const member = await prisma.tournamentPlayer.findUnique({
+        where: {
+          tournamentId_userId: {
+            tournamentId,
+            userId: user.userId,
+          },
+        },
+        include: { user: { select: { displayName: true, avatarUrl: true } } },
+      });
+      if (!member) {
+        socket.emit(ServerEvents.ERROR, {
+          message: "Not registered for this tournament",
+        });
+        return;
+      }
+      const seated = await seatLateJoiner({
+        tournamentId,
+        room,
+        userId: user.userId,
+        displayName: member.user.displayName,
+        avatarUrl: member.user.avatarUrl,
+      });
+      if (seated === null) {
+        socket.emit(ServerEvents.ERROR, {
+          message: "Not registered for this tournament",
+        });
+        return;
+      }
     }
 
     await socket.join(`tournament:${tournamentId}`);
@@ -1106,6 +1221,30 @@ io.on("connection", (socket) => {
     await afterAction(tournamentId, room);
   });
 
+  socket.on(ClientEvents.READY_SEATING, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) {
+      socket.emit(ServerEvents.ERROR, { message: "No active game" });
+      return;
+    }
+    if (room.hostUserId !== user.userId) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Only the host can start seating",
+      });
+      return;
+    }
+
+    const ok = await readySeating(tournamentId);
+    if (!ok) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Need at least 2 seated players to start",
+      });
+    }
+  });
+
   socket.on(ClientEvents.START_NEXT_HAND, async () => {
     const tournamentId = await redis.get(`player:${user.userId}:tournament`);
     if (!tournamentId) return;
@@ -1120,13 +1259,26 @@ io.on("connection", (socket) => {
     if (seatId === undefined) return;
 
     const state = room.table.getPublicState();
-    if (state.phase !== "hand-complete") {
-      socket.emit(ServerEvents.ERROR, { message: "Hand is still in progress" });
+    const firstDeal =
+      state.phase === "waiting" &&
+      state.handNumber === 0 &&
+      room.table.isSeatingReady();
+    if (state.phase !== "hand-complete" && !firstDeal) {
+      socket.emit(ServerEvents.ERROR, {
+        message: firstDeal
+          ? "Hand is still in progress"
+          : state.phase === "waiting" && !room.table.isSeatingReady()
+            ? "Host must start (randomize seats) before the first deal"
+            : "Hand is still in progress",
+      });
       return;
     }
 
-    if (state.nextDealerSeat !== seatId) {
-      const nextDealer = state.nextDealerSeat;
+    const dealSeat = firstDeal
+      ? state.dealerSeat
+      : state.nextDealerSeat;
+    if (dealSeat !== seatId) {
+      const nextDealer = dealSeat;
       const nextDealerUserId =
         nextDealer != null
           ? [...room.seatByUserId.entries()].find(
@@ -1387,4 +1539,4 @@ httpServer.listen(PORT, () => {
   console.log(`Game server listening on port ${PORT}`);
 });
 
-export { io, app, beginGame };
+export { io, app, beginGame, openTable, readySeating };

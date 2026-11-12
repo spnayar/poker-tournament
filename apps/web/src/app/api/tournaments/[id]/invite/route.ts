@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@poker/db";
 import {
   listPastPlayers,
-  parseInviteEmails,
+  parseInvitePeople,
   sendGameNightInvites,
 } from "@/lib/gameNightInvite";
 import { requestIp } from "@/lib/requestIp";
@@ -73,17 +73,19 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "Add at least one email" }, { status: 400 });
   }
-  const emailsRaw =
-    body && typeof body === "object" && "emails" in body
-      ? (body as { emails: unknown }).emails
-      : undefined;
-  const parsed = parseInviteEmails(emailsRaw);
+  const payload =
+    body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const peopleRaw =
+    "people" in payload && payload.people != null
+      ? payload.people
+      : payload.emails;
+  const parsed = parseInvitePeople(peopleRaw);
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
   const result = await sendGameNightInvites({
-    emails: parsed.emails,
+    people: parsed.people,
     hostEmail: tournament.host.email,
     hostDisplayName: tournament.host.displayName,
     nightName: tournament.name,

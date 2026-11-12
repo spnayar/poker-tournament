@@ -369,6 +369,46 @@ describe("TableEngine", () => {
     randomSpy.mockRestore();
   });
 
+  it("prepareTournamentStart randomizes seats and dealer without dealing", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    expect(table.prepareTournamentStart()).toBe(true);
+    const state = table.getPublicState();
+    expect(state.phase).toBe("waiting");
+    expect(state.handNumber).toBe(0);
+    expect(state.seatingReady).toBe(true);
+    expect(state.nextDealerSeat).toBe(state.dealerSeat);
+    // random=0 keeps swapping toward the front of Fisher–Yates / dealer pick.
+    expect(state.seats.map((s) => s.userId).sort()).toEqual([
+      "u1",
+      "u2",
+      "u3",
+    ]);
+    expect(table.startHand()).toBe(true);
+    expect(table.getPublicState().dealerSeat).toBe(state.dealerSeat);
+    randomSpy.mockRestore();
+  });
+
+  it("prepareTournamentStart refuses a solo table", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    expect(table.prepareTournamentStart()).toBe(false);
+    expect(table.isSeatingReady()).toBe(false);
+  });
+
+  it("findOpenSeat returns the first empty seat", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(2, "u2", "Bob", null, 1000);
+    expect(table.findOpenSeat(9)).toBe(1);
+    table.addPlayer(1, "u3", "Carol", null, 1000);
+    expect(table.findOpenSeat(3)).toBeNull();
+  });
+
   it("applyScheduledBlindIncrease advances blinds between hands", () => {
     const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);

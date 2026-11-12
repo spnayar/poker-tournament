@@ -56,6 +56,18 @@ describe("decideJoinNight", () => {
     ).toMatchObject({ ok: false, status: 400 });
   });
 
+  it("lets new players join the table before host locks seating", () => {
+    expect(
+      decideJoinNight({
+        status: "RUNNING",
+        hasRunningGame: true,
+        alreadyJoined: false,
+        isFull: false,
+        preDealJoinOpen: true,
+      })
+    ).toEqual({ ok: true, alreadyJoined: false, destination: "table" });
+  });
+
   it("lets new players join a lobby", () => {
     expect(
       decideJoinNight({

@@ -67,6 +67,11 @@ export class TableEngine {
   private phase: TablePhase = "waiting";
   private dealerSeat = 0;
   private skipNextDealerMove = false;
+  /**
+   * Host confirmed roster: seats + dealer were randomized. First hand waits for
+   * the dealer to deal (no auto-deal on randomize).
+   */
+  private seatingReady = false;
   private currentActorSeat: number | null = null;
   private smallBlind = 25;
   private bigBlind = 50;
@@ -121,6 +126,71 @@ export class TableEngine {
       skipped: false,
       skipReason: null,
     });
+  }
+
+  /** First unused seat id in `[0, maxPlayers)`, or null if full. */
+  findOpenSeat(maxPlayers: number): number | null {
+    const max = Math.max(0, Math.floor(maxPlayers));
+    for (let seatId = 0; seatId < max; seatId++) {
+      if (!this.players.has(seatId)) return seatId;
+    }
+    return null;
+  }
+
+  hasPlayer(userId: string): boolean {
+    for (const p of this.players.values()) {
+      if (p.userId === userId) return true;
+    }
+    return false;
+  }
+
+  isSeatingReady(): boolean {
+    return this.seatingReady;
+  }
+
+  /**
+   * Shuffle who sits where. Only before the first hand and before seating is
+   * locked by {@link prepareTournamentStart}.
+   */
+  randomizeSeatOrder(): boolean {
+    if (this.phase !== "waiting" || this.handNumber !== 0 || this.seatingReady) {
+      return false;
+    }
+    const seatIds = this.getSeatIds();
+    if (seatIds.length < 2) return false;
+
+    const roster = seatIds.map((id) => this.players.get(id)!);
+    for (let i = roster.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = roster[i]!;
+      roster[i] = roster[j]!;
+      roster[j] = tmp;
+    }
+
+    this.players.clear();
+    for (let i = 0; i < seatIds.length; i++) {
+      const seatId = seatIds[i]!;
+      const player = roster[i]!;
+      player.seatId = seatId;
+      this.players.set(seatId, player);
+    }
+    this.emitState();
+    return true;
+  }
+
+  /**
+   * Host ready: randomize seat order + dealer button, lock seating. Does not deal.
+   */
+  prepareTournamentStart(): boolean {
+    if (this.phase !== "waiting" || this.handNumber !== 0) return false;
+    if (this.seatingReady) return true;
+    const active = this.getActiveSeats();
+    if (active.length < 2) return false;
+    this.randomizeSeatOrder();
+    this.randomizeDealerButton();
+    this.seatingReady = true;
+    this.emitState();
+    return true;
   }
 
   /** Players still in the tournament (not busted). All-in players count until eliminated. */
@@ -223,6 +293,8 @@ export class TableEngine {
       board: [...this.board],
       phase: this.phase,
       dealerSeat: this.dealerSeat,
+      skipNextDealerMove: this.skipNextDealerMove,
+      seatingReady: this.seatingReady,
       currentActorSeat: this.currentActorSeat,
       smallBlind: this.smallBlind,
       bigBlind: this.bigBlind,
@@ -267,6 +339,10 @@ export class TableEngine {
     this.board = [...snapshot.board];
     this.phase = snapshot.phase;
     this.dealerSeat = snapshot.dealerSeat;
+    this.skipNextDealerMove = snapshot.skipNextDealerMove ?? false;
+    this.seatingReady =
+      snapshot.seatingReady ??
+      (snapshot.handNumber > 0 || snapshot.phase !== "waiting");
     this.currentActorSeat = snapshot.currentActorSeat;
     this.smallBlind = snapshot.smallBlind;
     this.bigBlind = snapshot.bigBlind;
@@ -305,6 +381,10 @@ export class TableEngine {
   startHand(): boolean {
     const activeSeats = this.getActiveSeats();
     if (activeSeats.length < 2) return false;
+    // Dealing locks seating even if host ready was skipped (unit tests / recovery).
+    if (this.handNumber === 0) {
+      this.seatingReady = true;
+    }
 
     this.handNumber++;
     this.appendHandHeader();
@@ -400,6 +480,19 @@ export class TableEngine {
     const pick = seats[Math.floor(Math.random() * seats.length)]!;
     this.dealerSeat = pick;
     this.skipNextDealerMove = true;
+  }
+
+  /** Who should deal the next hand right now (first hand uses the button). */
+  getDealSeat(): number | null {
+    const activeSeats = this.getActiveSeats();
+    if (activeSeats.length < 2) return null;
+    if (this.phase === "waiting" && this.handNumber === 0) {
+      return this.seatingReady ? this.dealerSeat : null;
+    }
+    if (this.phase === "hand-complete") {
+      return this.getNextDealerSeat();
+    }
+    return null;
   }
 
   /** Apply the next blind level when the level timer expires (before a new hand). */
@@ -1242,6 +1335,8 @@ export class TableEngine {
       ? { pots: rawPots, uncalledAmount: 0 }
       : splitLivePots(rawPots);
     const awaitingNextHand = reviewingHand;
+    const awaitingFirstDeal =
+      this.phase === "waiting" && this.handNumber === 0 && this.seatingReady;
     return {
       tournamentId: this.config.tournamentId,
       phase: this.phase,
@@ -1252,7 +1347,12 @@ export class TableEngine {
       seats,
       dealerSeat: this.dealerSeat,
       currentActorSeat: this.currentActorSeat,
-      nextDealerSeat: awaitingNextHand ? this.getNextDealerSeat() : null,
+      nextDealerSeat: awaitingNextHand
+        ? this.getNextDealerSeat()
+        : awaitingFirstDeal
+          ? this.dealerSeat
+          : null,
+      seatingReady: this.seatingReady,
       smallBlind: this.smallBlind,
       bigBlind: this.bigBlind,
       blindLevel: this.blindLevel + 1,

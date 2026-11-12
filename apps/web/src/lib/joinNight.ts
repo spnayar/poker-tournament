@@ -23,6 +23,8 @@ export type JoinNightState = {
   hasRunningGame: boolean;
   alreadyJoined: boolean;
   isFull: boolean;
+  /** Table is open but host has not locked seats yet — new players may still join. */
+  preDealJoinOpen?: boolean;
 };
 
 export type JoinNightDecision =
@@ -47,7 +49,7 @@ export function decideJoinNight(state: JoinNightState): JoinNightDecision {
   if (state.status === "FINISHED") {
     return { ok: false, error: "This game night has ended", status: 400 };
   }
-  if (state.hasRunningGame) {
+  if (state.hasRunningGame && !state.preDealJoinOpen) {
     return {
       ok: false,
       error: "A tournament is in progress — join between tournaments",
@@ -58,7 +60,11 @@ export function decideJoinNight(state: JoinNightState): JoinNightDecision {
     return { ok: false, error: "Game night is full", status: 400 };
   }
 
-  return { ok: true, alreadyJoined: false, destination: "lobby" };
+  return {
+    ok: true,
+    alreadyJoined: false,
+    destination: state.preDealJoinOpen ? "table" : "lobby",
+  };
 }
 
 export function tournamentPath(
