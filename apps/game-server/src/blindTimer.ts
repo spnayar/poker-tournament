@@ -6,6 +6,8 @@ export interface BlindTimerSnapshot {
   paused: boolean;
   pausedRemainingMs: number | null;
   increasePending: boolean;
+  /** Target structure index when increasePending; null otherwise. */
+  pendingLevelIndex: number | null;
 }
 
 export class BlindTimer {
@@ -14,6 +16,7 @@ export class BlindTimer {
   private paused = false;
   private pausedRemainingMs: number | null = null;
   private increasePending = false;
+  private pendingLevelIndex: number | null = null;
 
   constructor(
     private readonly blindLevels: BlindLevel[],
@@ -26,6 +29,11 @@ export class BlindTimer {
       this.paused = snapshot.paused;
       this.pausedRemainingMs = snapshot.pausedRemainingMs;
       this.increasePending = snapshot.increasePending;
+      this.pendingLevelIndex =
+        snapshot.pendingLevelIndex ??
+        (snapshot.increasePending
+          ? Math.min(snapshot.levelIndex + 1, this.maxLevelIndex)
+          : null);
     }
   }
 
@@ -35,6 +43,10 @@ export class BlindTimer {
 
   hasMoreLevels(): boolean {
     return this.levelIndex < this.maxLevelIndex;
+  }
+
+  getPendingLevelIndex(): number | null {
+    return this.increasePending ? this.pendingLevelIndex : null;
   }
 
   startLevelTimer(): void {
@@ -52,9 +64,7 @@ export class BlindTimer {
       return false;
     }
     if (now >= this.levelEndsAt) {
-      this.increasePending = true;
-      this.levelEndsAt = null;
-      return true;
+      return this.scheduleLevel(this.levelIndex + 1);
     }
     return false;
   }
@@ -79,22 +89,43 @@ export class BlindTimer {
    * (same as letting the timer expire).
    */
   forceNextLevel(): boolean {
-    if (this.increasePending || !this.hasMoreLevels()) return false;
+    return this.scheduleLevel(this.levelIndex + 1);
+  }
+
+  /**
+   * Host override: schedule a specific structure level (must be above current).
+   */
+  forceToLevel(targetLevelIndex: number): boolean {
+    return this.scheduleLevel(targetLevelIndex);
+  }
+
+  private scheduleLevel(targetLevelIndex: number): boolean {
+    if (this.increasePending) return false;
+    if (
+      !Number.isInteger(targetLevelIndex) ||
+      targetLevelIndex <= this.levelIndex ||
+      targetLevelIndex > this.maxLevelIndex
+    ) {
+      return false;
+    }
     this.paused = false;
     this.pausedRemainingMs = null;
     this.levelEndsAt = null;
+    this.pendingLevelIndex = targetLevelIndex;
     this.increasePending = true;
     return true;
   }
 
   onLevelApplied(tableBlindLevel: number): void {
     this.increasePending = false;
+    this.pendingLevelIndex = null;
     this.levelIndex = tableBlindLevel;
     this.startLevelTimer();
   }
 
   clearIncreasePending(): void {
     this.increasePending = false;
+    this.pendingLevelIndex = null;
     this.levelEndsAt = null;
   }
 
@@ -105,6 +136,7 @@ export class BlindTimer {
       paused: this.paused,
       pausedRemainingMs: this.pausedRemainingMs,
       increasePending: this.increasePending,
+      pendingLevelIndex: this.pendingLevelIndex,
     };
   }
 
@@ -119,7 +151,14 @@ export class BlindTimer {
     now = Date.now()
   ): BlindTimerState {
     const levelNumber = tableBlindLevel + 1;
-    const nextLevel = this.blindLevels[tableBlindLevel + 1] ?? null;
+    const pendingIndex = this.increasePending
+      ? (this.pendingLevelIndex ?? tableBlindLevel + 1)
+      : null;
+    const pendingLevel =
+      pendingIndex !== null ? (this.blindLevels[pendingIndex] ?? null) : null;
+    const nextIndex = pendingIndex ?? tableBlindLevel + 1;
+    const nextLevel = this.blindLevels[nextIndex] ?? null;
+    const advanceOptions = this.blindLevels.slice(tableBlindLevel + 1);
 
     let remainingMs: number | null = null;
     if (this.paused) {
@@ -139,6 +178,10 @@ export class BlindTimer {
       currentBb,
       nextSb: nextLevel?.sb ?? null,
       nextBb: nextLevel?.bb ?? null,
+      pendingSb: pendingLevel?.sb ?? null,
+      pendingBb: pendingLevel?.bb ?? null,
+      pendingLevelNumber: pendingLevel ? pendingIndex! + 1 : null,
+      advanceOptions,
       levelDurationMs: this.levelDurationMs,
     };
   }

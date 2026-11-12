@@ -107,7 +107,30 @@ export const BlindTimerStateSchema = z.object({
   currentBb: z.number().int().positive(),
   nextSb: z.number().int().positive().nullable(),
   nextBb: z.number().int().positive().nullable(),
+  /** Scheduled target while increasePending (may skip levels). */
+  pendingSb: z.number().int().positive().nullable().optional(),
+  pendingBb: z.number().int().positive().nullable().optional(),
+  pendingLevelNumber: z.number().int().positive().nullable().optional(),
+  /** Higher structure levels the host may jump to. */
+  advanceOptions: z.array(BlindLevelSchema).optional(),
   levelDurationMs: z.number().int().positive(),
   hostUserId: z.string().optional(),
 });
 export type BlindTimerState = z.infer<typeof BlindTimerStateSchema>;
+
+/** Broadcast when blinds are scheduled to rise on the next hand. */
+export const BlindsUpSchema = z.object({
+  sb: z.number().int().positive(),
+  bb: z.number().int().positive(),
+  levelNumber: z.number().int().positive(),
+  pending: z.literal(true),
+});
+export type BlindsUp = z.infer<typeof BlindsUpSchema>;
+
+export const AdvanceBlindLevelSchema = z
+  .object({
+    /** 0-based structure index; omit to advance one level. */
+    targetLevelIndex: z.number().int().nonnegative().optional(),
+  })
+  .default({});
+export type AdvanceBlindLevel = z.infer<typeof AdvanceBlindLevelSchema>;
