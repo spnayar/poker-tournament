@@ -522,7 +522,16 @@ function syncPlayerState(room: TournamentRoom, tournamentId: string): void {
   }
 
   const actorSeat = state.currentActorSeat;
-  if (actorSeat !== null && !room.table.isSkipped(actorSeat)) {
+  const bettingPhase =
+    state.phase !== "hand-complete" &&
+    state.phase !== "showdown" &&
+    state.phase !== "waiting" &&
+    state.phase !== "tournament-complete";
+  if (
+    bettingPhase &&
+    actorSeat !== null &&
+    !room.table.isSkipped(actorSeat)
+  ) {
     const actorUserId = [...room.seatByUserId.entries()].find(
       ([, seat]) => seat === actorSeat
     )?.[0];
@@ -634,7 +643,11 @@ async function startNextHand(
     state.handNumber === 0 &&
     room.table.isSeatingReady();
   if (state.phase !== "hand-complete" && !firstDeal) return false;
-  if (room.table.isTournamentComplete()) return false;
+  if (room.table.isTournamentComplete()) {
+    // One player left (others busted/away-eliminated) — never soft-lock Deal.
+    void finishGame(tournamentId, room);
+    return false;
+  }
 
   await applyPendingBlindIncrease(room);
   const started = room.table.startHand();
@@ -1358,23 +1371,12 @@ io.on("connection", (socket) => {
       ? state.dealerSeat
       : state.nextDealerSeat;
     if (dealSeat !== seatId) {
-      const nextDealer = dealSeat;
-      const nextDealerUserId =
-        nextDealer != null
-          ? [...room.seatByUserId.entries()].find(
-              ([, seat]) => seat === nextDealer
-            )?.[0]
-          : undefined;
-      const nextDealerAway =
-        nextDealerUserId != null && !room.playerSockets.has(nextDealerUserId);
-      const nextDealerSkipped =
-        nextDealer != null && room.table.isSkipped(nextDealer);
-      const hostCanDeal =
-        room.hostUserId === user.userId &&
-        (nextDealerSkipped || nextDealerAway);
+      // Host may always advance between hands (away/busted dealers must not
+      // leave the table with no Deal control). Button seat still preferred.
+      const hostCanDeal = room.hostUserId === user.userId;
       if (!hostCanDeal) {
         socket.emit(ServerEvents.ERROR, {
-          message: "Only the next dealer can deal the next hand",
+          message: "Only the next dealer or host can deal the next hand",
         });
         return;
       }
