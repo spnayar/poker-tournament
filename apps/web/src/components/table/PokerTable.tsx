@@ -684,7 +684,7 @@ export function PokerTable({
             isActive={seat.seatId === currentActorSeat}
             animateDeal={animateDeal}
             isHost={isHost}
-            isSpeaking={speakingUserIds.includes(seat.userId)}
+            isSpeaking={(speakingUserIds ?? []).includes(seat.userId)}
             actionSecondsLeft={
               seat.seatId === currentActorSeat ? actionSecondsLeft : null
             }

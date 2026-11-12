@@ -75,7 +75,8 @@ export async function POST(
 
   const userName =
     session.user.name?.trim() ||
-    (isHost ? tournament.host.displayName : "Player");
+    (isHost ? tournament.host.displayName?.trim() : "") ||
+    "Player";
 
   const signature = signZoomMeetingSdkJwt({
     clientId: creds.clientId,
@@ -86,7 +87,7 @@ export async function POST(
 
   return NextResponse.json({
     signature,
-    meetingNumber: tournament.zoomMeetingNumber,
+    meetingNumber: String(tournament.zoomMeetingNumber),
     password,
     userName,
     /** Client must keep SDK audio off — Zoom app owns the call. */

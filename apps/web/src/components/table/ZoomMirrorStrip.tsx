@@ -128,17 +128,26 @@ export function ZoomMirrorStrip({
       clientRef.current = client;
 
       const onActiveSpeaker = (payload: unknown) => {
-        const speakers = Array.isArray(payload)
-          ? (payload as { displayName?: string }[])
-          : [];
-        onSpeakingUserIds(matchSpeakerUserIds(seatsRef.current, speakers));
+        try {
+          const speakers = Array.isArray(payload)
+            ? (payload as { displayName?: string | null; userName?: string | null }[])
+            : [];
+          onSpeakingUserIds(
+            matchSpeakerUserIds(seatsRef.current ?? [], speakers)
+          );
+        } catch {
+          // Missing Zoom participant / name mapping must never break the strip.
+          onSpeakingUserIds([]);
+        }
         void enforceAudioOff(client);
       };
 
-      client.on?.("active-speaker", onActiveSpeaker);
-
       // Component View InitOptions do not document disableJoinAudio (Client View does).
       // Pass it anyway + stopAudio/mute after join. Product assumes Zoom owns audio.
+      //
+      // IMPORTANT: register listeners only AFTER init(). Zoom's client.on() checks an
+      // internal event-name list that is assigned during init — calling on() first
+      // throws: Cannot read properties of undefined (reading 'includes').
       await client.init({
         zoomAppRoot: root,
         language: "en-US",
@@ -160,22 +169,45 @@ export function ZoomMirrorStrip({
         },
       });
 
+      client.on?.("active-speaker", onActiveSpeaker);
+
+      // Only pass defined join fields — Zoom may call string methods on optionals.
+      const userName =
+        typeof data.userName === "string" && data.userName.trim()
+          ? data.userName.trim()
+          : "Player";
+      const meetingNumber = String(data.meetingNumber ?? "").trim();
+      const password =
+        typeof data.password === "string" ? data.password : "";
+      const signature =
+        typeof data.signature === "string" ? data.signature : "";
+      if (!signature || !meetingNumber) {
+        setError("Meeting SDK join is missing signature or meeting number");
+        clientRef.current = null;
+        return;
+      }
+
       await client.join({
-        signature: data.signature,
-        meetingNumber: data.meetingNumber,
-        password: data.password,
-        userName: data.userName,
+        signature,
+        meetingNumber,
+        password,
+        userName,
       });
 
       await enforceAudioOff(client);
       setJoined(true);
       setExpanded(true);
     } catch (err) {
+      const raw = err instanceof Error ? err.message : "Meeting SDK join failed";
+      // Keep the banner useful without dumping opaque SDK TypeErrors as the only clue.
       const message =
-        err instanceof Error ? err.message : "Meeting SDK join failed";
+        /reading 'includes'/i.test(raw)
+          ? "Could not start table faces (Zoom listener ran before init). Try again."
+          : raw;
       setError(message);
       clientRef.current = null;
       setJoined(false);
+      onSpeakingUserIds([]);
     } finally {
       setJoining(false);
     }
