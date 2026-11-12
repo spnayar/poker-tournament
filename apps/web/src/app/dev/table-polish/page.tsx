@@ -259,8 +259,8 @@ export default function TablePolishPreviewPage() {
       <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch justify-center max-w-7xl mx-auto w-full min-h-0 overflow-visible pb-[3.25rem]">
         <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-visible">
           <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch min-h-0 overflow-visible">
-            <div className="flex-[1.4] flex items-center justify-center min-w-0 min-h-0 overflow-visible max-sm:min-h-[46%] max-sm:flex-[1.35]">
-              <div className="relative w-full h-full max-w-3xl max-h-full pb-6 sm:pb-8 overflow-visible">
+            <div className="flex-[1.4] flex items-center justify-center min-w-0 min-h-0 overflow-visible max-sm:min-h-[54%] max-sm:flex-[1.7]">
+              <div className="relative w-full h-full max-w-3xl max-h-full pb-5 sm:pb-8 overflow-visible">
                 <PokerTable
                   seats={seats}
                   board={["Ah", "Kd", "7c"]}
