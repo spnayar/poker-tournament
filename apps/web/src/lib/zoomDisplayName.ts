@@ -1,3 +1,14 @@
+/**
+ * Meeting SDK mirror join display name — always the club brand, never the
+ * signed-in seat name. Seat / Action Log identity stays elsewhere in the app.
+ *
+ * Avatar note: Component View `client.join()` has no participant avatar /
+ * userPhoto field (only userName, userEmail, zak, …). Avatars come from the
+ * Zoom account profile when joining with a ZAK — not something we can set for
+ * this anonymous mirror join. Logo asset: `/poker-table-club-logo.png`.
+ */
+export const ZOOM_MIRROR_PARTICIPANT_NAME = "The Poker Table Club";
+
 /** Normalize Zoom ↔ seat display names for soft auto-mapping. */
 export function normalizeZoomDisplayName(
   name: string | null | undefined
