@@ -210,6 +210,8 @@ export const ServerEvents = {
   PLAYER_CARDS: "player:cards",
   ACTION_REQUIRED: "action:required",
   HAND_RESULT: "hand:result",
+  /** Optional fold-win reveal — does not block dealing the next hand. */
+  CARDS_SHOWN: "hand:cards-shown",
   ANIM_DEAL: "anim:deal",
   ANIM_REVEAL: "anim:reveal",
   ANIM_CHIPS: "anim:chips",
@@ -225,6 +227,8 @@ export const ClientEvents = {
   ACTION: "player:action",
   RECONNECT: "player:reconnect",
   START_NEXT_HAND: "hand:start-next",
+  /** Fold-win winner optionally reveals hole cards (non-blocking). */
+  SHOW_CARDS: "hand:show-cards",
   /** Host: randomize seats + dealer before first deal (no auto-deal). */
   READY_SEATING: "seating:ready",
   PAUSE_BLIND_TIMER: "blind:pause",

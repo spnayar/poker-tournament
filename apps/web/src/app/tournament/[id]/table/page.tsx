@@ -15,6 +15,7 @@ import { BlindsUpToast } from "@/components/table/BlindsUpToast";
 import { ActionTimerControls } from "@/components/table/ActionTimerControls";
 import { ActionTimerNudge } from "@/components/table/ActionTimerNudge";
 import { DealNextHandBar } from "@/components/table/DealNextHandBar";
+import { ShowCardsControl } from "@/components/table/ShowCardsControl";
 import { SoundToggle } from "@/components/table/SoundToggle";
 import { DashboardLink } from "@/components/table/DashboardLink";
 import { HostMenu } from "@/components/table/HostMenu";
@@ -97,6 +98,7 @@ export default function TablePage() {
   const [connected, setConnected] = useState(false);
   const [actionPending, setActionPending] = useState(false);
   const [dealNextPending, setDealNextPending] = useState(false);
+  const [showCardsPending, setShowCardsPending] = useState(false);
   const [hostActionLoading, setHostActionLoading] = useState(false);
   const [chopOpen, setChopOpen] = useState(false);
   const [chopSubmitting, setChopSubmitting] = useState(false);
@@ -283,6 +285,7 @@ export default function TablePage() {
         setMyCards([]);
         setAnimateDeal(true);
         setDealNextPending(false);
+        setShowCardsPending(false);
         cheeredHandRef.current = null;
         const activePlayers = state.seats.filter(
           (s) =>
@@ -374,6 +377,7 @@ export default function TablePage() {
       }
       setHandResult(result);
       setShownCards(result.shownCards);
+      setShowCardsPending(false);
       const viewerSeatId = viewerSeatIdRef.current;
       if (viewerSeatId !== null) {
         const mine = result.shownCards.find((s) => s.seatId === viewerSeatId);
@@ -383,6 +387,28 @@ export default function TablePage() {
       }
       setLegalActions(null);
       setActionPending(false);
+    };
+
+    const handleCardsShown = (shown: ShownHand) => {
+      setShownCards((prev) => {
+        const without = prev.filter((s) => s.seatId !== shown.seatId);
+        return [...without, shown];
+      });
+      setShowCardsPending(false);
+      const viewerSeatId = viewerSeatIdRef.current;
+      if (viewerSeatId !== null && shown.seatId === viewerSeatId) {
+        setMyCards(shown.holeCards);
+      }
+      setHandResult((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          shownCards: [
+            ...prev.shownCards.filter((s) => s.seatId !== shown.seatId),
+            shown,
+          ],
+        };
+      });
     };
 
     const handleBlindTimer = (
@@ -403,6 +429,7 @@ export default function TablePage() {
       setShownCards([]);
       setMyCards([]);
       setDealNextPending(false);
+      setShowCardsPending(false);
       handNumberRef.current = 0;
       actionLogRef.current = [];
       setActionLog([]);
@@ -481,6 +508,7 @@ export default function TablePage() {
       console.error("Game error:", err.message);
       setActionPending(false);
       setDealNextPending(false);
+      setShowCardsPending(false);
       setChopSubmitting(false);
       if (chopOpenRef.current) setChopError(err.message);
       if (err.message.includes("deleted")) {
@@ -514,6 +542,7 @@ export default function TablePage() {
     socket.on(ServerEvents.PLAYER_CARDS, handlePlayerCards);
     socket.on(ServerEvents.ACTION_REQUIRED, handleActionRequired);
     socket.on(ServerEvents.HAND_RESULT, handleHandResult);
+    socket.on(ServerEvents.CARDS_SHOWN, handleCardsShown);
     socket.on(ServerEvents.GAME_FINISHED, handleGameFinished);
     socket.on(ServerEvents.GAME_STARTED, handleGameStarted);
     socket.on(ServerEvents.BLIND_TIMER, handleBlindTimer);
@@ -532,6 +561,7 @@ export default function TablePage() {
       socket.off(ServerEvents.PLAYER_CARDS, handlePlayerCards);
       socket.off(ServerEvents.ACTION_REQUIRED, handleActionRequired);
       socket.off(ServerEvents.HAND_RESULT, handleHandResult);
+      socket.off(ServerEvents.CARDS_SHOWN, handleCardsShown);
       socket.off(ServerEvents.GAME_FINISHED, handleGameFinished);
       socket.off(ServerEvents.GAME_STARTED, handleGameStarted);
       socket.off(ServerEvents.BLIND_TIMER, handleBlindTimer);
@@ -566,6 +596,12 @@ export default function TablePage() {
     if (!socketRef.current || dealNextPending || gameFinished) return;
     setDealNextPending(true);
     socketRef.current.emit(ClientEvents.START_NEXT_HAND);
+  }
+
+  function showFoldWinCards() {
+    if (!socketRef.current || showCardsPending || gameFinished) return;
+    setShowCardsPending(true);
+    socketRef.current.emit(ClientEvents.SHOW_CARDS);
   }
 
   function pauseBlindTimer() {
@@ -738,6 +774,15 @@ export default function TablePage() {
     mySeat !== undefined &&
     (nextDealerSeat === mySeat.seatId ||
       (Boolean(isHost) && nextDealerUnavailable));
+  const canShowFoldWinCards =
+    awaitingNextHand &&
+    mySeat !== undefined &&
+    Boolean(
+      handResult?.winners.some(
+        (w) => w.wonByFold === true && w.seatId === mySeat.seatId
+      )
+    ) &&
+    !shownCards.some((s) => s.seatId === mySeat.seatId);
   const isBetting =
     !gameFinished &&
     !handCompletePhase &&
@@ -953,6 +998,12 @@ export default function TablePage() {
                 )}
               </div>
             )}
+            {canShowFoldWinCards ? (
+              <ShowCardsControl
+                pending={showCardsPending}
+                onShow={showFoldWinCards}
+              />
+            ) : null}
             {(awaitingNextHand || awaitingFirstDeal) && nextDealer && (
               <DealNextHandBar
                 dealerName={nextDealer.displayName}

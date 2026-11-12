@@ -1,4 +1,10 @@
-import type { ActionLogEntry, Card, PotLayer, TablePhase } from "@poker/protocol";
+import type {
+  ActionLogEntry,
+  Card,
+  HandResult,
+  PotLayer,
+  TablePhase,
+} from "@poker/protocol";
 import type { TableFunStats } from "./funStats";
 import { TableEngine, type TableConfig, type TablePlayer } from "./table";
 
@@ -25,6 +31,8 @@ export interface TableSnapshot {
   postedSbSeat: number | null;
   postedBbSeat: number | null;
   lastAwardedPots?: PotLayer[];
+  /** Fold-win / showdown result retained through hand-complete for optional show. */
+  lastHandResult?: HandResult | null;
   funStats?: TableFunStats;
 }
 

@@ -49,6 +49,7 @@ function actionColor(action: string): string {
     return "text-emerald-400";
   if (action.startsWith("All-in") || action.startsWith("Wins"))
     return "text-amber-400";
+  if (action === "Shows") return "text-amber-300";
   if (action.startsWith("SB") || action.startsWith("BB")) return "text-slate-400";
   return "text-slate-300";
 }

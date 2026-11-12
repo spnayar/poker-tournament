@@ -77,7 +77,14 @@ export interface TableConfig {
 }
 
 export interface TableEvent {
-  type: "deal" | "reveal" | "chips" | "state" | "handResult" | "elimination";
+  type:
+    | "deal"
+    | "reveal"
+    | "chips"
+    | "state"
+    | "handResult"
+    | "cardsShown"
+    | "elimination";
   payload: unknown;
 }
 
@@ -113,6 +120,11 @@ export class TableEngine {
   private resolvingSkipped = false;
   /** Pot layers from the last showdown / fold-win, kept after bets reset. */
   private lastAwardedPots: PotLayer[] = [];
+  /**
+   * Last completed hand result (fold-win or showdown). Kept through
+   * hand-complete so winners can optionally show cards before the next deal.
+   */
+  private lastHandResult: HandResult | null = null;
   /** Fun-fact counters for night recap (seat-keyed). */
   private funStats: TableFunStats = emptyTableFunStats();
 
@@ -356,6 +368,17 @@ export class TableEngine {
         eligibleSeatIds: [...p.eligibleSeatIds],
         contributorCount: p.contributorCount,
       })),
+      lastHandResult: this.lastHandResult
+        ? {
+            ...this.lastHandResult,
+            winners: this.lastHandResult.winners.map((w) => ({ ...w })),
+            shownCards: this.lastHandResult.shownCards.map((s) => ({
+              ...s,
+              holeCards: [...s.holeCards],
+              bestHand: [...s.bestHand],
+            })),
+          }
+        : null,
       funStats: cloneTableFunStats(this.funStats),
     };
   }
@@ -404,6 +427,17 @@ export class TableEngine {
       eligibleSeatIds: [...p.eligibleSeatIds],
       contributorCount: p.contributorCount,
     }));
+    this.lastHandResult = snapshot.lastHandResult
+      ? {
+          ...snapshot.lastHandResult,
+          winners: snapshot.lastHandResult.winners.map((w) => ({ ...w })),
+          shownCards: snapshot.lastHandResult.shownCards.map((s) => ({
+            ...s,
+            holeCards: [...s.holeCards],
+            bestHand: [...s.bestHand],
+          })),
+        }
+      : null;
     this.funStats = snapshot.funStats
       ? cloneTableFunStats(snapshot.funStats)
       : emptyTableFunStats();
@@ -440,6 +474,7 @@ export class TableEngine {
     this.lastFullRaiseTo = this.bigBlind;
     this.bettingComplete = false;
     this.lastAwardedPots = [];
+    this.lastHandResult = null;
 
     for (const p of this.players.values()) {
       if (p.eliminated) {
@@ -1132,6 +1167,7 @@ export class TableEngine {
     }));
     const result = this.resolvePots(pots);
     this.phase = "hand-complete";
+    this.lastHandResult = result;
     const eliminated = this.checkEliminations();
     this.recordHandStats(result, eliminated);
     this.pendingEvents.push({ type: "handResult", payload: result });
@@ -1201,11 +1237,75 @@ export class TableEngine {
       totalAwarded: total,
     };
     this.phase = "hand-complete";
+    this.lastHandResult = result;
     this.resetHandBets();
     const eliminated = this.checkEliminations();
     this.recordHandStats(result, eliminated);
     this.pendingEvents.push({ type: "handResult", payload: result });
     this.emitState();
+  }
+
+  /** Last completed hand result (available during hand-complete). */
+  getLastHandResult(): HandResult | null {
+    if (!this.lastHandResult) return null;
+    return {
+      ...this.lastHandResult,
+      winners: this.lastHandResult.winners.map((w) => ({ ...w })),
+      shownCards: this.lastHandResult.shownCards.map((s) => ({
+        ...s,
+        holeCards: [...s.holeCards],
+        bestHand: [...s.bestHand],
+      })),
+    };
+  }
+
+  /** True when this seat won the last hand by fold and has not shown yet. */
+  canShowCards(seatId: number): boolean {
+    if (this.phase !== "hand-complete") return false;
+    const result = this.lastHandResult;
+    if (!result) return false;
+    const foldWinner = result.winners.find(
+      (w) => w.seatId === seatId && w.wonByFold === true
+    );
+    if (!foldWinner) return false;
+    if (result.shownCards.some((s) => s.seatId === seatId)) return false;
+    const player = this.players.get(seatId);
+    return Boolean(player && player.holeCards.length >= 2);
+  }
+
+  /**
+   * Fold-win winner optionally reveals hole cards. Non-blocking: does not
+   * change phase or prevent dealing the next hand.
+   */
+  showCards(seatId: number): boolean {
+    if (!this.canShowCards(seatId)) return false;
+    const player = this.players.get(seatId)!;
+    const holeCards = [...player.holeCards];
+
+    let bestHand = holeCards;
+    if (this.board.length >= 3) {
+      bestHand = evaluateHand(seatId, holeCards, this.board).cards;
+    }
+
+    const shown = {
+      seatId,
+      holeCards,
+      bestHand,
+    };
+
+    const result = this.lastHandResult!;
+    this.lastHandResult = {
+      ...result,
+      shownCards: [
+        ...result.shownCards.filter((s) => s.seatId !== seatId),
+        shown,
+      ],
+    };
+
+    this.logAction(seatId, "Shows");
+    this.pendingEvents.push({ type: "cardsShown", payload: shown });
+    this.emitState();
+    return true;
   }
 
   private computePots(winnerSeat?: number): PotLayer[] {
