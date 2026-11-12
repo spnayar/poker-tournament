@@ -21,6 +21,7 @@ import {
   buildSidePots,
   splitLivePots,
   totalPotAmount,
+  uncalledReturnsFromPots,
   type PlayerContribution,
 } from "./sidePots";
 import {
@@ -29,6 +30,26 @@ import {
   emptyTableFunStats,
   type TableFunStats,
 } from "./funStats";
+
+type WinnerRow = HandResult["winners"][number];
+
+/** Merge multi-pot awards for the same seat into one showdown win line. */
+function coalesceWinnerRows(rows: WinnerRow[]): WinnerRow[] {
+  const bySeat = new Map<number, WinnerRow>();
+  const order: number[] = [];
+  for (const row of rows) {
+    const existing = bySeat.get(row.seatId);
+    if (existing) {
+      existing.amount += row.amount;
+      if (row.handName) existing.handName = row.handName;
+      if (row.potIndex < existing.potIndex) existing.potIndex = row.potIndex;
+    } else {
+      bySeat.set(row.seatId, { ...row });
+      order.push(row.seatId);
+    }
+  }
+  return order.map((seatId) => bySeat.get(seatId)!);
+}
 
 export interface TablePlayer {
   seatId: number;
@@ -1066,7 +1087,23 @@ export class TableEngine {
 
   private showdown(): void {
     this.phase = "showdown";
-    const pots = this.computePots();
+    const rawPots = this.computePots();
+    // Uncalled single-contributor layers are chip returns, not "Wins" / side pots.
+    for (const ret of uncalledReturnsFromPots(rawPots)) {
+      const player = this.players.get(ret.seatId);
+      if (!player) continue;
+      player.chips += ret.amount;
+      this.pendingEvents.push({
+        type: "chips",
+        payload: {
+          fromSeat: null,
+          toSeat: ret.seatId,
+          toPot: false,
+          amount: ret.amount,
+        },
+      });
+    }
+    const { pots } = splitLivePots(rawPots);
     this.lastAwardedPots = pots.map((p) => ({
       amount: p.amount,
       eligibleSeatIds: [...p.eligibleSeatIds],
@@ -1176,7 +1213,7 @@ export class TableEngine {
   }
 
   private resolvePots(pots: PotLayer[]): HandResult {
-    const winners: HandResult["winners"] = [];
+    const awardRows: HandResult["winners"] = [];
     const shownCards: HandResult["shownCards"] = [];
 
     for (let potIndex = 0; potIndex < pots.length; potIndex++) {
@@ -1204,7 +1241,7 @@ export class TableEngine {
       potWinners.forEach((w, i) => {
         const player = this.players.get(w.seatId)!;
         player.chips += splits[i]!;
-        winners.push({
+        awardRows.push({
           seatId: w.seatId,
           displayName: player.displayName,
           avatarUrl: player.avatarUrl,
@@ -1222,11 +1259,16 @@ export class TableEngine {
             amount: splits[i]!,
           },
         });
-        const winLabel = handName
-          ? `Wins ${splits[i]} (${handName})`
-          : `Wins ${splits[i]}`;
-        this.logAction(w.seatId, winLabel);
       });
+    }
+
+    // One Wins line per seat even when they take multiple real side pots.
+    const winners = coalesceWinnerRows(awardRows);
+    for (const w of winners) {
+      const winLabel = w.handName
+        ? `Wins ${w.amount} (${w.handName})`
+        : `Wins ${w.amount}`;
+      this.logAction(w.seatId, winLabel);
     }
 
     this.resetHandBets();
@@ -1371,9 +1413,8 @@ export class TableEngine {
       reviewingHand && this.lastAwardedPots.length > 0
         ? this.lastAwardedPots
         : this.computePots();
-    const live = reviewingHand
-      ? { pots: rawPots, uncalledAmount: 0 }
-      : splitLivePots(rawPots);
+    // Always strip single-contributor layers from pot labels (never "Side N").
+    const live = splitLivePots(rawPots);
     const awaitingNextHand = reviewingHand;
     const awaitingFirstDeal =
       this.phase === "waiting" && this.handNumber === 0 && this.seatingReady;

@@ -2,8 +2,10 @@ export { createDeck, shuffleDeck, newShuffledDeck } from "./deck";
 export { getBlindsForLevelFromStructure, type BlindLevel } from "./blinds";
 export {
   buildSidePots,
+  coalesceEligiblePots,
   totalPotAmount,
   splitLivePots,
+  uncalledReturnsFromPots,
   type PlayerContribution,
 } from "./sidePots";
 export {

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildSidePots, splitLivePots, totalPotAmount } from "./sidePots";
+import {
+  buildSidePots,
+  coalesceEligiblePots,
+  splitLivePots,
+  totalPotAmount,
+  uncalledReturnsFromPots,
+} from "./sidePots";
 
 describe("buildSidePots", () => {
   it("creates main + side pot for short all-in", () => {
@@ -88,6 +94,9 @@ describe("buildSidePots", () => {
     ]);
     expect(live.uncalledAmount).toBe(4950);
     expect(totalPotAmount(pots)).toBe(5075);
+    expect(uncalledReturnsFromPots(pots)).toEqual([
+      { seatId: 2, amount: 4950 },
+    ]);
   });
 
   it("QA guest matched stacks show Main + one side pot, no uncalled", () => {
@@ -104,5 +113,48 @@ describe("buildSidePots", () => {
     expect(live.pots).toEqual(pots);
     expect(live.uncalledAmount).toBe(0);
     expect(totalPotAmount(pots)).toBe(10050);
+  });
+
+  it("coalesces fold-created contribution levels into one pot", () => {
+    // Shorter folded stack is not an all-in side pot — same eligibles merge.
+    const pots = buildSidePots([
+      { seatId: 0, contribution: 1000, folded: false },
+      { seatId: 1, contribution: 1000, folded: false },
+      { seatId: 2, contribution: 200, folded: true },
+    ]);
+    expect(pots).toHaveLength(1);
+    expect(pots[0]).toEqual({
+      amount: 2200,
+      eligibleSeatIds: [0, 1],
+      contributorCount: 3,
+    });
+  });
+
+  it("keeps real side pots when all-in changes eligibility", () => {
+    const pots = buildSidePots([
+      { seatId: 0, contribution: 1200, folded: false },
+      { seatId: 1, contribution: 500, folded: false },
+      { seatId: 2, contribution: 1200, folded: false },
+      { seatId: 3, contribution: 300, folded: true },
+    ]);
+    // Folded 300 merges into the main layer with [0,1,2]; short all-in still sides.
+    expect(pots).toEqual([
+      { amount: 1800, eligibleSeatIds: [0, 1, 2], contributorCount: 4 },
+      { amount: 1400, eligibleSeatIds: [0, 2], contributorCount: 2 },
+    ]);
+  });
+});
+
+describe("coalesceEligiblePots", () => {
+  it("merges adjacent same-eligible layers", () => {
+    const merged = coalesceEligiblePots([
+      { amount: 600, eligibleSeatIds: [0, 1], contributorCount: 3 },
+      { amount: 1600, eligibleSeatIds: [0, 1], contributorCount: 2 },
+      { amount: 400, eligibleSeatIds: [0], contributorCount: 1 },
+    ]);
+    expect(merged).toEqual([
+      { amount: 2200, eligibleSeatIds: [0, 1], contributorCount: 3 },
+      { amount: 400, eligibleSeatIds: [0], contributorCount: 1 },
+    ]);
   });
 });
