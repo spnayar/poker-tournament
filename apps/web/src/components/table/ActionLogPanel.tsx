@@ -202,9 +202,11 @@ export function ActionLogPanel({
         <h2 className="text-xs font-semibold text-slate-200 tracking-tight">
           Action Log
         </h2>
-        <p className="text-[10px] text-slate-500 font-mono tabular-nums">
-          #{handNumber}
-        </p>
+        {handNumber > 0 ? (
+          <p className="text-[10px] text-slate-500 font-mono tabular-nums">
+            #{handNumber}
+          </p>
+        ) : null}
       </div>
 
       {zoomJoinUrl ? (
