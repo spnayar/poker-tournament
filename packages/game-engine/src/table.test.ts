@@ -836,6 +836,42 @@ describe("TableEngine", () => {
     expect(result.winners[0]!.wonByFold).toBe(true);
   });
 
+  it("fold-win winner can optionally show cards without blocking next deal", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.startHand();
+
+    const folder = table.getPublicState().currentActorSeat!;
+    const winnerSeat = folder === 0 ? 1 : 0;
+    expect(table.applyAction(folder, { type: "fold" })).toBe(true);
+    expect(table.getPublicState().phase).toBe("hand-complete");
+    table.drainEvents();
+
+    expect(table.canShowCards(winnerSeat)).toBe(true);
+    expect(table.canShowCards(folder)).toBe(false);
+
+    const holeBefore = table.getHoleCards(winnerSeat);
+    expect(holeBefore).toHaveLength(2);
+
+    expect(table.showCards(winnerSeat)).toBe(true);
+    expect(table.canShowCards(winnerSeat)).toBe(false);
+    expect(table.showCards(winnerSeat)).toBe(false);
+
+    const events = table.drainEvents();
+    const shown = events.find((e) => e.type === "cardsShown");
+    expect(shown).toBeDefined();
+    const payload = shown!.payload as import("@poker/protocol").ShownHand;
+    expect(payload.seatId).toBe(winnerSeat);
+    expect(payload.holeCards).toEqual(holeBefore);
+
+    // Still hand-complete — next deal is not blocked.
+    expect(table.getPublicState().phase).toBe("hand-complete");
+    expect(table.startHand()).toBe(true);
+    expect(table.getPublicState().phase).toBe("preflop");
+    expect(table.canShowCards(winnerSeat)).toBe(false);
+  });
+
   it("skipped players still post blinds", () => {
     const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);

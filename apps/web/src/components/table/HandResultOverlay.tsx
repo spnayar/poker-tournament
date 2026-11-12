@@ -28,6 +28,7 @@ interface AggregatedWinner {
   handName?: string;
   wonByFold?: boolean;
   bestHand?: string[];
+  holeCards?: string[];
 }
 
 function aggregateWinners(
@@ -37,11 +38,15 @@ function aggregateWinners(
   const map = new Map<number, AggregatedWinner>();
 
   for (const w of result.winners) {
-    const bestHand = shownCards.find((s) => s.seatId === w.seatId)?.bestHand;
+    const shown = shownCards.find((s) => s.seatId === w.seatId);
+    const bestHand = shown?.bestHand;
+    const holeCards = shown?.holeCards;
     const existing = map.get(w.seatId);
     if (existing) {
       existing.amount += w.amount;
       if (w.handName) existing.handName = w.handName;
+      if (bestHand) existing.bestHand = bestHand;
+      if (holeCards) existing.holeCards = holeCards;
     } else {
       map.set(w.seatId, {
         seatId: w.seatId,
@@ -51,6 +56,7 @@ function aggregateWinners(
         handName: w.handName,
         wonByFold: w.wonByFold,
         bestHand,
+        holeCards,
       });
     }
   }
@@ -159,8 +165,13 @@ export function HandResultOverlay({
 
   if (!primary) return null;
 
+  const overlayCards = primary.wonByFold
+    ? primary.holeCards ?? []
+    : primary.bestHand ?? [];
   const subtitle = primary.wonByFold
-    ? "Everyone else folded"
+    ? overlayCards.length > 0
+      ? "Showed after everyone folded"
+      : "Everyone else folded"
     : primary.handName ?? "Winner";
 
   return (
@@ -198,11 +209,9 @@ export function HandResultOverlay({
                 </p>
               </div>
 
-              {primary.bestHand &&
-                primary.bestHand.length > 0 &&
-                !primary.wonByFold && (
+              {overlayCards.length > 0 && (
                   <div className="shrink-0 flex gap-0.5 scale-75 origin-right">
-                    {primary.bestHand.slice(0, 5).map((card, i) => (
+                    {overlayCards.slice(0, primary.wonByFold ? 2 : 5).map((card, i) => (
                       <PlayingCard
                         key={`${card}-${i}`}
                         card={card}

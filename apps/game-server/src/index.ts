@@ -556,6 +556,12 @@ async function processTableEvents(
       case "handResult":
         handResults.push(event.payload);
         break;
+      case "cardsShown":
+        io.to(`tournament:${tournamentId}`).emit(
+          ServerEvents.CARDS_SHOWN,
+          event.payload
+        );
+        break;
       case "state":
         break;
     }
@@ -1044,6 +1050,11 @@ async function resyncSocket(
     ...room.blindTimer.getPublicState(snap.smallBlind, snap.bigBlind, snap.blindLevel),
     hostUserId: room.hostUserId,
   });
+  // Between hands: restore fold-win / showdown result (incl. optional shown cards).
+  const lastResult = room.table.getLastHandResult();
+  if (lastResult && room.table.getPublicState().phase === "hand-complete") {
+    socket.emit(ServerEvents.HAND_RESULT, lastResult);
+  }
 }
 
 function requireGameServerSecret(
@@ -1292,6 +1303,26 @@ io.on("connection", (socket) => {
         message: "Need at least 2 seated players to start",
       });
     }
+  });
+
+  socket.on(ClientEvents.SHOW_CARDS, async () => {
+    const tournamentId = await redis.get(`player:${user.userId}:tournament`);
+    if (!tournamentId) return;
+
+    const room = rooms.get(tournamentId);
+    if (!room) return;
+
+    const seatId = room.seatByUserId.get(user.userId);
+    if (seatId === undefined) return;
+
+    if (!room.table.showCards(seatId)) {
+      socket.emit(ServerEvents.ERROR, {
+        message: "Cannot show cards right now",
+      });
+      return;
+    }
+
+    await afterAction(tournamentId, room);
   });
 
   socket.on(ClientEvents.START_NEXT_HAND, async () => {
