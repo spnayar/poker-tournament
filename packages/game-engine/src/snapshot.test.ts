@@ -43,6 +43,40 @@ describe("TableEngine snapshot", () => {
     );
   });
 
+  it("syncPlayerIdentities updates avatarUrl without touching chips or cards", () => {
+    const table = new TableEngine({
+      tournamentId: "test",
+      startingChips: 1000,
+      blindLevels: buildBlindLevels(1000, "turbo"),
+    });
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", "/avatars/man-jack.svg", 1000);
+    table.startHand();
+    const chipsBefore = table.getPublicState().seats.map((s) => s.chipCount);
+    const cardsBefore = table.getHoleCards(0);
+
+    const changed = table.syncPlayerIdentities([
+      { userId: "u1", displayName: "Alice", avatarUrl: "/avatars/man-omar.svg" },
+      { userId: "u2", displayName: "Bobby", avatarUrl: "/avatars/man-jack.svg" },
+    ]);
+    expect(changed).toBe(true);
+
+    const seats = table.getPublicState().seats;
+    expect(seats.find((s) => s.userId === "u1")!.avatarUrl).toBe(
+      "/avatars/man-omar.svg"
+    );
+    expect(seats.find((s) => s.userId === "u2")!.displayName).toBe("Bobby");
+    expect(seats.map((s) => s.chipCount)).toEqual(chipsBefore);
+    expect(table.getHoleCards(0)).toEqual(cardsBefore);
+
+    expect(
+      table.syncPlayerIdentities([
+        { userId: "u1", displayName: "Alice", avatarUrl: "/avatars/man-omar.svg" },
+        { userId: "u2", displayName: "Bobby", avatarUrl: "/avatars/man-jack.svg" },
+      ])
+    ).toBe(false);
+  });
+
   it("restores awarded pots after hand-complete", () => {
     const table = new TableEngine({
       tournamentId: "test",

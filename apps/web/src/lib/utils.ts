@@ -1,9 +1,9 @@
-import { resolveAvatarUrl } from "./avatars";
+import { fallbackAvatarUrl, resolveAvatarUrl } from "./avatars";
 
 export function getAvatarUrl(seed: string, avatarUrl?: string | null): string {
   const resolved = resolveAvatarUrl(avatarUrl);
   if (resolved) return resolved;
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}`;
+  return fallbackAvatarUrl(seed);
 }
 
 /** Format ledger cents as currency. Negatives render as `-$8.00`, not `$-8.00`. */

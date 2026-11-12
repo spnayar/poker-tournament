@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   AVATAR_LIBRARY,
   AVATAR_SOURCES,
+  fallbackAvatarUrl,
   findAvatarByUrl,
   isAllowedAvatarUrl,
   resolveAvatarUrl,
@@ -45,5 +46,14 @@ describe("avatar library", () => {
   it("rejects URLs outside the curated set", () => {
     expect(isAllowedAvatarUrl("https://evil.example/x.svg")).toBe(false);
     expect(isAllowedAvatarUrl("/avatars/not-a-real-one.svg")).toBe(false);
+  });
+
+  it("picks a stable local library URL when no avatar is saved", () => {
+    const a = fallbackAvatarUrl("Sanjay");
+    const b = fallbackAvatarUrl("Sanjay");
+    expect(a).toBe(b);
+    expect(a.startsWith("/avatars/")).toBe(true);
+    expect(isAllowedAvatarUrl(a)).toBe(true);
+    expect(fallbackAvatarUrl("Sanjay")).not.toBe(fallbackAvatarUrl("srcoyne"));
   });
 });
