@@ -158,10 +158,12 @@ export function ZoomMirrorProvider({
 
   const pinRibbonForVideoOn = useCallback(
     async (client: ZoomEmbeddedClient, count: number) => {
+      // Always ribbon — speaker view paints a huge dark stage with a tiny
+      // inset tile (the blank-space bug). Ribbon packs video tiles edge-to-edge.
       const tiles = Math.max(1, Math.min(ZOOM_FACES_MAX, count || 1));
       const height = ZOOM_SDK_TILE_HEIGHT * tiles;
       try {
-        await client.setViewType?.(tiles === 1 ? "speaker" : "ribbon");
+        await client.setViewType?.("ribbon");
       } catch {
         /* view type may be unavailable mid-join */
       }
@@ -483,8 +485,8 @@ export function ZoomMirrorToolbar() {
 
 /**
  * Meeting SDK root inside our slate/emerald frame.
- * Desktop: full-height column LEFT of the table. Phone: compact strip after
- * the Action Log (order-last). Ribbon tracks video-on count (max 9).
+ * Desktop: content-height column LEFT of the table (active thumbs only).
+ * Phone: compact strip after the Action Log (order-last). Always ribbon.
  */
 export function ZoomMirrorFacesFrame() {
   const { joined, expanded, videoOnCount, rootRef } = useZoomMirror();
@@ -492,7 +494,8 @@ export function ZoomMirrorFacesFrame() {
   const shellRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({
     w: ZOOM_FACES_COLUMN_WIDTH,
-    h: 360,
+    // Cap only — frame height comes from video-on count, not column stretch.
+    h: 900,
   });
 
   useEffect(() => {
@@ -501,13 +504,20 @@ export function ZoomMirrorFacesFrame() {
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      const { width, height } = entry.contentRect;
+      const { width } = entry.contentRect;
+      // Width from the column; height cap from the play-row parent (not the
+      // content-sized shell, which would chicken-egg with frame height).
+      const parent = el.parentElement;
+      const cap = parent
+        ? Math.floor(parent.getBoundingClientRect().height)
+        : 900;
       setBox({
-        w: Math.max(1, Math.floor(width)),
-        h: Math.max(1, Math.floor(height)),
+        w: Math.max(1, Math.floor(width) || ZOOM_FACES_COLUMN_WIDTH),
+        h: Math.max(ZOOM_FACES_PHONE_STRIP_HEIGHT, cap || 900),
       });
     });
     ro.observe(el);
+    if (el.parentElement) ro.observe(el.parentElement);
     return () => ro.disconnect();
   }, []);
 
@@ -520,7 +530,7 @@ export function ZoomMirrorFacesFrame() {
     layoutH
   );
 
-  const frameStyle: CSSProperties | undefined =
+  const frameStyle: CSSProperties =
     show && layout.tileCount > 0
       ? {
           width: layout.frameWidth,
@@ -532,18 +542,21 @@ export function ZoomMirrorFacesFrame() {
         }
       : {
           // Keep a measurable mount target while joining / cameras off.
-          width: Math.min(box.w || ZOOM_FACES_COLUMN_WIDTH, ZOOM_FACES_COLUMN_WIDTH),
+          width: Math.min(
+            box.w || ZOOM_FACES_COLUMN_WIDTH,
+            ZOOM_FACES_COLUMN_WIDTH
+          ),
           height: show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 1,
           ["--zoom-sdk-w" as string]: `${ZOOM_SDK_TILE_WIDTH}px`,
           ["--zoom-sdk-h" as string]: `${ZOOM_SDK_TILE_HEIGHT}px`,
-          ["--zoom-scale-x" as string]: "0.4",
-          ["--zoom-scale-y" as string]: "0.4",
+          ["--zoom-scale-x" as string]: "0.5",
+          ["--zoom-scale-y" as string]: "0.5",
         };
 
   return (
     <aside
       ref={shellRef}
-      className="zoom-faces-column order-last lg:order-first shrink-0 min-h-0 overflow-hidden flex flex-col items-stretch"
+      className="zoom-faces-column order-last lg:order-first shrink-0 overflow-hidden flex flex-col items-stretch self-start"
       data-expanded={show ? "true" : "false"}
       data-video-on={layout.tileCount}
       aria-label="Table faces"

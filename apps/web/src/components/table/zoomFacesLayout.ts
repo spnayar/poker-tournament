@@ -1,6 +1,6 @@
 /**
- * Zoom Meeting SDK tile floor (speaker/ribbon docs minimum per tile).
- * We size a ribbon of N tiles then CSS-scale into the faces column.
+ * Zoom Meeting SDK tile floor (ribbon docs minimum per tile).
+ * We size a ribbon of N tiles then CSS-scale/cover into the faces column.
  */
 export const ZOOM_SDK_TILE_WIDTH = 240;
 export const ZOOM_SDK_TILE_HEIGHT = 135;
@@ -12,18 +12,24 @@ export const ZOOM_SDK_VIEW_HEIGHT = ZOOM_SDK_TILE_HEIGHT;
 /** Max faces we try to show in the table column. */
 export const ZOOM_FACES_MAX = 9;
 
-/** Desktop faces column width (px) — full-height strip left of the table. */
+/** Desktop faces column width (px) — left of the table. */
 export const ZOOM_FACES_COLUMN_WIDTH = 120;
 
-/** Phone strip height when expanded (px). */
-export const ZOOM_FACES_PHONE_STRIP_HEIGHT = 72;
+/** Phone strip height when expanded (px) — ≈ one cover cell. */
+export const ZOOM_FACES_PHONE_STRIP_HEIGHT = 90;
+
+/**
+ * Visible face cell height for one video-on thumb (px).
+ * Slightly taller than 16:9-of-width so cover-crop fills without letterboxing.
+ */
+export const ZOOM_FACES_CELL_HEIGHT = 90;
 
 export type ZoomFacesLayout = {
   /** Active video-on tiles to request from the SDK (1–9, or 0). */
   tileCount: number;
   sdkWidth: number;
   sdkHeight: number;
-  /** Visible frame size after scale. */
+  /** Visible frame size after scale (tight wrap — no empty column padding). */
   frameWidth: number;
   frameHeight: number;
   scaleX: number;
@@ -46,8 +52,10 @@ export function countVideoOnAttendees(
 }
 
 /**
- * Layout the faces column so active thumbs use available space (up to 9).
- * Prefer filling column width; stack tiles vertically (ribbon).
+ * Tight layout for active video-on thumbs only.
+ * Frame height = cellHeight × tileCount (no reserved slots for cameras off).
+ * Scale uses cover (max) so the ribbon fills the frame without black bars;
+ * overflow clips on the thumb.
  */
 export function computeZoomFacesLayout(
   videoOnCount: number,
@@ -58,14 +66,16 @@ export function computeZoomFacesLayout(
     0,
     Math.min(ZOOM_FACES_MAX, Math.floor(videoOnCount))
   );
-  if (tileCount === 0 || columnWidth <= 0 || columnHeight <= 0) {
+  const frameWidth = Math.max(0, Math.min(columnWidth, ZOOM_FACES_COLUMN_WIDTH));
+
+  if (tileCount === 0 || frameWidth <= 0 || columnHeight <= 0) {
     return {
       tileCount: 0,
       sdkWidth: ZOOM_SDK_TILE_WIDTH,
       sdkHeight: ZOOM_SDK_TILE_HEIGHT,
-      frameWidth: Math.max(0, columnWidth),
+      frameWidth,
       frameHeight: 0,
-      scaleX: columnWidth > 0 ? columnWidth / ZOOM_SDK_TILE_WIDTH : 0,
+      scaleX: frameWidth > 0 ? frameWidth / ZOOM_SDK_TILE_WIDTH : 0,
       scaleY: 0,
     };
   }
@@ -73,19 +83,14 @@ export function computeZoomFacesLayout(
   const sdkWidth = ZOOM_SDK_TILE_WIDTH;
   const sdkHeight = ZOOM_SDK_TILE_HEIGHT * tileCount;
 
-  // Fit width first, then grow height if the column has room (maximize thumbs).
-  const scaleByWidth = columnWidth / sdkWidth;
-  let frameWidth = columnWidth;
-  let frameHeight = sdkHeight * scaleByWidth;
+  // Prefer packing N cells at ZOOM_FACES_CELL_HEIGHT; shrink if column is short.
+  const idealHeight = ZOOM_FACES_CELL_HEIGHT * tileCount;
+  const frameHeight = Math.min(idealHeight, columnHeight);
 
-  if (frameHeight > columnHeight && columnHeight > 0) {
-    const scaleByHeight = columnHeight / sdkHeight;
-    frameHeight = columnHeight;
-    frameWidth = sdkWidth * scaleByHeight;
-  }
-
+  // Cover scale — fill the frame; thumb overflow:hidden crops edges.
   const scaleX = frameWidth / sdkWidth;
   const scaleY = frameHeight / sdkHeight;
+  const cover = Math.max(scaleX, scaleY);
 
   return {
     tileCount,
@@ -93,7 +98,7 @@ export function computeZoomFacesLayout(
     sdkHeight,
     frameWidth,
     frameHeight,
-    scaleX,
-    scaleY,
+    scaleX: cover,
+    scaleY: cover,
   };
 }
