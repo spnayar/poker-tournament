@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useCallback,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -16,13 +17,21 @@ import {
   type ZoomEmbeddedClient,
 } from "@/lib/zoomMeetingSdkLoader";
 import {
+  ZOOM_FACES_COLUMN_WIDTH,
+  ZOOM_FACES_MAX,
+  ZOOM_FACES_PHONE_STRIP_HEIGHT,
+  ZOOM_SDK_TILE_HEIGHT,
+  ZOOM_SDK_TILE_WIDTH,
   ZOOM_SDK_VIEW_HEIGHT,
   ZOOM_SDK_VIEW_WIDTH,
+  computeZoomFacesLayout,
+  countVideoOnAttendees,
 } from "./zoomFacesLayout";
 
 export {
   ZOOM_SDK_VIEW_HEIGHT,
   ZOOM_SDK_VIEW_WIDTH,
+  ZOOM_FACES_MAX,
 } from "./zoomFacesLayout";
 
 type ZoomStatus = {
@@ -44,6 +53,7 @@ type ZoomMirrorContextValue = {
   expanded: boolean;
   error: string | null;
   canAttemptMirror: boolean;
+  videoOnCount: number;
   rootRef: RefObject<HTMLDivElement | null>;
   startMirror: () => void;
   leaveMirror: () => void;
@@ -67,9 +77,20 @@ type ZoomMirrorProviderProps = {
   children: ReactNode;
 };
 
+function readVideoOnCount(client: ZoomEmbeddedClient): number {
+  try {
+    const list = client.getAttendeeslist?.() ?? [];
+    return Math.min(ZOOM_FACES_MAX, countVideoOnAttendees(list));
+  } catch {
+    return 0;
+  }
+}
+
 /**
- * Meeting SDK video mirror — table keeps the viewport; faces live in a side
- * thumbnail (sm+) or a tiny strip under the Action Log (phone).
+ * Meeting SDK video mirror — table keeps the viewport.
+ *
+ * Desktop: faces column right of Action Log (ribbon of up to 9 video-on tiles).
+ * Phone: compact strip, collapsed until Show faces.
  *
  * Spike: Component View cannot paint per-seat streams. Active speakers get
  * seat rings via name match. In-app audio stays off so Zoom owns the call.
@@ -90,6 +111,7 @@ export function ZoomMirrorProvider({
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [videoOnCount, setVideoOnCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +130,16 @@ export function ZoomMirrorProvider({
     };
   }, [tournamentId]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    if (joined && expanded) {
+      root.classList.add("zoom-faces-active");
+    } else {
+      root.classList.remove("zoom-faces-active");
+    }
+    return () => root.classList.remove("zoom-faces-active");
+  }, [joined, expanded]);
+
   const enforceAudioOff = useCallback(async (client: ZoomEmbeddedClient) => {
     try {
       await client.stopAudio?.();
@@ -121,24 +153,12 @@ export function ZoomMirrorProvider({
     }
   }, []);
 
-  const leaveMirror = useCallback(async () => {
-    const client = clientRef.current;
-    clientRef.current = null;
-    setJoined(false);
-    setExpanded(false);
-    onSpeakingUserIds([]);
-    if (!client) return;
-    try {
-      await client.leaveMeeting?.();
-    } catch {
-      /* leaving is best-effort */
-    }
-  }, [onSpeakingUserIds]);
-
-  const pinCompactSpeakerView = useCallback(
-    async (client: ZoomEmbeddedClient) => {
+  const pinRibbonForVideoOn = useCallback(
+    async (client: ZoomEmbeddedClient, count: number) => {
+      const tiles = Math.max(1, Math.min(ZOOM_FACES_MAX, count || 1));
+      const height = ZOOM_SDK_TILE_HEIGHT * tiles;
       try {
-        await client.setViewType?.("speaker");
+        await client.setViewType?.(tiles === 1 ? "speaker" : "ribbon");
       } catch {
         /* view type may be unavailable mid-join */
       }
@@ -146,14 +166,8 @@ export function ZoomMirrorProvider({
         client.updateVideoOptions?.({
           isResizable: false,
           viewSizes: {
-            default: {
-              width: ZOOM_SDK_VIEW_WIDTH,
-              height: ZOOM_SDK_VIEW_HEIGHT,
-            },
-            ribbon: {
-              width: ZOOM_SDK_VIEW_WIDTH,
-              height: ZOOM_SDK_VIEW_HEIGHT,
-            },
+            default: { width: ZOOM_SDK_TILE_WIDTH, height },
+            ribbon: { width: ZOOM_SDK_TILE_WIDTH, height },
           },
           popper: { disableDraggable: true },
         });
@@ -163,6 +177,30 @@ export function ZoomMirrorProvider({
     },
     []
   );
+
+  const refreshVideoOnCount = useCallback(
+    (client: ZoomEmbeddedClient) => {
+      const next = readVideoOnCount(client);
+      setVideoOnCount(next);
+      void pinRibbonForVideoOn(client, next);
+    },
+    [pinRibbonForVideoOn]
+  );
+
+  const leaveMirror = useCallback(async () => {
+    const client = clientRef.current;
+    clientRef.current = null;
+    setJoined(false);
+    setExpanded(false);
+    setVideoOnCount(0);
+    onSpeakingUserIds([]);
+    if (!client) return;
+    try {
+      await client.leaveMeeting?.();
+    } catch {
+      /* leaving is best-effort */
+    }
+  }, [onSpeakingUserIds]);
 
   const startMirror = useCallback(async () => {
     setError(null);
@@ -193,8 +231,7 @@ export function ZoomMirrorProvider({
         return;
       }
 
-      // Expand the thumbnail slot before Zoom measures zoomAppRoot —
-      // a max-height:0 ancestor makes Component View paint a huge floating panel.
+      // Expand before Zoom measures zoomAppRoot (zero-height → huge float panel).
       setExpanded(true);
 
       // CDN UMD + Zoom React 18 vendors — never webpack-import the ESM SDK
@@ -215,15 +252,16 @@ export function ZoomMirrorProvider({
             matchSpeakerUserIds(seatsRef.current ?? [], speakers)
           );
         } catch {
-          // Missing Zoom participant / name mapping must never break the strip.
           onSpeakingUserIds([]);
         }
         void enforceAudioOff(client);
       };
 
-      // Component View InitOptions do not document disableJoinAudio (Client View does).
-      // Pass it anyway + stopAudio/mute after join. Product assumes Zoom owns audio.
-      //
+      const onRosterChange = () => {
+        refreshVideoOnCount(client);
+        void enforceAudioOff(client);
+      };
+
       // IMPORTANT: register listeners only AFTER init(). Zoom's client.on() checks an
       // internal event-name list that is assigned during init — calling on() first
       // throws: Cannot read properties of undefined (reading 'includes').
@@ -234,19 +272,20 @@ export function ZoomMirrorProvider({
         leaveOnPageUnload: true,
         disableJoinAudio: true,
         disablePreview: true,
+        maximumVideosInGalleryView: ZOOM_FACES_MAX,
         customize: {
           meetingInfo: [],
           video: {
             isResizable: false,
-            defaultViewType: "speaker",
+            defaultViewType: "ribbon",
             viewSizes: {
               default: {
-                width: ZOOM_SDK_VIEW_WIDTH,
-                height: ZOOM_SDK_VIEW_HEIGHT,
+                width: ZOOM_SDK_TILE_WIDTH,
+                height: ZOOM_SDK_TILE_HEIGHT,
               },
               ribbon: {
-                width: ZOOM_SDK_VIEW_WIDTH,
-                height: ZOOM_SDK_VIEW_HEIGHT,
+                width: ZOOM_SDK_TILE_WIDTH,
+                height: ZOOM_SDK_TILE_HEIGHT * ZOOM_FACES_MAX,
               },
             },
             popper: { disableDraggable: true },
@@ -255,8 +294,10 @@ export function ZoomMirrorProvider({
       });
 
       client.on?.("active-speaker", onActiveSpeaker);
+      client.on?.("user-added", onRosterChange);
+      client.on?.("user-removed", onRosterChange);
+      client.on?.("user-updated", onRosterChange);
 
-      // Only pass defined join fields — Zoom may call string methods on optionals.
       const userName =
         typeof data.userName === "string" && data.userName.trim()
           ? data.userName.trim()
@@ -269,6 +310,7 @@ export function ZoomMirrorProvider({
       if (!signature || !meetingNumber) {
         setError("Meeting SDK join is missing signature or meeting number");
         clientRef.current = null;
+        setExpanded(false);
         return;
       }
 
@@ -280,12 +322,11 @@ export function ZoomMirrorProvider({
       });
 
       await enforceAudioOff(client);
-      await pinCompactSpeakerView(client);
+      refreshVideoOnCount(client);
       setJoined(true);
     } catch (err) {
       const raw =
         err instanceof Error ? err.message : "Meeting SDK join failed";
-      // Keep the banner useful without dumping opaque SDK TypeErrors as the only clue.
       const message = /reading 'includes'/i.test(raw)
         ? "Could not start table faces (Zoom listener ran before init). Try again."
         : raw;
@@ -293,6 +334,7 @@ export function ZoomMirrorProvider({
       clientRef.current = null;
       setJoined(false);
       setExpanded(false);
+      setVideoOnCount(0);
       onSpeakingUserIds([]);
     } finally {
       setJoining(false);
@@ -300,7 +342,7 @@ export function ZoomMirrorProvider({
   }, [
     enforceAudioOff,
     onSpeakingUserIds,
-    pinCompactSpeakerView,
+    refreshVideoOnCount,
     tournamentId,
   ]);
 
@@ -321,6 +363,7 @@ export function ZoomMirrorProvider({
     expanded,
     error,
     canAttemptMirror,
+    videoOnCount,
     rootRef,
     startMirror: () => {
       void startMirror();
@@ -437,20 +480,85 @@ export function ZoomMirrorToolbar() {
 }
 
 /**
- * Single Meeting SDK root inside our slate/emerald thumbnail frame.
- * Responsive CSS: side-sized above Action Log on sm+, tiny strip under it on phone.
+ * Meeting SDK root inside our slate/emerald frame.
+ * Parent layout places this right of Action Log on sm+ and under it on phone.
+ * Ribbon height tracks video-on count (max 9); avatar-only tiles are CSS-hidden.
  */
 export function ZoomMirrorFacesFrame() {
-  const { joined, expanded, rootRef } = useZoomMirror();
+  const { joined, expanded, videoOnCount, rootRef } = useZoomMirror();
   const show = joined && expanded;
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({
+    w: ZOOM_FACES_COLUMN_WIDTH,
+    h: 360,
+  });
+
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setBox({
+        w: Math.max(1, Math.floor(width)),
+        h: Math.max(1, Math.floor(height)),
+      });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Phone shell is wide — clamp to column width so thumbs stay compact.
+  const layoutW = Math.min(
+    Math.max(box.w, 1),
+    ZOOM_FACES_COLUMN_WIDTH
+  );
+  const layoutH = Math.max(
+    box.h,
+    show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 0
+  );
+  const layout = computeZoomFacesLayout(
+    show ? Math.max(videoOnCount, 0) : 0,
+    layoutW,
+    layoutH
+  );
+
+  const frameStyle: CSSProperties | undefined =
+    show && layout.tileCount > 0
+      ? {
+          width: layout.frameWidth,
+          height: layout.frameHeight,
+          ["--zoom-sdk-w" as string]: `${layout.sdkWidth}px`,
+          ["--zoom-sdk-h" as string]: `${layout.sdkHeight}px`,
+          ["--zoom-scale-x" as string]: String(layout.scaleX),
+          ["--zoom-scale-y" as string]: String(layout.scaleY),
+        }
+      : {
+          // Keep a measurable mount target while joining / cameras off.
+          width: Math.min(box.w, ZOOM_FACES_COLUMN_WIDTH),
+          height: show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 0,
+          ["--zoom-sdk-w" as string]: `${ZOOM_SDK_TILE_WIDTH}px`,
+          ["--zoom-sdk-h" as string]: `${ZOOM_SDK_TILE_HEIGHT}px`,
+          ["--zoom-scale-x" as string]: "0.4",
+          ["--zoom-scale-y" as string]: "0.4",
+        };
 
   return (
-    <div
-      className="zoom-faces-frame-slot shrink-0 w-full"
+    <aside
+      ref={shellRef}
+      className="zoom-faces-column shrink-0 min-h-0 overflow-hidden flex flex-col items-center"
       data-expanded={show ? "true" : "false"}
+      data-video-on={layout.tileCount}
+      aria-label="Table faces"
       aria-hidden={!show}
     >
-      <div className="zoom-faces-thumb mx-auto">
+      <div
+        className={`zoom-faces-thumb ${
+          show ? "zoom-faces-thumb--visible" : ""
+        }`}
+        style={frameStyle}
+      >
         <div className="zoom-faces-thumb__scale">
           <div
             ref={rootRef}
@@ -459,7 +567,12 @@ export function ZoomMirrorFacesFrame() {
           />
         </div>
       </div>
-    </div>
+      {show && videoOnCount === 0 ? (
+        <p className="text-[10px] text-slate-500 text-center px-1 mt-1 leading-tight">
+          Waiting for cameras…
+        </p>
+      ) : null}
+    </aside>
   );
 }
 

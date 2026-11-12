@@ -984,11 +984,8 @@ export default function TablePage() {
               </div>
             </div>
 
-            {/* Side column: faces above Action Log on sm+; under it on phone. */}
-            <div className="flex flex-col gap-1.5 w-full lg:w-64 xl:w-72 shrink-0 min-h-0 max-h-full max-sm:flex-none max-sm:max-h-[30%] overflow-hidden">
-              <div className="order-last sm:order-first">
-                <ZoomMirrorFacesFrame />
-              </div>
+            {/* Desktop: [Action Log | Faces]. Phone: log then compact faces strip. */}
+            <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-2 w-full sm:w-auto shrink-0 min-h-0 max-h-full max-sm:flex-none max-sm:max-h-[30%] overflow-hidden">
               <ActionLogPanel
                 actionLog={actionLog}
                 currentActorSeat={tableState.currentActorSeat}
@@ -998,6 +995,7 @@ export default function TablePage() {
                 zoomJoinUrl={zoomJoinUrl}
                 zoomMeetingNumber={zoomMeetingNumber}
               />
+              <ZoomMirrorFacesFrame />
             </div>
           </div>
         </div>

@@ -19,7 +19,12 @@ export type ZoomEmbeddedClient = {
   leaveMeeting?: () => Promise<unknown>;
   stopAudio?: () => Promise<unknown>;
   mute?: (mute: boolean) => Promise<unknown>;
-  getAttendeeslist?: () => { userId: number; displayName?: string }[];
+  getAttendeeslist?: () => {
+    userId: number;
+    displayName?: string;
+    video?: boolean;
+    bVideoOn?: boolean;
+  }[];
   on?: (event: string, cb: (...args: unknown[]) => void) => void;
   off?: (event: string, cb: (...args: unknown[]) => void) => void;
   /** Component View: speaker | ribbon | gallery | minimized | active */

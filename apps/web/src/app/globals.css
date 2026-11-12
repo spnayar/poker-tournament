@@ -194,56 +194,56 @@ body {
 }
 
 /*
-  Zoom Meeting SDK table faces — compact thumbnail, no Zoom chrome.
-  SDK paints speaker view at 240×135 (floor); we scale into our frame and
-  hide suspension-header / meeting-info (shield, grid, hamburger).
+  Zoom Meeting SDK table faces — column right of Action Log (sm+),
+  compact strip under the log on phone. Ribbon sized to video-on count
+  (max 9); Zoom chrome (shield / grid / menu) forced off.
 */
-.zoom-faces-frame-slot {
+.zoom-faces-column {
+  width: 100%;
+  max-width: 100%;
+  /* collapsed until Show faces — still mounts SDK root for init */
   max-height: 0;
   opacity: 0;
-  overflow: hidden;
   pointer-events: none;
-  transition: max-height 200ms ease-out, opacity 200ms ease-out;
+  transition: max-height 200ms ease-out, opacity 200ms ease-out, width 200ms ease-out;
 }
 
-.zoom-faces-frame-slot[data-expanded="true"] {
-  max-height: 5.5rem; /* phone: ~88px */
+.zoom-faces-column[data-expanded="true"] {
+  max-height: 4.75rem; /* phone strip */
   opacity: 1;
   pointer-events: auto;
 }
 
 @media (min-width: 640px) {
-  .zoom-faces-frame-slot[data-expanded="true"] {
-    max-height: 7.5rem; /* side: ~120px */
+  .zoom-faces-column {
+    width: 0;
+  }
+
+  .zoom-faces-column[data-expanded="true"] {
+    width: 6.5rem; /* ~104px — keep in sync with ZOOM_FACES_COLUMN_WIDTH */
+    max-height: none;
+    height: 100%;
+    align-self: stretch;
   }
 }
 
 .zoom-faces-thumb {
-  /* Keep in sync with zoomFacesLayout.ts phone/side thumb sizes. */
-  --zoom-thumb-w: 120px;
-  --zoom-thumb-h: 68px;
   --zoom-sdk-w: 240px;
   --zoom-sdk-h: 135px;
-  /* unitless scale = thumb / sdk (avoid px/px calc quirks) */
-  --zoom-scale-x: 0.5;
-  --zoom-scale-y: 0.5037;
+  --zoom-scale-x: 0.4;
+  --zoom-scale-y: 0.4;
   position: relative;
-  width: var(--zoom-thumb-w);
-  height: var(--zoom-thumb-h);
   border-radius: 0.375rem;
   border: 1px solid color-mix(in srgb, var(--accent-emerald) 45%, var(--hairline));
   background: color-mix(in srgb, var(--surface-1) 88%, transparent);
   overflow: hidden;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  flex-shrink: 0;
 }
 
-@media (min-width: 640px) {
-  .zoom-faces-thumb {
-    --zoom-thumb-w: 168px;
-    --zoom-thumb-h: 94px;
-    --zoom-scale-x: 0.7;
-    --zoom-scale-y: 0.6963;
-  }
+.zoom-faces-thumb:not(.zoom-faces-thumb--visible) {
+  border-color: transparent;
+  background: transparent;
 }
 
 .zoom-faces-thumb__scale {
@@ -264,27 +264,56 @@ body {
   background: #0f172a;
 }
 
-/* Strip Zoom Component View chrome inside our root only. */
+/* Zoom chrome — root-scoped + html.zoom-faces-active for portaled UI. */
+html.zoom-faces-active .suspension-header,
+html.zoom-faces-active .meeting-info-container,
+html.zoom-faces-active .meeting-info-container__inner-icons,
+html.zoom-faces-active .meeting-info-container__wrapper,
+html.zoom-faces-active .meeting-info-encryption-icon__icon-wrap,
+html.zoom-faces-active .meeting-info-encryption-icon__button-wrap,
+html.zoom-faces-active .footer,
+html.zoom-faces-active .footer__inner,
+html.zoom-faces-active .sharee-container-box,
+html.zoom-faces-active .gallery-video-container__switch-button,
+html.zoom-faces-active .gallery-video-container__pagination,
+html.zoom-faces-active .more-button,
 #zoom-meeting-sdk-root .suspension-header,
 #zoom-meeting-sdk-root .meeting-info-container,
 #zoom-meeting-sdk-root .meeting-info-container__inner-icons,
 #zoom-meeting-sdk-root .meeting-info-container__wrapper,
+#zoom-meeting-sdk-root .meeting-info-encryption-icon__icon-wrap,
+#zoom-meeting-sdk-root .meeting-info-encryption-icon__button-wrap,
 #zoom-meeting-sdk-root .footer,
 #zoom-meeting-sdk-root .footer__inner,
 #zoom-meeting-sdk-root .sharee-container-box,
-#zoom-meeting-sdk-root .suspension-user-name {
+#zoom-meeting-sdk-root .gallery-video-container__switch-button,
+#zoom-meeting-sdk-root .gallery-video-container__pagination,
+#zoom-meeting-sdk-root .more-button,
+#zoom-meeting-sdk-root .video-avatar__group-btn,
+#zoom-meeting-sdk-root .avatar-more,
+#zoom-meeting-sdk-root .avatar-more-xs-btn {
   display: none !important;
   height: 0 !important;
   min-height: 0 !important;
+  width: 0 !important;
   overflow: hidden !important;
   pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+/* No empty placeholders for cameras off — hide avatar-only tiles. */
+#zoom-meeting-sdk-root .gallery-video-container__video-frame:has(.video-avatar__avatar-img):not(:has(video)):not(:has(canvas)),
+#zoom-meeting-sdk-root .mobile-gallery-video-container__video-frame:has(.video-avatar__avatar-img):not(:has(video)):not(:has(canvas)),
+#zoom-meeting-sdk-root .video-avatar__avatar:has(.video-avatar__avatar-img):not(:has(video)):not(:has(canvas)) {
+  display: none !important;
 }
 
 #zoom-meeting-sdk-root .suspension-window,
 #zoom-meeting-sdk-root .suspension-content,
 #zoom-meeting-sdk-root .suspension-content2,
 #zoom-meeting-sdk-root .suspension-content3,
-#zoom-meeting-sdk-root .react-draggable {
+#zoom-meeting-sdk-root .react-draggable,
+#zoom-meeting-sdk-root .gallery-video-container__main-view {
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
@@ -304,10 +333,20 @@ body {
 #zoom-meeting-sdk-root video,
 #zoom-meeting-sdk-root canvas,
 #zoom-meeting-sdk-root .suspension-canvas,
-#zoom-meeting-sdk-root .suspension-img-wrapper img {
+#zoom-meeting-sdk-root .suspension-img-wrapper img,
+#zoom-meeting-sdk-root .gallery-video-container__video-stream,
+#zoom-meeting-sdk-root .gallery-video-container__video-frame {
   object-fit: contain !important;
-  width: 100% !important;
-  height: 100% !important;
   max-width: 100% !important;
   max-height: 100% !important;
+}
+
+/* Tiny optional name tags — don't compete with the table. */
+#zoom-meeting-sdk-root .suspension-user-name,
+#zoom-meeting-sdk-root .video-avatar__avatar-name,
+#zoom-meeting-sdk-root .video-avatar__name-tag {
+  font-size: 9px !important;
+  line-height: 1.1 !important;
+  max-width: 90% !important;
+  padding: 1px 4px !important;
 }
