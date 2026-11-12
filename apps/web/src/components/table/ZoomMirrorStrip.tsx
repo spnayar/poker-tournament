@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { matchSpeakerUserIds } from "@/lib/zoomDisplayName";
+import {
+  loadZoomMtgEmbedded,
+  type ZoomEmbeddedClient,
+} from "@/lib/zoomMeetingSdkLoader";
 
 type ZoomStatus = {
   videoMode: string;
@@ -21,17 +25,6 @@ type ZoomMirrorStripProps = {
   onSpeakingUserIds: (userIds: string[]) => void;
 };
 
-type EmbeddedClient = {
-  init: (args: Record<string, unknown>) => Promise<unknown>;
-  join: (args: Record<string, unknown>) => Promise<unknown>;
-  leaveMeeting?: () => Promise<unknown>;
-  stopAudio?: () => Promise<unknown>;
-  mute?: (mute: boolean) => Promise<unknown>;
-  getAttendeeslist?: () => { userId: number; displayName?: string }[];
-  on?: (event: string, cb: (...args: unknown[]) => void) => void;
-  off?: (event: string, cb: (...args: unknown[]) => void) => void;
-};
-
 /**
  * Meeting SDK video mirror — viewport-neutral fallback.
  *
@@ -46,7 +39,7 @@ export function ZoomMirrorStrip({
   onSpeakingUserIds,
 }: ZoomMirrorStripProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const clientRef = useRef<EmbeddedClient | null>(null);
+  const clientRef = useRef<ZoomEmbeddedClient | null>(null);
   const seatsRef = useRef(seats);
   seatsRef.current = seats;
 
@@ -73,7 +66,7 @@ export function ZoomMirrorStrip({
     };
   }, [tournamentId]);
 
-  const enforceAudioOff = useCallback(async (client: EmbeddedClient) => {
+  const enforceAudioOff = useCallback(async (client: ZoomEmbeddedClient) => {
     try {
       await client.stopAudio?.();
     } catch {
@@ -128,10 +121,9 @@ export function ZoomMirrorStrip({
         return;
       }
 
-      const ZoomMtgEmbedded = (await import("@zoom/meetingsdk/embedded"))
-        .default as unknown as {
-        createClient: () => EmbeddedClient;
-      };
+      // CDN UMD + Zoom React 18 vendors — never webpack-import the ESM SDK
+      // (that resolves to app React 19 and crashes on ReactCurrentOwner).
+      const ZoomMtgEmbedded = await loadZoomMtgEmbedded();
       const client = ZoomMtgEmbedded.createClient();
       clientRef.current = client;
 

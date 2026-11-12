@@ -59,6 +59,8 @@ pnpm db:studio     # Prisma Studio
 
 Host can paste a Zoom join URL on the night lobby. Players open Zoom for the real call (audio). Optional **Meeting SDK** mirror shows a collapse-to-zero face strip plus speaker rings on seats — in-app audio stays off.
 
+The in-app mirror loads Zoom’s Component View **CDN UMD** with Zoom’s React 18 vendors (the app itself stays on React 19). Browsers need access to `source.zoom.us`.
+
 On the **web** Railway service set:
 
 - `ZOOM_MEETING_SDK_CLIENT_ID`
