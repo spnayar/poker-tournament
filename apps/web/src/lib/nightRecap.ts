@@ -12,6 +12,7 @@ import {
   type SettleTransfer,
   type SettleUpMethod,
 } from "@poker/protocol";
+import { formatRankDisplay } from "./cardDisplay";
 import { sendAppEmail } from "./mailer";
 import { formatCents, LEDGER_DISCLAIMER } from "./utils";
 import {
@@ -284,7 +285,8 @@ const SUIT_SYMBOLS: Record<string, string> = {
 export function formatCardsPlain(cards: Card[]): string {
   return cards
     .map((card) => {
-      const rank = card.length === 2 ? card[0]! : card.slice(0, -1);
+      const rawRank = card.length === 2 ? card[0]! : card.slice(0, -1);
+      const rank = formatRankDisplay(rawRank);
       const suit = card[card.length - 1]!;
       return `${rank}${SUIT_SYMBOLS[suit] ?? suit}`;
     })

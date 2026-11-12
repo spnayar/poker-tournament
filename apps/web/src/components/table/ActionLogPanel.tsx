@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { formatRankDisplay } from "@/lib/cardDisplay";
 import { getAvatarUrl } from "@/lib/utils";
 import type { ActionLogEntry } from "@poker/protocol";
 import { ZoomActionLogBanner } from "./ZoomActionLogBanner";
@@ -61,14 +62,14 @@ function streetLabel(street: string): string {
 }
 
 function LogPlayingCard({ card }: { card: string }) {
-  const rank = card[0]!;
+  const rank = formatRankDisplay(card[0]!);
   const suit = card[1]!;
   const suitSymbol = SUIT_SYMBOLS[suit] ?? suit;
   const colorClass = SUIT_COLORS[suit] ?? "text-slate-300";
 
   return (
     <span
-      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white border border-slate-600 text-xs font-bold font-mono ${colorClass}`}
+      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white border border-slate-600 text-xs font-bold font-mono tabular-nums ${colorClass}`}
     >
       <span>{rank}</span>
       <span>{suitSymbol}</span>

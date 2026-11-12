@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { formatRankDisplay } from "@/lib/cardDisplay";
 import {
   COMMUNITY_FLIP_DURATION_SEC,
   HOLE_CARD_DEAL_DURATION_SEC,
@@ -49,16 +50,23 @@ function CardFace({
   card: string;
   className?: string;
 }) {
-  const rank = card[0]!;
+  const rank = formatRankDisplay(card[0]!);
   const suit = card[1]!;
   const suitSymbol = SUIT_SYMBOLS[suit] ?? suit;
   const colorClass = SUIT_COLORS[suit] ?? "text-slate-900";
+  // "10" is two glyphs — tighten on mobile so it still fits w-11 cards.
+  const rankSize =
+    rank === "10"
+      ? "text-sm sm:text-base tracking-tight"
+      : "text-base sm:text-lg";
 
   return (
     <div
       className={`${CARD_CLASS} bg-slate-50 border border-slate-300/90 ${className}`}
     >
-      <span className={`text-base sm:text-lg font-bold leading-none ${colorClass}`}>
+      <span
+        className={`${rankSize} font-bold leading-none tabular-nums ${colorClass}`}
+      >
         {rank}
       </span>
       <span className={`text-lg sm:text-xl leading-none ${colorClass}`}>
