@@ -663,6 +663,9 @@ export class TableEngine {
         const p = this.players.get(seatId)!;
         p.betThisRound = 0;
         p.hasActed = false;
+        // Drop prior-street seat bubbles (e.g. "Call 50") so labels only
+        // reflect the current betting round.
+        p.lastAction = null;
       }
     }
 

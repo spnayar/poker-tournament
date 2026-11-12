@@ -143,6 +143,41 @@ describe("TableEngine", () => {
     expect(legal!.canFold).toBe(true);
   });
 
+  it("clears lastAction seat labels when a new street starts", () => {
+    const table = new TableEngine(testTableConfig());
+    table.addPlayer(0, "u1", "Alice", null, 1000);
+    table.addPlayer(1, "u2", "Bob", null, 1000);
+    table.addPlayer(2, "u3", "Carol", null, 1000);
+    table.startHand();
+
+    const foldSeat = table.getPublicState().currentActorSeat!;
+    expect(table.applyAction(foldSeat, { type: "fold" })).toBe(true);
+
+    let actor = table.getPublicState().currentActorSeat!;
+    expect(table.applyAction(actor, { type: "call" })).toBe(true);
+    actor = table.getPublicState().currentActorSeat!;
+    expect(table.applyAction(actor, { type: "check" })).toBe(true);
+
+    const preflopEnd = table.getPublicState();
+    expect(preflopEnd.phase).toBe("flop");
+    expect(preflopEnd.board).toHaveLength(3);
+
+    const folded = preflopEnd.seats.find((s) => s.seatId === foldSeat)!;
+    expect(folded.folded).toBe(true);
+    expect(folded.lastAction).toMatch(/^Fold/);
+
+    for (const seat of preflopEnd.seats.filter((s) => !s.folded)) {
+      expect(seat.lastAction).toBeNull();
+    }
+
+    actor = table.getPublicState().currentActorSeat!;
+    expect(table.applyAction(actor, { type: "check" })).toBe(true);
+    const afterFlopCheck = table.getPublicState();
+    expect(
+      afterFlopCheck.seats.find((s) => s.seatId === actor)!.lastAction
+    ).toBe("Check");
+  });
+
   it("HU opponent gets action after all-in on flop", () => {
     const table = new TableEngine(testTableConfig());
     table.addPlayer(0, "u1", "Alice", null, 1000);
