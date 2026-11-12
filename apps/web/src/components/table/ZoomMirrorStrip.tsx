@@ -89,8 +89,8 @@ function readVideoOnCount(client: ZoomEmbeddedClient): number {
 /**
  * Meeting SDK video mirror — table keeps the viewport.
  *
- * Desktop: faces column right of Action Log (ribbon of up to 9 video-on tiles).
- * Phone: compact strip, collapsed until Show faces.
+ * Desktop: faces column LEFT of the table (ribbon of up to 9 video-on tiles).
+ * Phone: compact strip after Action Log, collapsed until Show faces.
  *
  * Spike: Component View cannot paint per-seat streams. Active speakers get
  * seat rings via name match. In-app audio stays off so Zoom owns the call.
@@ -481,8 +481,8 @@ export function ZoomMirrorToolbar() {
 
 /**
  * Meeting SDK root inside our slate/emerald frame.
- * Parent layout places this right of Action Log on sm+ and under it on phone.
- * Ribbon height tracks video-on count (max 9); avatar-only tiles are CSS-hidden.
+ * Desktop: full-height column LEFT of the table. Phone: compact strip after
+ * the Action Log (order-last). Ribbon tracks video-on count (max 9).
  */
 export function ZoomMirrorFacesFrame() {
   const { joined, expanded, videoOnCount, rootRef } = useZoomMirror();
@@ -510,14 +510,8 @@ export function ZoomMirrorFacesFrame() {
   }, []);
 
   // Phone shell is wide — clamp to column width so thumbs stay compact.
-  const layoutW = Math.min(
-    Math.max(box.w, 1),
-    ZOOM_FACES_COLUMN_WIDTH
-  );
-  const layoutH = Math.max(
-    box.h,
-    show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 0
-  );
+  const layoutW = Math.min(Math.max(box.w, 1), ZOOM_FACES_COLUMN_WIDTH);
+  const layoutH = Math.max(box.h, show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 0);
   const layout = computeZoomFacesLayout(
     show ? Math.max(videoOnCount, 0) : 0,
     layoutW,
@@ -536,8 +530,8 @@ export function ZoomMirrorFacesFrame() {
         }
       : {
           // Keep a measurable mount target while joining / cameras off.
-          width: Math.min(box.w, ZOOM_FACES_COLUMN_WIDTH),
-          height: show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 0,
+          width: Math.min(box.w || ZOOM_FACES_COLUMN_WIDTH, ZOOM_FACES_COLUMN_WIDTH),
+          height: show ? ZOOM_FACES_PHONE_STRIP_HEIGHT : 1,
           ["--zoom-sdk-w" as string]: `${ZOOM_SDK_TILE_WIDTH}px`,
           ["--zoom-sdk-h" as string]: `${ZOOM_SDK_TILE_HEIGHT}px`,
           ["--zoom-scale-x" as string]: "0.4",
@@ -547,14 +541,14 @@ export function ZoomMirrorFacesFrame() {
   return (
     <aside
       ref={shellRef}
-      className="zoom-faces-column shrink-0 min-h-0 overflow-hidden flex flex-col items-center"
+      className="zoom-faces-column order-last lg:order-first shrink-0 min-h-0 overflow-hidden flex flex-col items-stretch"
       data-expanded={show ? "true" : "false"}
       data-video-on={layout.tileCount}
       aria-label="Table faces"
       aria-hidden={!show}
     >
       <div
-        className={`zoom-faces-thumb ${
+        className={`zoom-faces-thumb mx-auto ${
           show ? "zoom-faces-thumb--visible" : ""
         }`}
         style={frameStyle}

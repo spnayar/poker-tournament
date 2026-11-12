@@ -12,8 +12,8 @@ export const ZOOM_SDK_VIEW_HEIGHT = ZOOM_SDK_TILE_HEIGHT;
 /** Max faces we try to show in the table column. */
 export const ZOOM_FACES_MAX = 9;
 
-/** Desktop faces column width (px) — narrow strip right of Action Log. */
-export const ZOOM_FACES_COLUMN_WIDTH = 104;
+/** Desktop faces column width (px) — full-height strip left of the table. */
+export const ZOOM_FACES_COLUMN_WIDTH = 120;
 
 /** Phone strip height when expanded (px). */
 export const ZOOM_FACES_PHONE_STRIP_HEIGHT = 72;
