@@ -194,8 +194,8 @@ body {
 }
 
 /*
-  Zoom Meeting SDK table faces — column right of Action Log (sm+),
-  compact strip under the log on phone. Ribbon sized to video-on count
+  Zoom Meeting SDK table faces — full-height column LEFT of the table (lg+),
+  compact strip after Action Log on phone. Ribbon sized to video-on count
   (max 9); Zoom chrome (shield / grid / menu) forced off.
 */
 .zoom-faces-column {
@@ -205,25 +205,42 @@ body {
   max-height: 0;
   opacity: 0;
   pointer-events: none;
-  transition: max-height 200ms ease-out, opacity 200ms ease-out, width 200ms ease-out;
+  position: relative;
+  isolation: isolate;
+  contain: layout paint;
+  z-index: 1;
+  transition:
+    max-height 200ms ease-out,
+    opacity 200ms ease-out,
+    width 200ms ease-out;
 }
 
 .zoom-faces-column[data-expanded="true"] {
-  max-height: 4.75rem; /* phone strip */
+  max-height: 4.75rem; /* phone strip under log */
   opacity: 1;
   pointer-events: auto;
 }
 
-@media (min-width: 640px) {
+/* Match the table play row breakpoint (lg:flex-row). */
+@media (min-width: 1024px) {
   .zoom-faces-column {
     width: 0;
+    max-height: none;
+    align-self: stretch;
   }
 
   .zoom-faces-column[data-expanded="true"] {
-    width: 6.5rem; /* ~104px — keep in sync with ZOOM_FACES_COLUMN_WIDTH */
+    /* keep in sync with ZOOM_FACES_COLUMN_WIDTH (120) */
+    width: 7.5rem;
     max-height: none;
-    height: 100%;
+    height: auto;
     align-self: stretch;
+    min-height: 0;
+  }
+
+  .zoom-faces-column[data-expanded="true"] .zoom-faces-thumb {
+    /* Fill column height so thumbs pack the left panel */
+    max-height: 100%;
   }
 }
 
@@ -260,8 +277,11 @@ body {
   position: relative;
   width: var(--zoom-sdk-w);
   height: var(--zoom-sdk-h);
-  overflow: hidden;
+  overflow: hidden !important;
   background: #0f172a;
+  /* Keep Meeting SDK suspension/popper from escaping the left column. */
+  contain: strict;
+  isolation: isolate;
 }
 
 /* Zoom chrome — root-scoped + html.zoom-faces-active for portaled UI. */
@@ -313,12 +333,15 @@ html.zoom-faces-active .more-button,
 #zoom-meeting-sdk-root .suspension-content2,
 #zoom-meeting-sdk-root .suspension-content3,
 #zoom-meeting-sdk-root .react-draggable,
-#zoom-meeting-sdk-root .gallery-video-container__main-view {
+#zoom-meeting-sdk-root .gallery-video-container__main-view,
+#zoom-meeting-sdk-root .speaker-active-container__main-view,
+#zoom-meeting-sdk-root [class*="react-draggable"] {
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
   right: auto !important;
   bottom: auto !important;
+  inset: 0 auto auto 0 !important;
   transform: none !important;
   width: 100% !important;
   max-width: 100% !important;

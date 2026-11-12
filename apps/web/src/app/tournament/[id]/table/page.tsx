@@ -938,8 +938,11 @@ export default function TablePage() {
               actionLoading={timerActionLoading}
             />
           )}
-          <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch min-h-0 overflow-visible">
-            <div className="flex-[1.4] flex items-center justify-center min-w-0 min-h-0 overflow-visible max-sm:min-h-[54%] max-sm:flex-[1.7]">
+          {/* Desktop: [ Faces | Table | Action Log ]. Phone: table → log → faces strip. */}
+          <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 items-stretch min-h-0 overflow-hidden">
+            <ZoomMirrorFacesFrame />
+
+            <div className="order-first lg:order-none flex-[1.4] flex items-center justify-center min-w-0 min-h-0 overflow-visible max-sm:min-h-[54%] max-sm:flex-[1.7]">
               <div className="relative w-full h-full max-w-3xl max-h-full pb-5 sm:pb-8 overflow-visible">
                 <PokerTable
                   seats={tableState.seats}
@@ -984,19 +987,15 @@ export default function TablePage() {
               </div>
             </div>
 
-            {/* Desktop: [Action Log | Faces]. Phone: log then compact faces strip. */}
-            <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-2 w-full sm:w-auto shrink-0 min-h-0 max-h-full max-sm:flex-none max-sm:max-h-[30%] overflow-hidden">
-              <ActionLogPanel
-                actionLog={actionLog}
-                currentActorSeat={tableState.currentActorSeat}
-                handNumber={tableState.handNumber}
-                visibleBoard={visibleBoard}
-                hideAwards={boardRevealing}
-                zoomJoinUrl={zoomJoinUrl}
-                zoomMeetingNumber={zoomMeetingNumber}
-              />
-              <ZoomMirrorFacesFrame />
-            </div>
+            <ActionLogPanel
+              actionLog={actionLog}
+              currentActorSeat={tableState.currentActorSeat}
+              handNumber={tableState.handNumber}
+              visibleBoard={visibleBoard}
+              hideAwards={boardRevealing}
+              zoomJoinUrl={zoomJoinUrl}
+              zoomMeetingNumber={zoomMeetingNumber}
+            />
           </div>
         </div>
       </div>
