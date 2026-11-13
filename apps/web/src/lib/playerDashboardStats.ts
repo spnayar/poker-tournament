@@ -63,9 +63,42 @@ export type HeadToHeadRow = {
   theirHandsWon: number;
 };
 
+/**
+ * Highlight card for Biggest Nemesis / Easy Money.
+ * Ranked by ledger edge across shared sessions (friends-club tracking only).
+ */
+export type RivalHighlight = {
+  opponentUserId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  nightsTogether: number;
+  sessionsTogether: number;
+  finishesAhead: number;
+  finishesBehind: number;
+  /** Your ledger net minus theirs across shared sessions. */
+  netLedgerEdgeCents: number;
+};
+
+export type RivalHighlights = {
+  /**
+   * Opponent with the worst (most negative) ledger edge vs you.
+   * Requires ≥ {@link MIN_RIVAL_NIGHTS_TOGETHER} shared nights and a negative edge.
+   */
+  biggestNemesis: RivalHighlight | null;
+  /**
+   * Opponent with the best (most positive) ledger edge vs you.
+   * Requires ≥ {@link MIN_RIVAL_NIGHTS_TOGETHER} shared nights and a positive edge.
+   */
+  easyMoney: RivalHighlight | null;
+};
+
+/** Minimum shared game nights before Nemesis / Easy Money can be awarded. */
+export const MIN_RIVAL_NIGHTS_TOGETHER = 2;
+
 export type PlayerDashboardStats = {
   career: CareerPlayStats;
   headToHead: HeadToHeadRow[];
+  rivals: RivalHighlights;
 };
 
 function emptyCareer(): CareerPlayStats {
@@ -86,6 +119,60 @@ function emptyCareer(): CareerPlayStats {
   };
 }
 
+function toRivalHighlight(row: HeadToHeadRow): RivalHighlight {
+  return {
+    opponentUserId: row.opponentUserId,
+    displayName: row.displayName,
+    avatarUrl: row.avatarUrl,
+    nightsTogether: row.nightsTogether,
+    sessionsTogether: row.sessionsTogether,
+    finishesAhead: row.finishesAhead,
+    finishesBehind: row.finishesBehind,
+    netLedgerEdgeCents: row.netLedgerEdgeCents,
+  };
+}
+
+/**
+ * Pick Biggest Nemesis (worst ledger edge) and Easy Money (best ledger edge)
+ * among opponents with enough shared nights. Pure / testable.
+ */
+export function pickRivalHighlights(
+  headToHead: HeadToHeadRow[],
+  minNights: number = MIN_RIVAL_NIGHTS_TOGETHER
+): RivalHighlights {
+  const eligible = headToHead.filter((r) => r.nightsTogether >= minNights);
+
+  let biggestNemesis: RivalHighlight | null = null;
+  let easyMoney: RivalHighlight | null = null;
+
+  for (const row of eligible) {
+    if (row.netLedgerEdgeCents < 0) {
+      if (
+        !biggestNemesis ||
+        row.netLedgerEdgeCents < biggestNemesis.netLedgerEdgeCents ||
+        (row.netLedgerEdgeCents === biggestNemesis.netLedgerEdgeCents &&
+          row.finishesBehind - row.finishesAhead >
+            biggestNemesis.finishesBehind - biggestNemesis.finishesAhead)
+      ) {
+        biggestNemesis = toRivalHighlight(row);
+      }
+    }
+    if (row.netLedgerEdgeCents > 0) {
+      if (
+        !easyMoney ||
+        row.netLedgerEdgeCents > easyMoney.netLedgerEdgeCents ||
+        (row.netLedgerEdgeCents === easyMoney.netLedgerEdgeCents &&
+          row.finishesAhead - row.finishesBehind >
+            easyMoney.finishesAhead - easyMoney.finishesBehind)
+      ) {
+        easyMoney = toRivalHighlight(row);
+      }
+    }
+  }
+
+  return { biggestNemesis, easyMoney };
+}
+
 /**
  * Aggregate career + head-to-head play stats from finished game rows.
  * Pure: invents nothing — missing funStats fields stay 0 / null.
@@ -94,12 +181,16 @@ export function aggregatePlayerDashboardStats(
   userId: string,
   games: DashboardGameInput[]
 ): PlayerDashboardStats {
+  const emptyRivals: RivalHighlights = {
+    biggestNemesis: null,
+    easyMoney: null,
+  };
   const myGames = games.filter((g) =>
     g.results.some((r) => r.userId === userId)
   );
 
   if (myGames.length === 0) {
-    return { career: emptyCareer(), headToHead: [] };
+    return { career: emptyCareer(), headToHead: [], rivals: emptyRivals };
   }
 
   const nightIds = new Set<string>();
@@ -245,5 +336,9 @@ export function aggregatePlayerDashboardStats(
       );
     });
 
-  return { career, headToHead };
+  return {
+    career,
+    headToHead,
+    rivals: pickRivalHighlights(headToHead),
+  };
 }

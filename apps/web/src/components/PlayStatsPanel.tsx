@@ -1,7 +1,11 @@
 "use client";
 
 import { formatCents, getAvatarUrl, LEDGER_DISCLAIMER } from "@/lib/utils";
-import type { PlayerDashboardStats } from "@/lib/playerDashboardStats";
+import type {
+  PlayerDashboardStats,
+  RivalHighlight,
+} from "@/lib/playerDashboardStats";
+import { MIN_RIVAL_NIGHTS_TOGETHER } from "@/lib/playerDashboardStats";
 
 function formatFinish(place: number): string {
   if (place === 1) return "1st";
@@ -17,6 +21,56 @@ function formatChips(n: number): string {
 function ledgerSign(cents: number): string {
   const formatted = formatCents(cents);
   return cents > 0 ? `+${formatted}` : formatted;
+}
+
+function rivalSupportLine(row: RivalHighlight, kind: "nemesis" | "easy"): string {
+  const nights = `${row.nightsTogether} night${row.nightsTogether === 1 ? "" : "s"}`;
+  if (kind === "nemesis") {
+    return `${nights} · ahead of you ${row.finishesBehind}–${row.finishesAhead} · ${ledgerSign(row.netLedgerEdgeCents)} ledger`;
+  }
+  return `${nights} · you ahead ${row.finishesAhead}–${row.finishesBehind} · ${ledgerSign(row.netLedgerEdgeCents)} ledger`;
+}
+
+function RivalCard({
+  label,
+  hint,
+  row,
+  kind,
+  emptyCopy,
+}: {
+  label: string;
+  hint: string;
+  row: RivalHighlight | null;
+  kind: "nemesis" | "easy";
+  emptyCopy: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        {label}
+      </p>
+      <p className="text-[11px] text-slate-500 mt-0.5">{hint}</p>
+      {row ? (
+        <div className="mt-3 flex items-center gap-3">
+          <img
+            src={getAvatarUrl(row.displayName, row.avatarUrl)}
+            alt=""
+            className="w-10 h-10 rounded-full bg-slate-800 shrink-0"
+          />
+          <div className="min-w-0">
+            <p className="font-medium text-slate-100 truncate">
+              {row.displayName}
+            </p>
+            <p className="text-slate-500 text-xs truncate">
+              {rivalSupportLine(row, kind)}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-slate-500 text-sm">{emptyCopy}</p>
+      )}
+    </div>
+  );
 }
 
 type Props = {
@@ -47,13 +101,14 @@ export function PlayStatsPanel({ playStats, ready }: Props) {
     );
   }
 
-  const { career, headToHead } = playStats;
+  const { career, headToHead, rivals } = playStats;
   const netColor =
     career.netLedgerCents > 0
       ? "text-emerald-400"
       : career.netLedgerCents < 0
         ? "text-red-400"
         : "text-slate-200";
+  const rivalEmpty = `Need ${MIN_RIVAL_NIGHTS_TOGETHER}+ shared nights with a clear ledger edge.`;
 
   return (
     <section className="mb-8 rounded-xl border border-slate-800 bg-slate-900 px-5 py-5 sm:px-6 sm:py-6">
@@ -140,6 +195,29 @@ export function PlayStatsPanel({ playStats, ready }: Props) {
       </dl>
 
       <p className="mt-3 text-amber-400/70 text-xs">{LEDGER_DISCLAIMER}</p>
+
+      <div className="mt-6 border-t border-slate-800 pt-5">
+        <h3 className="text-sm font-semibold text-slate-200">Club rivals</h3>
+        <p className="text-slate-500 text-xs mt-0.5 mb-3">
+          Ranked by ledger edge across shared nights (tracking only — not cash).
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <RivalCard
+            label="Biggest Nemesis"
+            hint="Worst ledger edge vs you"
+            row={rivals.biggestNemesis}
+            kind="nemesis"
+            emptyCopy={rivalEmpty}
+          />
+          <RivalCard
+            label="Easy Money"
+            hint="Best ledger edge for you"
+            row={rivals.easyMoney}
+            kind="easy"
+            emptyCopy={rivalEmpty}
+          />
+        </div>
+      </div>
 
       {headToHead.length > 0 && (
         <div className="mt-6 border-t border-slate-800 pt-5">

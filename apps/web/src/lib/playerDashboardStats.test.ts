@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregatePlayerDashboardStats,
+  pickRivalHighlights,
   type DashboardGameInput,
+  type HeadToHeadRow,
 } from "./playerDashboardStats";
+
+function h2h(partial: Partial<HeadToHeadRow> & Pick<HeadToHeadRow, "opponentUserId" | "displayName">): HeadToHeadRow {
+  return {
+    avatarUrl: null,
+    nightsTogether: 2,
+    sessionsTogether: 2,
+    finishesAhead: 0,
+    finishesBehind: 0,
+    finishesTied: 0,
+    netLedgerEdgeCents: 0,
+    myHandsWon: 0,
+    theirHandsWon: 0,
+    ...partial,
+  };
+}
 
 const alice = "alice";
 const bob = "bob";
@@ -41,6 +58,7 @@ describe("aggregatePlayerDashboardStats", () => {
     expect(stats.career.nightsPlayed).toBe(0);
     expect(stats.career.ledgerRoiPercent).toBeNull();
     expect(stats.headToHead).toEqual([]);
+    expect(stats.rivals).toEqual({ biggestNemesis: null, easyMoney: null });
   });
 
   it("aggregates nights, wins, ledger ROI, hands, flops, best finish, biggest pot", () => {
@@ -306,6 +324,11 @@ describe("aggregatePlayerDashboardStats", () => {
     expect(headToHead[1]!.finishesBehind).toBe(0);
     // alice +1000, cara -1000 → edge +2000
     expect(headToHead[1]!.netLedgerEdgeCents).toBe(2000);
+
+    // Bob even (0 edge); Cara only 1 night — no rival highlights yet
+    const { rivals } = aggregatePlayerDashboardStats(alice, games);
+    expect(rivals.biggestNemesis).toBeNull();
+    expect(rivals.easyMoney).toBeNull();
   });
 
   it("skips finish comparisons on chopped sessions but still tracks ledger edge", () => {
@@ -363,4 +386,178 @@ describe("aggregatePlayerDashboardStats", () => {
     expect(career.biggestPotChips).toBeNull();
     expect(career.bestFinish).toBe(3);
   });
+
+  it("picks Biggest Nemesis and Easy Money by ledger edge with enough shared nights", () => {
+    const games: DashboardGameInput[] = [
+      // Bob beats Alice twice across two nights
+      game({
+        gameId: "g1",
+        tournamentId: "n1",
+        buyInCents: 2000,
+        results: [
+          {
+            userId: alice,
+            displayName: "Alice",
+            avatarUrl: null,
+            finishPosition: 2,
+            payoutCents: 0,
+          },
+          {
+            userId: bob,
+            displayName: "Bob",
+            avatarUrl: "/bob.png",
+            finishPosition: 1,
+            payoutCents: 4000,
+          },
+        ],
+      }),
+      game({
+        gameId: "g2",
+        tournamentId: "n2",
+        buyInCents: 2000,
+        results: [
+          {
+            userId: alice,
+            displayName: "Alice",
+            avatarUrl: null,
+            finishPosition: 2,
+            payoutCents: 0,
+          },
+          {
+            userId: bob,
+            displayName: "Bob",
+            avatarUrl: "/bob.png",
+            finishPosition: 1,
+            payoutCents: 4000,
+          },
+        ],
+      }),
+      // Cara loses to Alice twice across two nights
+      game({
+        gameId: "g3",
+        tournamentId: "n3",
+        buyInCents: 1000,
+        results: [
+          {
+            userId: alice,
+            displayName: "Alice",
+            avatarUrl: null,
+            finishPosition: 1,
+            payoutCents: 2000,
+          },
+          {
+            userId: cara,
+            displayName: "Cara",
+            avatarUrl: "/cara.png",
+            finishPosition: 2,
+            payoutCents: 0,
+          },
+        ],
+      }),
+      game({
+        gameId: "g4",
+        tournamentId: "n4",
+        buyInCents: 1000,
+        results: [
+          {
+            userId: alice,
+            displayName: "Alice",
+            avatarUrl: null,
+            finishPosition: 1,
+            payoutCents: 2000,
+          },
+          {
+            userId: cara,
+            displayName: "Cara",
+            avatarUrl: "/cara.png",
+            finishPosition: 2,
+            payoutCents: 0,
+          },
+        ],
+      }),
+    ];
+
+    const { rivals } = aggregatePlayerDashboardStats(alice, games);
+    expect(rivals.biggestNemesis?.opponentUserId).toBe(bob);
+    expect(rivals.biggestNemesis?.avatarUrl).toBe("/bob.png");
+    expect(rivals.biggestNemesis?.netLedgerEdgeCents).toBe(-8000);
+    expect(rivals.biggestNemesis?.nightsTogether).toBe(2);
+
+    expect(rivals.easyMoney?.opponentUserId).toBe(cara);
+    expect(rivals.easyMoney?.avatarUrl).toBe("/cara.png");
+    expect(rivals.easyMoney?.netLedgerEdgeCents).toBe(4000);
+    expect(rivals.easyMoney?.nightsTogether).toBe(2);
+  });
 });
+
+describe("pickRivalHighlights", () => {
+  it("ignores opponents with fewer than 2 shared nights", () => {
+    const rivals = pickRivalHighlights([
+      h2h({
+        opponentUserId: bob,
+        displayName: "Bob",
+        nightsTogether: 1,
+        netLedgerEdgeCents: -9999,
+      }),
+      h2h({
+        opponentUserId: cara,
+        displayName: "Cara",
+        nightsTogether: 1,
+        netLedgerEdgeCents: 9999,
+      }),
+    ]);
+    expect(rivals.biggestNemesis).toBeNull();
+    expect(rivals.easyMoney).toBeNull();
+  });
+
+  it("requires a negative edge for Nemesis and positive for Easy Money", () => {
+    const rivals = pickRivalHighlights([
+      h2h({
+        opponentUserId: bob,
+        displayName: "Bob",
+        nightsTogether: 3,
+        netLedgerEdgeCents: 0,
+        finishesAhead: 1,
+        finishesBehind: 2,
+      }),
+    ]);
+    expect(rivals.biggestNemesis).toBeNull();
+    expect(rivals.easyMoney).toBeNull();
+  });
+
+  it("tie-breaks Nemesis by finishes behind and Easy Money by finishes ahead", () => {
+    const rivals = pickRivalHighlights([
+      h2h({
+        opponentUserId: "x",
+        displayName: "X",
+        netLedgerEdgeCents: -1000,
+        finishesBehind: 1,
+        finishesAhead: 0,
+      }),
+      h2h({
+        opponentUserId: "y",
+        displayName: "Y",
+        netLedgerEdgeCents: -1000,
+        finishesBehind: 3,
+        finishesAhead: 0,
+      }),
+      h2h({
+        opponentUserId: "p",
+        displayName: "P",
+        netLedgerEdgeCents: 500,
+        finishesAhead: 1,
+        finishesBehind: 0,
+      }),
+      h2h({
+        opponentUserId: "q",
+        displayName: "Q",
+        netLedgerEdgeCents: 500,
+        finishesAhead: 4,
+        finishesBehind: 0,
+      }),
+    ]);
+    expect(rivals.biggestNemesis?.opponentUserId).toBe("y");
+    expect(rivals.easyMoney?.opponentUserId).toBe("q");
+  });
+});
+
