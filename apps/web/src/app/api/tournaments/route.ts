@@ -22,6 +22,7 @@ import {
   buildBlindLevels,
   resolveActionTimerSeconds,
 } from "@poker/protocol";
+import { loadPlayerDashboardStats } from "@/lib/loadPlayerDashboardStats";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -30,49 +31,51 @@ export async function GET() {
   }
 
   try {
-    const [user, stats, tournaments, lastHosted] = await Promise.all([
-      prisma.user.findUnique({ where: { id: session.user.id } }),
-      prisma.userStats.findUnique({ where: { userId: session.user.id } }),
-      prisma.tournament.findMany({
-        where: {
-          OR: [
-            { hostUserId: session.user.id },
-            { players: { some: { userId: session.user.id } } },
-          ],
-        },
-        include: {
-          host: { select: { displayName: true } },
-          players: {
-            include: {
-              user: { select: { displayName: true, avatarUrl: true } },
+    const [user, stats, tournaments, lastHosted, playStats] =
+      await Promise.all([
+        prisma.user.findUnique({ where: { id: session.user.id } }),
+        prisma.userStats.findUnique({ where: { userId: session.user.id } }),
+        prisma.tournament.findMany({
+          where: {
+            OR: [
+              { hostUserId: session.user.id },
+              { players: { some: { userId: session.user.id } } },
+            ],
+          },
+          include: {
+            host: { select: { displayName: true } },
+            players: {
+              include: {
+                user: { select: { displayName: true, avatarUrl: true } },
+              },
             },
+            games: {
+              where: { status: "FINISHED" },
+              select: { id: true },
+            },
+            _count: { select: { players: true } },
           },
-          games: {
-            where: { status: "FINISHED" },
-            select: { id: true },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+        }),
+        prisma.tournament.findFirst({
+          where: { hostUserId: session.user.id },
+          orderBy: { createdAt: "desc" },
+          select: {
+            buyInCents: true,
+            startingChips: true,
+            maxPlayers: true,
+            blindPace: true,
+            blindPreset: true,
+            blindLevelMinutes: true,
+            actionTimerSeconds: true,
+            payoutPercents: true,
+            zoomJoinUrl: true,
+            zoomPasscodePlain: true,
           },
-          _count: { select: { players: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      }),
-      prisma.tournament.findFirst({
-        where: { hostUserId: session.user.id },
-        orderBy: { createdAt: "desc" },
-        select: {
-          buyInCents: true,
-          startingChips: true,
-          maxPlayers: true,
-          blindPace: true,
-          blindPreset: true,
-          blindLevelMinutes: true,
-          actionTimerSeconds: true,
-          payoutPercents: true,
-          zoomJoinUrl: true,
-          zoomPasscodePlain: true,
-        },
-      }),
-    ]);
+        }),
+        loadPlayerDashboardStats(session.user.id),
+      ]);
 
     const lastHostedDefaults = lastHosted
       ? {
@@ -86,6 +89,7 @@ export async function GET() {
     return NextResponse.json({
       user,
       stats,
+      playStats,
       tournaments,
       lastHostedDefaults,
       pastPlayers,
