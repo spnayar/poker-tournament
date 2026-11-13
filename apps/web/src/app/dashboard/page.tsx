@@ -39,6 +39,8 @@ import {
   type InviteDraft,
 } from "@/lib/inviteList";
 import { InviteComposeBox } from "@/components/InviteComposeBox";
+import { PlayStatsPanel } from "@/components/PlayStatsPanel";
+import type { PlayerDashboardStats } from "@/lib/playerDashboardStats";
 
 interface Tournament {
   id: string;
@@ -53,14 +55,6 @@ interface Tournament {
   _count: { players: number };
 }
 
-interface Stats {
-  tournamentsPlayed: number;
-  wins: number;
-  itmCount: number;
-  totalBuyInCents: number;
-  totalPayoutCents: number;
-}
-
 interface DashboardUser {
   displayName: string;
   displayNameSet: boolean;
@@ -71,7 +65,9 @@ export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [playStats, setPlayStats] = useState<PlayerDashboardStats | null>(
+    null
+  );
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
@@ -119,7 +115,7 @@ export default function DashboardPage() {
             return;
           }
           setTournaments(data.tournaments ?? []);
-          setStats(data.stats);
+          setPlayStats(data.playStats ?? null);
           setPastPlayers(data.pastPlayers ?? []);
           const defaults = data.lastHostedDefaults ?? null;
           setLastHostedDefaults(defaults);
@@ -251,13 +247,6 @@ export default function DashboardPage() {
     );
   }
 
-  const net =
-    (stats?.totalPayoutCents ?? 0) - (stats?.totalBuyInCents ?? 0);
-  const itmPct =
-    stats && stats.tournamentsPlayed > 0
-      ? Math.round((stats.itmCount / stats.tournamentsPlayed) * 100)
-      : 0;
-
   return (
     <div className="min-h-screen p-6 max-w-4xl mx-auto">
       <header className="mb-8">
@@ -337,24 +326,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {[
-            { label: "Played", value: stats.tournamentsPlayed },
-            { label: "Wins", value: stats.wins },
-            { label: "ITM %", value: `${itmPct}%` },
-            { label: "Net", value: formatCents(net) },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="bg-slate-900 rounded-xl p-4 border border-slate-800"
-            >
-              <p className="text-slate-400 text-sm">{s.label}</p>
-              <p className="text-2xl font-bold">{s.value}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      <PlayStatsPanel playStats={playStats} ready={nightsReady} />
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold">My Game Nights</h2>
