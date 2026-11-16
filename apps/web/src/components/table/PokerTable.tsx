@@ -20,7 +20,11 @@ import {
 } from "./tableLayout";
 import type { SeatPublic, ShownHand } from "@poker/protocol";
 import { hostSeatControl } from "@poker/protocol";
-import { seatVisualKind, showSeatHoleCards } from "./seatVisualState";
+import {
+  opponentHolePresentation,
+  seatVisualKind,
+  showSeatHoleCards,
+} from "./seatVisualState";
 
 function emptyBoard(): (string | undefined)[] {
   return [undefined, undefined, undefined, undefined, undefined];
@@ -147,8 +151,17 @@ export function PlayerSeat({
   }, [menuOpen, hostControl]);
 
   // Hero: pod above, hole cards on the felt bottom pin (must not cover the board).
-  // Opponents: tuck face-down cards under the avatar; only fan a full row at showdown.
-  const showOpponentFan = !isMe && revealHoleCards && showCards;
+  // Opponents: peek face-down backs *behind* the avatar (never over it — F3);
+  // only fan a full row at showdown. Still faceDown / undefined until reveal.
+  const opponentHoles = isMe
+    ? null
+    : opponentHolePresentation({
+        folded: seat.folded,
+        eliminated: seat.eliminated,
+        revealHoleCards,
+        showCards: !!showCards,
+      });
+  const showOpponentFan = opponentHoles === "fan-reveal";
   const cardsBelowPod = isMe || (showOpponentFan && position.y < 48);
   const cardScale = isMe
     ? compact
@@ -180,10 +193,12 @@ export function PlayerSeat({
       </div>
     );
 
+  // Mid-hand opponent indicator: small backs behind the avatar so avatarUrl /
+  // DiceBear stays the seat face until showdown (QA F3).
   const tuckedOpponentCards =
-    !isMe && !showOpponentFan && cardsToShow.length > 0 ? (
+    opponentHoles === "tucked-backs" && cardsToShow.length > 0 ? (
       <div
-        className="pointer-events-none absolute -bottom-0.5 left-1/2 z-[5] flex -translate-x-1/2 gap-px scale-[0.38] origin-bottom"
+        className="pointer-events-none absolute -bottom-1.5 left-1/2 z-0 flex -translate-x-1/2 gap-px scale-[0.34] origin-bottom"
         aria-hidden
         data-seat-cards="live"
       >
@@ -223,11 +238,12 @@ export function PlayerSeat({
           />
         ) : null}
 
-        <div className="relative shrink-0">
+        <div className="relative shrink-0 overflow-visible">
+          {/* Avatar stays above tucked backs so mid-hand seats never look like card backs. */}
           <img
             src={getAvatarUrl(seat.displayName, seat.avatarUrl)}
             alt=""
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 bg-slate-800 object-cover ${
+            className={`relative z-10 w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 bg-slate-800 object-cover ${
               isFolded || isOut
                 ? "border-slate-600 grayscale"
                 : statusBadge

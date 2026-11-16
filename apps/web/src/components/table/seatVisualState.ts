@@ -21,3 +21,22 @@ export function showSeatHoleCards(seat: {
 }): boolean {
   return !seat.folded && seat.eliminated !== true;
 }
+
+/**
+ * How opponent hole cards appear on a seat (hero uses the full hole-card row).
+ * Mid-hand always keeps the avatar as the seat face — backs tuck behind it,
+ * never replace it (QA F3). Fan only at showdown when cards are revealed.
+ * Face-down / undefined until reveal — never leak opponent ranks/suits.
+ */
+export type OpponentHolePresentation = "hidden" | "tucked-backs" | "fan-reveal";
+
+export function opponentHolePresentation(opts: {
+  folded: boolean;
+  eliminated?: boolean;
+  revealHoleCards: boolean;
+  showCards: boolean;
+}): OpponentHolePresentation {
+  if (!showSeatHoleCards(opts)) return "hidden";
+  if (opts.revealHoleCards && opts.showCards) return "fan-reveal";
+  return "tucked-backs";
+}
