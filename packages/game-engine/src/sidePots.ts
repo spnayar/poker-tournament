@@ -4,6 +4,8 @@ export interface PlayerContribution {
   seatId: number;
   contribution: number;
   folded: boolean;
+  /** When true, this seat is all-in (live labeling only). */
+  allIn?: boolean;
 }
 
 function sameEligibleSeats(a: number[], b: number[]): boolean {
@@ -94,6 +96,60 @@ export function splitLivePots(pots: PotLayer[]): {
     }
   }
   return { pots: matched, uncalledAmount };
+}
+
+/**
+ * Real side pots exist only when a non-folded all-in seat has put in strictly
+ * less than another non-folded seat (someone continued past the all-in).
+ * Unequal live bets / blinds / covered all-ins awaiting callers are not sides.
+ */
+export function hasRealSidePotStructure(
+  players: PlayerContribution[]
+): boolean {
+  const active = players.filter((p) => !p.folded && p.contribution > 0);
+  if (active.length < 2) return false;
+  const maxContrib = Math.max(...active.map((p) => p.contribution));
+  return active.some(
+    (p) => p.allIn === true && p.contribution < maxContrib
+  );
+}
+
+/**
+ * Live-table pot chrome: collapse to a single main pot unless an all-in has
+ * created a real side-pot structure. Totals always include every chip in play;
+ * settlement still uses `buildSidePots` + `splitLivePots` unchanged.
+ */
+export function liveTablePots(players: PlayerContribution[]): {
+  pots: PotLayer[];
+  uncalledAmount: number;
+  totalPot: number;
+} {
+  const raw = buildSidePots(players);
+  const totalPot = totalPotAmount(raw);
+  if (totalPot <= 0) {
+    return { pots: [], uncalledAmount: 0, totalPot: 0 };
+  }
+
+  if (!hasRealSidePotStructure(players)) {
+    const eligibleSeatIds = players
+      .filter((p) => !p.folded && p.contribution > 0)
+      .map((p) => p.seatId);
+    const contributorCount = players.filter((p) => p.contribution > 0).length;
+    return {
+      pots: [
+        {
+          amount: totalPot,
+          eligibleSeatIds,
+          contributorCount,
+        },
+      ],
+      uncalledAmount: 0,
+      totalPot,
+    };
+  }
+
+  const live = splitLivePots(raw);
+  return { ...live, totalPot };
 }
 
 /** Single-contributor layers to return as uncalled (seat + amount). */

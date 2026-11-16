@@ -630,6 +630,7 @@ export function PokerTable({
           Pot {totalPot.toLocaleString()}
         </motion.div>
 
+        {/* Main/Side only for real multi-pots; Uncalled only when engine reports it. */}
         {pots.length > 1 || uncalledAmount > 0 ? (
           <div className="flex gap-1.5 mt-1 flex-wrap justify-center max-w-[15rem]">
             {pots.map((pot, i) => (
@@ -637,7 +638,10 @@ export function PokerTable({
                 key={i}
                 className="text-[10px] bg-slate-950/45 px-1.5 py-0.5 rounded text-slate-300 font-mono"
               >
-                {i === 0 ? "Main" : `Side ${i}`}: {pot.amount.toLocaleString()}
+                {pots.length > 1
+                  ? `${i === 0 ? "Main" : `Side ${i}`}: `
+                  : ""}
+                {pot.amount.toLocaleString()}
               </span>
             ))}
             {uncalledAmount > 0 ? (

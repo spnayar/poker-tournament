@@ -3,6 +3,8 @@ export { getBlindsForLevelFromStructure, type BlindLevel } from "./blinds";
 export {
   buildSidePots,
   coalesceEligiblePots,
+  hasRealSidePotStructure,
+  liveTablePots,
   totalPotAmount,
   splitLivePots,
   uncalledReturnsFromPots,
