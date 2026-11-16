@@ -1443,16 +1443,27 @@ io.on("connection", (socket) => {
     const dealSeat = firstDeal
       ? state.dealerSeat
       : state.nextDealerSeat;
-    if (dealSeat !== seatId) {
-      // Host may always advance between hands (away/busted dealers must not
-      // leave the table with no Deal control). Button seat still preferred.
-      const hostCanDeal = room.hostUserId === user.userId;
-      if (!hostCanDeal) {
-        socket.emit(ServerEvents.ERROR, {
-          message: "Only the next dealer or host can deal the next hand",
-        });
-        return;
-      }
+    const isHost = room.hostUserId === user.userId;
+    const dealUserId =
+      dealSeat != null
+        ? [...room.seatByUserId.entries()].find(([, s]) => s === dealSeat)?.[0]
+        : undefined;
+    // Away = skipped sit-out or live socket gone (same as client Deal gate).
+    const nextDealerUnavailable =
+      dealSeat == null ||
+      room.table.isSkipped(dealSeat) ||
+      (dealUserId != null && !room.playerSockets.has(dealUserId));
+    const canDealAsButton =
+      dealSeat === seatId && !nextDealerUnavailable;
+    // Host override only when the button seat cannot deal — never dual Deal.
+    const canDealAsHost = isHost && nextDealerUnavailable;
+    if (!canDealAsButton && !canDealAsHost) {
+      socket.emit(ServerEvents.ERROR, {
+        message: nextDealerUnavailable
+          ? "Only the host can deal while the next dealer is away"
+          : "Only the next dealer can deal the next hand",
+      });
+      return;
     }
 
     const started = await startNextHand(tournamentId, room);

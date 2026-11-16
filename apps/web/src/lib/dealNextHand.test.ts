@@ -30,7 +30,7 @@ describe("dealNextHand gates", () => {
     ).toBe(false);
   });
 
-  it("lets the button seat or host deal when others are away", () => {
+  it("lets only the button seat deal when the dealer is available", () => {
     expect(
       canDealNextHand({
         awaitingNextHand: true,
@@ -42,6 +42,31 @@ describe("dealNextHand gates", () => {
       })
     ).toBe(true);
 
+    // Host who is not the dealer must not get a second live Deal.
+    expect(
+      canDealNextHand({
+        awaitingNextHand: true,
+        awaitingFirstDeal: false,
+        mySeatId: 0,
+        nextDealerSeat: 2,
+        isHost: true,
+        nextDealerUnavailable: false,
+      })
+    ).toBe(false);
+
+    expect(
+      canDealNextHand({
+        awaitingNextHand: true,
+        awaitingFirstDeal: false,
+        mySeatId: 0,
+        nextDealerSeat: 2,
+        isHost: false,
+        nextDealerUnavailable: false,
+      })
+    ).toBe(false);
+  });
+
+  it("host overrides only when the next dealer is away or missing", () => {
     expect(
       canDealNextHand({
         awaitingNextHand: true,
@@ -53,14 +78,12 @@ describe("dealNextHand gates", () => {
       })
     ).toBe(true);
 
-    // Host may deal even when next dealer looks "available" but is stuck away
-    // in a way the client didn't flag — never soft-lock the table.
     expect(
       canDealNextHand({
         awaitingNextHand: true,
         awaitingFirstDeal: false,
         mySeatId: 0,
-        nextDealerSeat: 2,
+        nextDealerSeat: null,
         isHost: true,
         nextDealerUnavailable: false,
       })
@@ -76,6 +99,32 @@ describe("dealNextHand gates", () => {
         nextDealerUnavailable: true,
       })
     ).toBe(false);
+  });
+
+  it("does not leave Deal on an away button seat (host-only)", () => {
+    // Away dealer who is not host — no Deal (prefer host "deal when ready").
+    expect(
+      canDealNextHand({
+        awaitingNextHand: true,
+        awaitingFirstDeal: false,
+        mySeatId: 2,
+        nextDealerSeat: 2,
+        isHost: false,
+        nextDealerUnavailable: true,
+      })
+    ).toBe(false);
+
+    // Away dealer who is also host still gets Deal via host override.
+    expect(
+      canDealNextHand({
+        awaitingNextHand: true,
+        awaitingFirstDeal: false,
+        mySeatId: 2,
+        nextDealerSeat: 2,
+        isHost: true,
+        nextDealerUnavailable: true,
+      })
+    ).toBe(true);
   });
 
   it("shows the deal bar for host when nextDealerSeat is missing", () => {
