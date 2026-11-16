@@ -79,7 +79,11 @@ body {
   display: none;
 }
 
-/* Table play surface: lock to viewport; Action Log scrolls internally. */
+/*
+  Table play surface: lock to viewport; Action Log scrolls internally.
+  Below lg the log stacks under the table and is height-capped (max-lg:max-h-[18dvh])
+  so seats/countdown stay visible — see ActionLogPanel + table page flex shell.
+*/
 .table-play-shell {
   height: 100dvh;
   max-height: 100dvh;

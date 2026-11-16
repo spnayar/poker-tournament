@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useCallback,
+  useState,
 } from "react";
 import { formatRankDisplay } from "@/lib/cardDisplay";
 import { getAvatarUrl } from "@/lib/utils";
@@ -163,6 +164,8 @@ export function ActionLogPanel({
 }: ActionLogPanelProps) {
   const scrollRef = useRef<HTMLUListElement>(null);
   const stickToLatestRef = useRef(true);
+  // Stacked layout (< lg) can let the log eat the table; allow Hide.
+  const [collapsed, setCollapsed] = useState(false);
 
   const handGroups = useMemo(
     () => groupActionLogNewestFirst(actionLog),
@@ -198,121 +201,158 @@ export function ActionLogPanel({
   }, [actionLog.length, scrollToLatest]);
 
   return (
-    <aside className="table-chrome w-full lg:w-64 xl:w-72 shrink-0 min-h-0 max-h-full max-sm:flex-none max-sm:max-h-[26%] rounded-md p-2 sm:p-2.5 flex flex-col overflow-hidden relative z-0">
-      <div className="mb-1.5 shrink-0 flex items-baseline justify-between gap-2">
+    <aside
+      className={`table-chrome w-full lg:w-64 xl:w-72 min-h-0 max-h-full rounded-md p-2 sm:p-2.5 flex flex-col overflow-hidden relative z-0 lg:shrink-0 max-lg:flex-none max-lg:shrink ${
+        // Cap stacked height in dvh (%, not parent-height) so seats/countdown
+        // stay visible at ~640–1023px (N1). Collapsed = header strip only.
+        // Side column (lg+) is uncapped.
+        collapsed ? "max-lg:max-h-none" : "max-lg:max-h-[18dvh]"
+      }`}
+      data-collapsed={collapsed ? "true" : undefined}
+    >
+      <div
+        className={`shrink-0 flex items-center justify-between gap-2 ${
+          collapsed ? "mb-0 max-lg:mb-0 lg:mb-1.5" : "mb-1.5"
+        }`}
+      >
         <h2 className="text-xs font-semibold text-slate-200 tracking-tight">
           Action Log
         </h2>
-        {handNumber > 0 ? (
-          <p className="text-[10px] text-slate-500 font-mono tabular-nums">
-            #{handNumber}
-          </p>
-        ) : null}
+        <div className="flex items-center gap-2 shrink-0">
+          {handNumber > 0 ? (
+            <p className="text-[10px] text-slate-500 font-mono tabular-nums">
+              #{handNumber}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="lg:hidden rounded border border-slate-600/80 bg-slate-800/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 hover:border-emerald-500/40 hover:text-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-amber-400"
+            aria-expanded={!collapsed}
+            aria-controls="action-log-body"
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            {collapsed ? "Show" : "Hide"}
+          </button>
+        </div>
       </div>
 
-      {zoomJoinUrl ? (
-        <ZoomActionLogBanner
-          zoomJoinUrl={zoomJoinUrl}
-          zoomMeetingNumber={zoomMeetingNumber}
-        />
-      ) : null}
+      <div
+        id="action-log-body"
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden ${
+          collapsed ? "max-lg:hidden" : ""
+        }`}
+      >
+        {zoomJoinUrl ? (
+          <ZoomActionLogBanner
+            zoomJoinUrl={zoomJoinUrl}
+            zoomMeetingNumber={zoomMeetingNumber}
+          />
+        ) : null}
 
-      {handGroups.length === 0 ? (
-        <p className="text-sm text-slate-500 flex-1">Waiting for action...</p>
-      ) : (
-        <ul
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="table-scroll space-y-0.5 overflow-y-auto flex-1 min-h-0 overscroll-contain"
-        >
-          {handGroups.map((group, groupIndex) => {
-            const isLatestHand = groupIndex === 0;
-            return (
-              <Fragment key={`hand-group-${group.handNumber}`}>
-                <HandSeparator
-                  handNumber={group.handNumber}
-                  isLatestHand={isLatestHand}
-                />
-                {group.entries.map((entry, index) => {
-                  if (hideAwards && entry.action.startsWith("Wins")) {
-                    return null;
-                  }
+        {handGroups.length === 0 ? (
+          <p className="text-sm text-slate-500 flex-1">Waiting for action...</p>
+        ) : (
+          <ul
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="table-scroll space-y-0.5 overflow-y-auto flex-1 min-h-0 overscroll-contain"
+          >
+            {handGroups.map((group, groupIndex) => {
+              const isLatestHand = groupIndex === 0;
+              return (
+                <Fragment key={`hand-group-${group.handNumber}`}>
+                  <HandSeparator
+                    handNumber={group.handNumber}
+                    isLatestHand={isLatestHand}
+                  />
+                  {group.entries.map((entry, index) => {
+                    if (hideAwards && entry.action.startsWith("Wins")) {
+                      return null;
+                    }
 
-                  if (entry.seatId === -2 && entry.cards && entry.cards.length > 0) {
-                    const streetShown = communityStreetShown(
-                      entry,
-                      visibleBoard
-                    );
-                    if (streetShown <= 0) return null;
-                    const cardsToShow = entry.cards.slice(0, streetShown);
+                    if (
+                      entry.seatId === -2 &&
+                      entry.cards &&
+                      entry.cards.length > 0
+                    ) {
+                      const streetShown = communityStreetShown(
+                        entry,
+                        visibleBoard
+                      );
+                      if (streetShown <= 0) return null;
+                      const cardsToShow = entry.cards.slice(0, streetShown);
+
+                      return (
+                        <li key={entry.id}>
+                          <div className="py-1.5 px-2 rounded-lg bg-slate-800/40">
+                            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5">
+                              {entry.action}
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {cardsToShow.map((card, i) => (
+                                <LogPlayingCard
+                                  key={`${card}-${i}`}
+                                  card={card}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    }
+
+                    // Newer entry is above (lower index) in reverse-chrono list.
+                    const newerStreet =
+                      index > 0 ? group.entries[index - 1]!.street : null;
+                    const showStreetHeader =
+                      entry.street !== "hand" &&
+                      (index === 0 || entry.street !== newerStreet);
 
                     return (
                       <li key={entry.id}>
-                        <div className="py-1.5 px-2 rounded-lg bg-slate-800/40">
-                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5">
-                            {entry.action}
+                        {showStreetHeader && (
+                          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold py-1.5 px-1">
+                            {streetLabel(entry.street)}
                           </p>
-                          <div className="flex flex-wrap gap-1">
-                            {cardsToShow.map((card, i) => (
-                              <LogPlayingCard
-                                key={`${card}-${i}`}
-                                card={card}
-                              />
-                            ))}
+                        )}
+                        <div
+                          className={`flex items-start gap-2 rounded-lg px-2 py-1.5 ${
+                            entry.seatId === currentActorSeat
+                              ? "bg-amber-500/10"
+                              : "hover:bg-slate-800/50"
+                          }`}
+                        >
+                          <img
+                            src={getAvatarUrl(
+                              entry.displayName,
+                              entry.avatarUrl
+                            )}
+                            alt=""
+                            className="w-6 h-6 rounded-full shrink-0 mt-0.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-medium text-slate-300">
+                              {entry.displayName}
+                            </span>
+                            <p
+                              className={`text-sm font-mono ${actionColor(entry.action)}`}
+                            >
+                              {entry.action}
+                            </p>
                           </div>
                         </div>
                       </li>
                     );
-                  }
+                  })}
+                </Fragment>
+              );
+            })}
+          </ul>
+        )}
 
-                  // Newer entry is above (lower index) in reverse-chrono list.
-                  const newerStreet =
-                    index > 0 ? group.entries[index - 1]!.street : null;
-                  const showStreetHeader =
-                    entry.street !== "hand" &&
-                    (index === 0 || entry.street !== newerStreet);
-
-                  return (
-                    <li key={entry.id}>
-                      {showStreetHeader && (
-                        <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold py-1.5 px-1">
-                          {streetLabel(entry.street)}
-                        </p>
-                      )}
-                      <div
-                        className={`flex items-start gap-2 rounded-lg px-2 py-1.5 ${
-                          entry.seatId === currentActorSeat
-                            ? "bg-amber-500/10"
-                            : "hover:bg-slate-800/50"
-                        }`}
-                      >
-                        <img
-                          src={getAvatarUrl(entry.displayName, entry.avatarUrl)}
-                          alt=""
-                          className="w-6 h-6 rounded-full shrink-0 mt-0.5"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <span className="text-xs font-medium text-slate-300">
-                            {entry.displayName}
-                          </span>
-                          <p
-                            className={`text-sm font-mono ${actionColor(entry.action)}`}
-                          >
-                            {entry.action}
-                          </p>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </Fragment>
-            );
-          })}
-        </ul>
-      )}
-
-      <div className="mt-1.5 pt-1.5 border-t border-slate-800/80 shrink-0 flex justify-center">
-        <InstagramFollowLink variant="chrome" />
+        <div className="mt-1.5 pt-1.5 border-t border-slate-800/80 shrink-0 flex justify-center">
+          <InstagramFollowLink variant="chrome" />
+        </div>
       </div>
     </aside>
   );
