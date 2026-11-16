@@ -1,6 +1,10 @@
 /**
  * Between-hand Deal controls. Must stay available even when HAND_RESULT was
  * missed (reconnect) or cleared — phase hand-complete is enough.
+ *
+ * Only the button seat may deal while available. Host override applies only
+ * when that seat is away/skipped (or missing) so the table never soft-locks —
+ * never dual live Deal buttons.
  */
 
 export function isAwaitingNextHand(opts: {
@@ -25,9 +29,18 @@ export function canDealNextHand(opts: {
 }): boolean {
   if (!opts.awaitingNextHand && !opts.awaitingFirstDeal) return false;
   if (opts.mySeatId == null) return false;
-  if (opts.nextDealerSeat === opts.mySeatId) return true;
-  // Host always — away/skipped/busted button must not soft-lock the table.
-  return opts.isHost;
+
+  const dealerMissing = opts.nextDealerSeat == null;
+  const hostOverride =
+    opts.isHost && (opts.nextDealerUnavailable || dealerMissing);
+
+  // Available button seat deals. Away/skipped button does not keep Deal —
+  // only host override (including when the host is the away dealer).
+  if (opts.nextDealerSeat === opts.mySeatId && !opts.nextDealerUnavailable) {
+    return true;
+  }
+
+  return hostOverride;
 }
 
 export function shouldShowDealNextBar(opts: {
