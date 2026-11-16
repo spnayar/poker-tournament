@@ -10,7 +10,10 @@ import {
   parseSettleUpMethods,
   resolveActionTimerSeconds,
 } from "@poker/protocol";
-import { sendNightRecapEmail } from "@/lib/nightRecap";
+import {
+  buildNightRecapPayload,
+  sendNightRecapEmail,
+} from "@/lib/nightRecap";
 import { gameServerControlHeaders } from "@/lib/gameServerControl";
 import {
   NIGHT_SETTINGS_IMMUTABLE_KEYS,
@@ -117,6 +120,12 @@ export async function GET(
     settleUpByUserId[p.userId] = parseSettleUpMethods(p.user.settleUpMethods);
   }
 
+  // Same night-highlight stats as the recap email (hands won, flop %, etc.).
+  const hasFinishedGames = tournament.games.some((g) => g.status === "FINISHED");
+  const nightHighlights = hasFinishedGames
+    ? ((await buildNightRecapPayload(id))?.stats ?? null)
+    : null;
+
   const tournamentJson = {
     ...tournament,
     players: tournament.players.map((p) => ({
@@ -138,6 +147,7 @@ export async function GET(
     settleTransfers,
     settleUpByUserId,
     payoutPercents,
+    nightHighlights,
   });
 }
 

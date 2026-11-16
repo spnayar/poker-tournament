@@ -17,6 +17,11 @@ import {
 } from "@/lib/settleUp";
 import { RecapEmailPreview } from "@/components/RecapEmailPreview";
 import {
+  hasNightHighlights,
+  NightHighlightsPanel,
+} from "@/components/NightHighlightsPanel";
+import type { NightRecapStats } from "@/lib/nightRecap";
+import {
   clearRecapPreviewHtml,
   readRecapPreviewHtml,
   storeRecapPreviewHtml,
@@ -119,6 +124,8 @@ function ResultsContent() {
   >({});
   const [actionLoading, setActionLoading] = useState(false);
   const [recapPreviewHtml, setRecapPreviewHtml] = useState<string | null>(null);
+  const [nightHighlights, setNightHighlights] =
+    useState<NightRecapStats | null>(null);
 
   const waitingForNextGame =
     status === "authenticated" &&
@@ -136,6 +143,7 @@ function ResultsContent() {
       setLedger(data.ledger ?? []);
       setSettleTransfers(data.settleTransfers ?? []);
       setSettleUpByUserId(data.settleUpByUserId ?? {});
+      setNightHighlights(data.nightHighlights ?? null);
       if (
         data.tournament.status !== "FINISHED" &&
         !justFinishedGame &&
@@ -356,6 +364,10 @@ function ResultsContent() {
             </div>
           )}
         </div>
+      )}
+
+      {hasNightHighlights(nightHighlights) && nightHighlights && (
+        <NightHighlightsPanel stats={nightHighlights} />
       )}
 
       {finishedGames.length > 1 && (
