@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { seatVisualKind, showSeatHoleCards } from "./seatVisualState";
+import {
+  opponentHolePresentation,
+  seatVisualKind,
+  showSeatHoleCards,
+} from "./seatVisualState";
 
 describe("seatVisualKind", () => {
   it("orders out > folded > away > live", () => {
@@ -30,5 +34,45 @@ describe("showSeatHoleCards", () => {
       false
     );
     expect(showSeatHoleCards({ folded: false })).toBe(true);
+  });
+});
+
+describe("opponentHolePresentation", () => {
+  it("tucks face-down backs mid-hand so the avatar stays the seat face (F3)", () => {
+    expect(
+      opponentHolePresentation({
+        folded: false,
+        revealHoleCards: false,
+        showCards: false,
+      })
+    ).toBe("tucked-backs");
+  });
+
+  it("fans revealed cards only at showdown", () => {
+    expect(
+      opponentHolePresentation({
+        folded: false,
+        revealHoleCards: true,
+        showCards: true,
+      })
+    ).toBe("fan-reveal");
+  });
+
+  it("hides cards for folded or eliminated seats", () => {
+    expect(
+      opponentHolePresentation({
+        folded: true,
+        revealHoleCards: false,
+        showCards: false,
+      })
+    ).toBe("hidden");
+    expect(
+      opponentHolePresentation({
+        folded: false,
+        eliminated: true,
+        revealHoleCards: true,
+        showCards: true,
+      })
+    ).toBe("hidden");
   });
 });
