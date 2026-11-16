@@ -1262,12 +1262,64 @@ describe("TableEngine", () => {
 
     const state = table.getPublicState();
     expect(state.phase).toBe("preflop");
-    expect(state.pots.every((p) => (p.contributorCount ?? 2) >= 2)).toBe(true);
-    expect(state.uncalledAmount).toBeGreaterThan(0);
+    // Covered/unmatched shove with nobody continuing past it → one pot, no
+    // Main/Side/Uncalled chrome (F5: fake Uncalled on pending all-ins).
+    expect(state.pots).toHaveLength(1);
+    expect(state.uncalledAmount ?? 0).toBe(0);
+    expect(state.pots[0]!.amount).toBe(state.totalPot);
     expect(state.pots.some((p) => p.amount === 4950)).toBe(false);
-    expect((state.uncalledAmount ?? 0) + state.pots.reduce((s, p) => s + p.amount, 0)).toBe(
-      state.totalPot
-    );
+  });
+
+  it("live blinds do not show Main/Uncalled before anyone acts", () => {
+    const table = new TableEngine(testTableConfig(5000));
+    table.addPlayer(0, "u1", "Host", null, 5000);
+    table.addPlayer(1, "u2", "Guest", null, 5000);
+    table.addPlayer(2, "u3", "GuestBig", null, 5000);
+    table.startHand();
+
+    const state = table.getPublicState();
+    expect(state.phase).toBe("preflop");
+    expect(state.pots).toHaveLength(1);
+    expect(state.uncalledAmount ?? 0).toBe(0);
+    expect(state.pots[0]!.amount).toBe(state.totalPot);
+    expect(state.totalPot).toBe(state.smallBlind + state.bigBlind);
+  });
+
+  it("covered all-in stays a single live pot until someone bets more", () => {
+    const table = new TableEngine(testTableConfig(5000));
+    table.addPlayer(0, "u1", "Host", null, 5000);
+    table.addPlayer(1, "u2", "Bot", null, 5000);
+    table.addPlayer(2, "u3", "Phone", null, 5000);
+    table.addPlayer(3, "u4", "Big", null, 4900);
+
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+    table.randomizeDealerButton();
+    randomSpy.mockRestore();
+    table.startHand();
+
+    // BTN 0 / SB 1 / BB 2 / UTG 3 (Big). Big shoves covered stack.
+    expect(table.getPublicState().currentActorSeat).toBe(3);
+    expect(table.applyAction(3, { type: "all-in" })).toBe(true);
+
+    const afterShove = table.getPublicState();
+    expect(afterShove.pots).toHaveLength(1);
+    expect(afterShove.uncalledAmount ?? 0).toBe(0);
+    expect(afterShove.pots[0]!.amount).toBe(afterShove.totalPot);
+
+    // Fold Host (BTN), call Bot (SB), call Phone (BB).
+    expect(table.applyAction(0, { type: "fold" })).toBe(true);
+    expect(table.applyAction(1, { type: "call" })).toBe(true);
+    const afterBot = table.getPublicState();
+    expect(afterBot.pots).toHaveLength(1);
+    expect(afterBot.uncalledAmount ?? 0).toBe(0);
+    expect(afterBot.pots[0]!.amount).toBe(afterBot.totalPot);
+
+    expect(table.applyAction(2, { type: "call" })).toBe(true);
+    const afterAll = table.getPublicState();
+    // Still a single contested pot (covered all-in, equal contributions).
+    expect(afterAll.pots).toHaveLength(1);
+    expect(afterAll.uncalledAmount ?? 0).toBe(0);
+    expect(afterAll.pots[0]!.amount).toBe(afterAll.totalPot);
   });
 
   it("keeps awarded pot labels after showdown resets bets", () => {

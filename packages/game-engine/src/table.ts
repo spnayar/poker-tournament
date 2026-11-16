@@ -19,6 +19,7 @@ import {
 } from "./handEval";
 import {
   buildSidePots,
+  liveTablePots,
   splitLivePots,
   totalPotAmount,
   uncalledReturnsFromPots,
@@ -1379,9 +1380,22 @@ export class TableEngine {
           seatId: p.seatId,
           contribution,
           folded: p.folded,
+          allIn: p.allIn,
         };
       });
     return buildSidePots(contributions);
+  }
+
+  /** Live contributions including all-in flags for table pot chrome. */
+  private liveContributions(): PlayerContribution[] {
+    return [...this.players.values()]
+      .filter((p) => p.totalBet > 0)
+      .map((p) => ({
+        seatId: p.seatId,
+        contribution: p.totalBet,
+        folded: p.folded,
+        allIn: p.allIn,
+      }));
   }
 
   private resolvePots(pots: PotLayer[]): HandResult {
@@ -1607,12 +1621,15 @@ export class TableEngine {
     const seats = this.buildPublicSeats();
     const reviewingHand =
       this.phase === "hand-complete" || this.phase === "showdown";
-    const rawPots =
+    // Hand-complete: show awarded contested layers. Live: collapse unless a
+    // real all-in side-pot structure exists (no fake Main/Side/Uncalled).
+    const live =
       reviewingHand && this.lastAwardedPots.length > 0
-        ? this.lastAwardedPots
-        : this.computePots();
-    // Always strip single-contributor layers from pot labels (never "Side N").
-    const live = splitLivePots(rawPots);
+        ? {
+            ...splitLivePots(this.lastAwardedPots),
+            totalPot: totalPotAmount(this.lastAwardedPots),
+          }
+        : liveTablePots(this.liveContributions());
     const awaitingNextHand = reviewingHand;
     const awaitingFirstDeal =
       this.phase === "waiting" && this.handNumber === 0 && this.seatingReady;
@@ -1621,7 +1638,7 @@ export class TableEngine {
       phase: this.phase,
       board: [...this.board],
       pots: live.pots,
-      totalPot: totalPotAmount(rawPots),
+      totalPot: live.totalPot,
       uncalledAmount: live.uncalledAmount,
       seats,
       dealerSeat: this.dealerSeat,
